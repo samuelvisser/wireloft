@@ -115,6 +115,19 @@ def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
     return publication_time + timedelta(minutes=delay_minutes)
 
 
+def automatic_episode_download_delay_passed(
+        episode: Episode,
+        *,
+        now: datetime | None = None,
+) -> bool:
+    """Return whether the configured post-publication download safety delay has elapsed."""
+    ready_at = automatic_episode_download_ready_at(episode)
+    if ready_at is None:
+        return True
+    current = now or datetime.now(timezone.utc)
+    return ready_at <= current
+
+
 def _hold_download_dispatch_lock_until_transaction_end(session: Session) -> None:
     """Serialize queue budget calculation through the reservation commit."""
     current_transaction = session.get_transaction()
@@ -814,13 +827,16 @@ def _has_active_media_download_run(
     ) is not None
 
 
-def queue_final_episode_redownload_if_ready(
+def queue_episode_redownload_if_ready(
     session: Session,
     media_download_id: int,
 ) -> bool:
-    """Consume final-replacement intent only after the prior attempt is terminal."""
+    """Consume pending episode replacement intent after the prior attempt is terminal."""
     download = session.get(EpisodeMediaDownload, media_download_id)
-    if download is None or not download.redownload_when_final:
+    if download is None or not (
+        download.redownload_when_final
+        or download.redownload_when_delay_passed
+    ):
         return False
 
     episode = session.get(Episode, download.media_item_id)
@@ -830,10 +846,14 @@ def queue_final_episode_redownload_if_ready(
     active_operation = get_active_media_download_operation(session, download.id)
     if active_operation is not None:
         if (
-            isinstance(active_operation.context, dict)
+            download.redownload_when_final
+            and isinstance(active_operation.context, dict)
             and active_operation.context.get("episode_publish_status")
             == EpisodePublishStatus.PUBLISHED_FINAL.value
         ):
+            # The countdown replacement is already the active final download.
+            # A separate safety-delay replacement, if requested, must remain
+            # armed until that manual attempt is actually terminal.
             download.redownload_when_final = False
             session.flush()
         return False
@@ -843,6 +863,7 @@ def queue_final_episode_redownload_if_ready(
 
     ready_at = automatic_episode_download_ready_at(episode)
     download.redownload_when_final = False
+    download.redownload_when_delay_passed = False
     create_media_download_operation(
         session,
         download,
@@ -1070,7 +1091,7 @@ def on_media_download_task_terminal(
     session = get_session()
     try:
         if resource_type == ResourceType.MEDIA_DOWNLOAD.value and resource_id is not None:
-            queue_final_episode_redownload_if_ready(session, resource_id)
+            queue_episode_redownload_if_ready(session, resource_id)
         dispatch_queued_media_download_operations(session)
         session.commit()
     except Exception:

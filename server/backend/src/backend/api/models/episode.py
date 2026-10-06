@@ -91,6 +91,7 @@ class _EpisodeAPIBaseOut(_EpisodeIdentifierAPIOut):
     scheduled_date: Optional[datetime]
     sharing_url: str
     early_delete_available: bool = False
+    download_delay_passed: bool = True
 
     title: str
     description: str

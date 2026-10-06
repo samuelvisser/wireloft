@@ -22,8 +22,20 @@ def _invoke(action, *args, **kwargs):
         raise HTTPException(status_code=404 if exc.kind == "missing" else 409, detail=str(exc)) from exc
 
 
-def retry_media_download_action(media_download_id: int, *, source: str = OperationSource.UI, reuse_matching_active: bool = False) -> str:
-    return _invoke(actions.retry_media_download_action, media_download_id, source=source, reuse_matching_active=reuse_matching_active)
+def retry_media_download_action(
+        media_download_id: int,
+        *,
+        source: str = OperationSource.UI,
+        reuse_matching_active: bool = False,
+        redownload_when_delay_passed: bool = False,
+) -> str:
+    return _invoke(
+        actions.retry_media_download_action,
+        media_download_id,
+        source=source,
+        reuse_matching_active=reuse_matching_active,
+        redownload_when_delay_passed=redownload_when_delay_passed,
+    )
 
 
 def cancel_media_download_action(media_download_id: int, *, allow_inactive: bool = False, missing_ok: bool = False) -> MediaDownloadAPIRead | None:

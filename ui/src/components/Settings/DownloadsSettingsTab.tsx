@@ -325,30 +325,32 @@ export default function DownloadsSettingsTab({
                         </ReadMore>
                     }
                 />
-                <ToggleField
-                    id="settings-ensure-safe-delay"
-                    label="Ensure Safe Delay"
-                    checked={draft.downloadSettings.ensureSafeDelay}
-                    environmentVariable={environmentVariableFor('downloadSettings.ensureSafeDelay')}
-                    onChange={(checked) => updateDraft((next) => {
-                        next.downloadSettings.ensureSafeDelay = checked
-                    })}
-                    help={
-                        <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the automatic episode delay.</span>}>
-                            <p>
-                                When enabled, final episode downloads first use a trusted publication timestamp when WireLoft
-                                continuously observed the transition. If that is unavailable, WireLoft uses the first time it
-                                recorded the episode as fully published.
-                            </p>
-                            <p>
-                                This can delay a download longer after WireLoft was offline, but avoids relying on The Daily Wire&apos;s
-                                publication timestamp when its meaning is ambiguous. It only affects Download Profile downloads when
-                                the automatic episode download delay is greater than zero. Manual downloads are never held by this setting.
-                            </p>
-                        </ReadMore>
-                    }
-                    wide
-                />
+                {draft.downloadSettings.automaticEpisodeDownloadDelayMinutes > 0 && (
+                    <ToggleField
+                        id="settings-ensure-safe-delay"
+                        label="Ensure Safe Delay"
+                        checked={draft.downloadSettings.ensureSafeDelay}
+                        environmentVariable={environmentVariableFor('downloadSettings.ensureSafeDelay')}
+                        onChange={(checked) => updateDraft((next) => {
+                            next.downloadSettings.ensureSafeDelay = checked
+                        })}
+                        help={
+                            <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the automatic episode delay.</span>}>
+                                <p>
+                                    When enabled, final episode downloads first use a trusted publication timestamp when WireLoft
+                                    continuously observed the transition. If that is unavailable, WireLoft uses the first time it
+                                    recorded the episode as fully published.
+                                </p>
+                                <p>
+                                    This can delay a download longer after WireLoft was offline, but avoids relying on The Daily Wire&apos;s
+                                    publication timestamp when its meaning is ambiguous. Download Profiles wait for this safety point, and
+                                    manual downloads show a warning while it has not passed but can still start immediately.
+                                </p>
+                            </ReadMore>
+                        }
+                        wide
+                    />
+                )}
                 <NumberField
                     id="settings-download-concurrency"
                     label="Concurrent downloads"

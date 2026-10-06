@@ -48,6 +48,7 @@ from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun
 from task_manager.scheduler.types import ResourceType
 from task_manager.tasks.media_download_operations import (
+    automatic_episode_download_delay_passed,
     get_active_media_download_operation,
     get_media_download_queue_positions,
     prepare_media_download_artifact,
@@ -363,6 +364,11 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         body.redownload_when_final
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
     )
+    redownload_when_delay_passed = (
+        body.redownload_when_delay_passed
+        and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+        and not automatic_episode_download_delay_passed(episode)
+    )
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)
         .filter(
@@ -374,6 +380,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     if existing is not None:
         _assert_no_active_attempt(s, existing)
         existing.redownload_when_final = redownload_when_final
+        existing.redownload_when_delay_passed = redownload_when_delay_passed
         _reconcile_existing_artifact(s, existing)
         if existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
             raise HTTPException(status_code=409, detail=f"Episode already has a downloaded file for profile '{profile.name}'")
@@ -389,6 +396,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
         file_path="",
         redownload_when_final=redownload_when_final,
+        redownload_when_delay_passed=redownload_when_delay_passed,
     )
     s.add(download)
     s.flush()

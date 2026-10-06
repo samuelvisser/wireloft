@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "6d3a9f1c2b7e"
+HEAD_REVISION = "a4e7c19b2d53"
+COUNTDOWN_REDOWNLOAD_REVISION = "6d3a9f1c2b7e"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
 PRE_HISTORY_HEAD_REVISION = "6d1e8f2a4c73"
@@ -244,7 +245,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == COUNTDOWN_REDOWNLOAD_REVISION
+    assert script.get_revision(COUNTDOWN_REDOWNLOAD_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
     assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
         script.get_revision(WIRELOFT_1_2_REVISION).down_revision
@@ -386,6 +388,58 @@ def test_countdown_redownload_migration_resumes_after_failed_sqlite_batch(migrat
         for column in inspector.get_columns("media_downloads_episode")
     }
     assert "redownload_when_final" in episode_download_columns
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HEAD_REVISION
+
+
+def test_redownload_delay_intent_migration_adds_persistent_flag(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        COUNTDOWN_REDOWNLOAD_REVISION,
+    )
+
+    assert "redownload_when_delay_passed" not in {
+        column["name"]
+        for column in inspect(engine).get_columns("media_downloads_episode")
+    }
+
+    upgrade_database()
+
+    assert "redownload_when_delay_passed" in {
+        column["name"]
+        for column in inspect(engine).get_columns("media_downloads_episode")
+    }
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT alembic_version_num FROM settings"
+        )).scalar_one() == HEAD_REVISION
+
+
+def test_redownload_delay_intent_migration_resumes_after_column_add(migration_database):
+    _database_path, engine = migration_database
+    from backend.db.migrations import get_alembic_config, upgrade_database
+
+    command.upgrade(
+        get_alembic_config(allow_version_storage_migration=True),
+        COUNTDOWN_REDOWNLOAD_REVISION,
+    )
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE media_downloads_episode "
+            "ADD COLUMN redownload_when_delay_passed BOOLEAN DEFAULT 0 NOT NULL"
+        )
+
+    upgrade_database()
+
+    assert "redownload_when_delay_passed" in {
+        column["name"]
+        for column in inspect(engine).get_columns("media_downloads_episode")
+    }
     with engine.connect() as connection:
         assert connection.execute(text(
             "SELECT alembic_version_num FROM settings"

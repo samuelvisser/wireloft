@@ -146,6 +146,117 @@ def test_media_download_operation_is_the_live_execution_owner():
         engine.dispose()
 
 
+def test_episode_api_delay_readiness_and_manual_redownload_intent_use_safe_delay(monkeypatch):
+    from backend.api.endpoints.episodes.service import _episode_api_read
+    from backend.api.endpoints.media_downloads.service import create_episode_download
+    from backend.api.models.media_download import EpisodeDownloadAPICreate
+    from backend.db.models import Episode
+    from backend.utils.episode_publication_timing import record_published_final_observation
+    from config import get_settings
+
+    session, engine = _session()
+    try:
+        settings = get_settings().download_settings
+        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "ensure_safe_delay", True)
+
+        download = _make_download(session, slug="manual-safe-delay")
+        episode = session.get(Episode, download.media_item_id)
+        assert episode is not None
+        episode.published_date = datetime.now(timezone.utc) - timedelta(hours=1)
+        record_published_final_observation(
+            episode,
+            observed_at=datetime.now(timezone.utc) - timedelta(minutes=2),
+        )
+        session.flush()
+
+        assert _episode_api_read(episode).download_delay_passed is False
+
+        requested = create_episode_download(
+            session,
+            episode.slug,
+            EpisodeDownloadAPICreate(
+                local_media_profile_id=download.local_media_profile_id,
+                redownload_when_delay_passed=True,
+            ),
+        )
+        assert requested.id == download.id
+        assert requested.redownload_when_delay_passed is True
+
+        record_published_final_observation(
+            episode,
+            observed_at=datetime.now(timezone.utc) - timedelta(minutes=20),
+        )
+        # The first observation is durable, so advance it explicitly to model an
+        # episode whose delay has already elapsed.
+        from backend.utils.episode_publication_timing import (
+            RECORDED_PUBLISHED_FINAL_META_KEY,
+            encode_recorded_published_final,
+        )
+        episode.set_meta(
+            RECORDED_PUBLISHED_FINAL_META_KEY,
+            encode_recorded_published_final(
+                datetime.now(timezone.utc) - timedelta(minutes=20)
+            ),
+        )
+        requested.redownload_when_delay_passed = False
+        session.flush()
+
+        assert _episode_api_read(episode).download_delay_passed is True
+        requested = create_episode_download(
+            session,
+            episode.slug,
+            EpisodeDownloadAPICreate(
+                local_media_profile_id=download.local_media_profile_id,
+                redownload_when_delay_passed=True,
+            ),
+        )
+        assert requested.redownload_when_delay_passed is False
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_manual_unsafe_download_followup_waits_until_delay_passes(monkeypatch):
+    from backend.db.models import Episode
+    from backend.utils.episode_publication_timing import record_published_final_observation
+    from config import get_settings
+    from task_manager.scheduler.operations import operation_admission_wait_state
+    from task_manager.scheduler.types import OperationStatus
+    from task_manager.tasks.media_download_operations import (
+        get_active_media_download_operation,
+        queue_episode_redownload_if_ready,
+    )
+
+    session, engine = _session()
+    try:
+        settings = get_settings().download_settings
+        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "ensure_safe_delay", True)
+
+        download = _make_download(session, slug="manual-safe-delay-followup")
+        episode = session.get(Episode, download.media_item_id)
+        assert episode is not None
+        observed_final = datetime.now(timezone.utc) - timedelta(minutes=2)
+        record_published_final_observation(episode, observed_at=observed_final)
+        download.redownload_when_delay_passed = True
+        session.flush()
+
+        assert queue_episode_redownload_if_ready(session, download.id) is True
+
+        operation = get_active_media_download_operation(session, download.id)
+        assert operation is not None
+        assert operation.status == OperationStatus.WAITING.value
+        wait_state = operation_admission_wait_state(operation)
+        assert wait_state is not None
+        assert wait_state["reason"] == "publication_delay"
+        assert wait_state["until"] == observed_final + timedelta(minutes=10)
+        assert download.redownload_when_delay_passed is False
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_system_download_operation_waits_without_reserving_capacity(monkeypatch):
     from config import get_settings
     from backend.db.models.media_download import MediaDownloadHistory

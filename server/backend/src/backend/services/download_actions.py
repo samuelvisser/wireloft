@@ -7,12 +7,15 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db import get_session
+from backend.db.models import Episode
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.services.media_download_history import record_media_download_history
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
+    automatic_episode_download_delay_passed,
     cancel_media_download_operation,
     create_media_download_operation,
     dispatch_queued_media_download_operations,
@@ -54,6 +57,7 @@ def retry_media_download_action(
         *,
         source: str = OperationSource.UI,
         reuse_matching_active: bool = False,
+        redownload_when_delay_passed: bool = False,
 ) -> str:
     """Replace one download attempt and return the new media.download operation ID."""
     active_operation_id: str | None = None
@@ -62,6 +66,15 @@ def retry_media_download_action(
         download = s.get(MediaDownloadBase, media_download_id)
         if download is None:
             raise DownloadActionError("missing", "Media download not found")
+        if isinstance(download, EpisodeMediaDownload):
+            episode = s.get(Episode, download.media_item_id)
+            download.redownload_when_delay_passed = bool(
+                redownload_when_delay_passed
+                and episode is not None
+                and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+                and not automatic_episode_download_delay_passed(episode)
+            )
+
         record_media_download_history(
             s,
             media_download_id,
@@ -150,6 +163,7 @@ def cancel_media_download_action(
             )
             if isinstance(download, EpisodeMediaDownload):
                 download.redownload_when_final = False
+                download.redownload_when_delay_passed = False
             s.commit()
             s.refresh(download)
             _ = download.assets

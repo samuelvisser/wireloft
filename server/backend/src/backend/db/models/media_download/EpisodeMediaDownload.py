@@ -19,6 +19,7 @@ class EpisodeMediaDownload(MediaDownloadBase):
     download_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("download_profiles.id"))
     downloaded_publish_status: Mapped[Optional[str]]
     redownload_when_final: Mapped[bool] = mapped_column(default=False)
+    redownload_when_delay_passed: Mapped[bool] = mapped_column(default=False)
 
     # Relationships
     download_profile: Mapped[Optional["DownloadProfileBase"]] = relationship(back_populates="episode_downloads")

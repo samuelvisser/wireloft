@@ -58,17 +58,21 @@ function ProfileDownloadRow({
                                 download,
                                 episodeSlug,
                                 confirmCountdownDownload,
+                                confirmSafeDelayDownload,
                             }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
     episodeSlug: string
     confirmCountdownDownload: boolean
+    confirmSafeDelayDownload: boolean
 }) {
     const qc = useQueryClient()
     const [busy, setBusy] = useState(false)
     const [showLog, setShowLog] = useState(false)
     const [countdownConfirm, setCountdownConfirm] = useState(false)
+    const [safeDelayAction, setSafeDelayAction] = useState<'download' | 'retry' | null>(null)
     const [redownloadWhenFinal, setRedownloadWhenFinal] = useState(true)
+    const [redownloadWhenDelayPassed, setRedownloadWhenDelayPassed] = useState(true)
 
     const invalidate = () =>
         Promise.all([
@@ -92,13 +96,23 @@ function ProfileDownloadRow({
         }
     }
 
-    const startDownload = (redownloadFinal = false) =>
+    const startDownload = ({
+        redownloadFinal = false,
+        redownloadDelayPassed = false,
+    }: {
+        redownloadFinal?: boolean
+        redownloadDelayPassed?: boolean
+    } = {}) =>
         request(
             `${(window as any).appConfig.API_URL}/episodes/${encodeURIComponent(episodeSlug)}/downloads`,
             {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({localMediaProfileId: profile.id, redownloadWhenFinal: redownloadFinal}),
+                body: JSON.stringify({
+                    localMediaProfileId: profile.id,
+                    redownloadWhenFinal: redownloadFinal,
+                    redownloadWhenDelayPassed: redownloadDelayPassed,
+                }),
             },
             'Could not start the download',
         )
@@ -109,15 +123,33 @@ function ProfileDownloadRow({
             setCountdownConfirm(true)
             return
         }
+        if (confirmSafeDelayDownload) {
+            setRedownloadWhenDelayPassed(true)
+            setSafeDelayAction('download')
+            return
+        }
         void startDownload()
     }
 
-    const retryDownload = () =>
+    const retryDownload = (redownloadDelayPassed = false) =>
         request(
             `${(window as any).appConfig.API_URL}/media-downloads/${download!.id}/retry`,
-            {method: 'POST'},
+            {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({redownloadWhenDelayPassed: redownloadDelayPassed}),
+            },
             'Could not retry the download',
         )
+
+    const requestRetry = () => {
+        if (confirmSafeDelayDownload) {
+            setRedownloadWhenDelayPassed(true)
+            setSafeDelayAction('retry')
+            return
+        }
+        void retryDownload()
+    }
 
     const cancelDownload = () =>
         request(
@@ -172,7 +204,7 @@ function ProfileDownloadRow({
                         <button
                             type="button"
                             className="icon-btn"
-                            onClick={retryDownload}
+                            onClick={requestRetry}
                             disabled={busy}
                             title={download.presentation.outcome === 'success' ? 'Re-download' : 'Retry download'}
                             aria-label={download.presentation.outcome === 'success'
@@ -205,7 +237,7 @@ function ProfileDownloadRow({
                 confirmButton={{
                     label: busy ? 'Starting…' : 'Yes, download',
                     onClick: async () => {
-                        await startDownload(redownloadWhenFinal)
+                        await startDownload({redownloadFinal: redownloadWhenFinal})
                         setCountdownConfirm(false)
                     },
                     icon: faIcon('fas', 'download'),
@@ -226,6 +258,46 @@ function ProfileDownloadRow({
                         disabled={busy}
                     />
                     <span>Re-download automatically when the countdown is gone</span>
+                </label>
+            </ConfirmDialog>
+            <ConfirmDialog
+                open={safeDelayAction !== null}
+                title="Download before the safety delay has passed?"
+                onDismiss={() => {
+                    if (!busy) setSafeDelayAction(null)
+                }}
+                icon={faIcon('fas', 'circle-exclamation')}
+                dismissOnOverlayClick={!busy}
+                cancelButton={{disabled: busy}}
+                confirmButton={{
+                    label: busy ? 'Starting…' : 'Yes, download now',
+                    onClick: async () => {
+                        if (safeDelayAction === 'retry') {
+                            await retryDownload(redownloadWhenDelayPassed)
+                        } else {
+                            await startDownload({redownloadDelayPassed: redownloadWhenDelayPassed})
+                        }
+                        setSafeDelayAction(null)
+                    },
+                    icon: faIcon('fas', 'download'),
+                    disabled: busy,
+                }}
+            >
+                <p>
+                    WireLoft&apos;s configured post-publication safety delay has not passed yet. The Daily Wire may still be
+                    processing this episode, so the current file may be incomplete.
+                </p>
+                <p>
+                    If you continue, WireLoft will download the episode immediately instead of waiting for the safety delay.
+                </p>
+                <label className="confirm-dialog-option">
+                    <input
+                        type="checkbox"
+                        checked={redownloadWhenDelayPassed}
+                        onChange={(event) => setRedownloadWhenDelayPassed(event.target.checked)}
+                        disabled={busy}
+                    />
+                    <span>Re-download automatically when the safety delay has passed</span>
                 </label>
             </ConfirmDialog>
             <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
@@ -477,6 +549,7 @@ export default function EpisodePage() {
                                         download={downloadByProfileId.get(profile.id)}
                                         episodeSlug={episode.slug}
                                         confirmCountdownDownload={containsCountdown}
+                                        confirmSafeDelayDownload={!containsCountdown && !episode.downloadDelayPassed}
                                     />
                                 ))}
                             </div>

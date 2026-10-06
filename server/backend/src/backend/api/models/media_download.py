@@ -13,6 +13,13 @@ class EpisodeDownloadAPICreate(RequestBase):
 
     local_media_profile_id: int
     redownload_when_final: bool = False
+    redownload_when_delay_passed: bool = False
+
+
+class MediaDownloadRetryAPIRequest(RequestBase):
+    """Optional controls for an explicit retry/re-download request."""
+
+    redownload_when_delay_passed: bool = False
 
 
 class MovieDownloadAPICreate(RequestBase):
@@ -62,6 +69,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     format_downloaded: Optional[str]
     downloaded_at: Optional[datetime]
     redownload_when_final: Optional[bool] = None
+    redownload_when_delay_passed: Optional[bool] = None
 
 
 class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):

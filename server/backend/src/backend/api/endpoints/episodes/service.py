@@ -23,11 +23,20 @@ from task_manager.scheduler.operations import (
     create_operation,
     queue_operation_target_dispatch,
 )
+from task_manager.tasks.media_download_operations import (
+    automatic_episode_download_delay_passed,
+)
 
 
 METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
 _METADATA_REFRESH_TASK_KEY = "refresh_episode_metadata"
 _EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
+
+
+def _episode_api_read(episode: Episode) -> EpisodeAPIRead:
+    return EpisodeAPIRead.model_validate(episode).model_copy(update={
+        "download_delay_passed": automatic_episode_download_delay_passed(episode),
+    })
 
 
 def _episodes_for_show_stmt(show_slug: str):
@@ -48,7 +57,7 @@ def get_episodes_by_show_list(s: Session, show_slug: str, limit: int | None = No
         stmt = stmt.limit(limit)
     episodes: Sequence[Episode] = s.scalars(stmt).all()
 
-    return [EpisodeAPIRead.model_validate(episode) for episode in episodes]
+    return [_episode_api_read(episode) for episode in episodes]
 
 
 def _episode_view_stmt(show_slug: str, season_id: int | None = None):
@@ -172,7 +181,7 @@ def get_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
 
-    return EpisodeAPIRead.model_validate(episode)
+    return _episode_api_read(episode)
 
 
 def queue_episode_metadata_refresh(
@@ -303,7 +312,7 @@ def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
     })
     request_show_custom_index_reconciliation(s, episode.show_id)
 
-    return EpisodeAPIRead.model_validate(episode)
+    return _episode_api_read(episode)
 
 
 def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> EpisodeAPIRead:
@@ -355,7 +364,7 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
             queue_event(s, "episode.published_with_countdown", event_data)
 
     request_show_custom_index_reconciliation(s, episode.show_id)
-    return EpisodeAPIRead.model_validate(episode)
+    return _episode_api_read(episode)
 
 
 def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
@@ -367,7 +376,7 @@ def delete_episode(s: Session, episode_slug: str) -> EpisodeAPIRead:
     if episode is None:
         raise HTTPException(status_code=404, detail="Episode not found")
 
-    payload = EpisodeAPIRead.model_validate(episode)
+    payload = _episode_api_read(episode)
 
     media_download = s.scalar(
         select(EpisodeMediaDownload.id).where(

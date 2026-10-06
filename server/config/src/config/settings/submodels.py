@@ -366,7 +366,7 @@ class DownloadSettings(SubmodelBase):
     ensure_safe_delay: bool = Field(
         default=False,
         description=(
-            "For automatic Download Profile delays, prefer a trusted final-publication timestamp and otherwise delay from WireLoft's first recorded final observation"
+            "For post-publication download safety checks, prefer a trusted final-publication timestamp and otherwise use WireLoft's first recorded final observation"
         ),
     )
     download_timeout_seconds: int = Field(

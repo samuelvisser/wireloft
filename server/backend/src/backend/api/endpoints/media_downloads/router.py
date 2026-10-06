@@ -105,9 +105,17 @@ def media_downloads_bulk_delete_unavailable(body: MediaDownloadBulkActionAPIRequ
     response_model=MediaDownloadOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def media_downloads_retry(media_download_id: int):
+def media_downloads_retry(
+        media_download_id: int,
+        body: MediaDownloadRetryAPIRequest | None = None,
+):
     """Start a replacement attempt using the generic operation pipeline."""
-    operation_id = retry_media_download_action(media_download_id)
+    operation_id = retry_media_download_action(
+        media_download_id,
+        redownload_when_delay_passed=bool(
+            body is not None and body.redownload_when_delay_passed
+        ),
+    )
     return {
         "queued": True,
         "operation_id": operation_id,
