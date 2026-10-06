@@ -70,7 +70,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
             url = audio_url if audio_only and audio_url else video_url
             if not url:
                 if refreshed:
-                    media_kind = "audio" if audio_only else "video"
+                    media_kind = (
+                        "media" if not audio_url and not video_url
+                        else "audio" if audio_only
+                        else "video"
+                    )
                     raise MediaUnavailableError(
                         f"The Daily Wire provides no playable {media_kind} for '{title}'"
                     )
@@ -100,7 +104,11 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
                 if is_no_internet_error(exc):
                     raise
                 if refreshed:
-                    media_kind = "audio" if audio_only else "video"
+                    media_kind = (
+                        "media" if not audio_url and not video_url
+                        else "audio" if audio_only
+                        else "video"
+                    )
                     raise MediaUnavailableError(
                         f"The Daily Wire provides no playable {media_kind} for '{title}'"
                     ) from exc
