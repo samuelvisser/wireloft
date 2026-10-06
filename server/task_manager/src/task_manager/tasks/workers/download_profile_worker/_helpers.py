@@ -244,7 +244,7 @@ def ensure_episode_download(
         isinstance(profile, PodcastDownloadProfile)
         and profile.download_with_countdown
         and profile.redownload_final
-        and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value
+        and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
     )
 
     if existing is None:
