@@ -13,7 +13,7 @@ const items: NavItem[] = [
         label: 'Profiles',
         icon: faIcon('fas', 'layer-group'),
         children: [
-            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: faIcon('fass', 'file-lines') },
+            { path: '/local-media-profiles', label: 'Local Media Profiles', icon: faIcon('fasr', 'file-video') },
             { path: '/download-profiles', label: 'Download Profiles', icon: faIcon('fas', 'download') },
             { path: '/stream-profiles', label: 'Stream Profiles', icon: faIcon('fas', 'rss') },
         ]
