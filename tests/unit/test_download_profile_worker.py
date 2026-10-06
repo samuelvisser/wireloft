@@ -406,6 +406,45 @@ def test_final_download_delay_uses_safe_published_final(db_session, monkeypatch)
     assert get_download_profile_episodes(db_session, profile) == []
 
 
+def test_final_download_delay_uses_last_known_pending_after_monitor_restart(db_session, monkeypatch):
+    from backend.utils.episode_publication_timing import (
+        LAST_KNOWN_PENDING_META_KEY,
+        encode_last_known_pending,
+    )
+    from config import get_settings
+    from task_manager.tasks.workers.download_profile_worker._helpers import get_download_profile_episodes
+
+    monkeypatch.setattr(
+        get_settings().download_settings,
+        "automatic_episode_download_delay_minutes",
+        10,
+    )
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    now = _now()
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="final-after-restart",
+        ep_id="ep.1",
+        status="published_final",
+        published_at=now - timedelta(hours=1),
+        index=1,
+    )
+    episode.set_meta(
+        LAST_KNOWN_PENDING_META_KEY,
+        encode_last_known_pending(now - timedelta(minutes=2)),
+    )
+    profile = _make_podcast_profile(db_session, show, lmp)
+    db_session.commit()
+
+    assert episode.safe_published_final is None
+    assert episode.last_known_pending is not None
+    assert get_download_profile_episodes(db_session, profile) == []
+
+
 def test_final_download_falls_back_instead_of_using_safe_live_ended(db_session, monkeypatch):
     from backend.types.episode_types import EpisodePublishStatus
     from config import get_settings

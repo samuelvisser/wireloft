@@ -15,6 +15,7 @@ def _final_episode(*, episode_id: int = 71):
         metadata_is_final=False,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=None,
+        last_known_pending=None,
         published_date=datetime(2026, 9, 8, tzinfo=timezone.utc),
         show=SimpleNamespace(membership_level=WlDwMembershipLevel.FREE.value),
     )

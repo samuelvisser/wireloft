@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Show
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
+from backend.utils.episode_publication_timing import best_effort_published_date
 from dailywire_api.dw_api.client import ByShowSeason, MiddlewareAPIError, MiddlewareClient
 from task_manager.events.transactional import queue_event
 
@@ -331,9 +332,9 @@ async def run_monitor_pending_episode(
         s.commit()
         return EpisodePublishStatus(old_status)
 
-    # Safe timestamps describe what The Daily Wire was actually observed doing,
-    # never a WireLoft age-based fallback. Recording the observation first also
-    # lets this same poll's safe_live_ended guide status fallback timing.
+    # Record the observed publication timing before applying status fallbacks.
+    # safe_* facts still require continuous evidence, while interrupted monitor
+    # evidence is kept separately as a lower bound for best-effort timing.
     track_monitor_publication_timing(
         episode,
         old_status=old_status,
@@ -361,9 +362,7 @@ async def run_monitor_pending_episode(
         clear_episode_no_usable_media_tracking(episode)
 
     if new_status is not EpisodePublishStatus.NO_USABLE_MEDIA:
-        final_publication_time = episode.safe_published_final
-        if final_publication_time is None:
-            final_publication_time = episode.published_date
+        final_publication_time = best_effort_published_date(episode)
         episode.metadata_is_final = (
             metadata_watch_expired(final_publication_time)
             if new_status is EpisodePublishStatus.PUBLISHED_FINAL

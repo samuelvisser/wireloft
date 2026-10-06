@@ -15,6 +15,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
+from backend.utils.episode_publication_timing import best_effort_published_date
 from backend.services.media_download_history import (
     record_media_download_history,
     record_media_download_operation_history_once,
@@ -89,14 +90,13 @@ def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
         return None
 
     if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
-        publication_time = episode.safe_published_final
+        publication_time = best_effort_published_date(episode)
     elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value:
         publication_time = episode.safe_live_ended
+        if publication_time is None and episode.published_date is not None:
+            publication_time = ensure_utc(episode.published_date)
     else:
         publication_time = None
-
-    if publication_time is None and episode.published_date is not None:
-        publication_time = ensure_utc(episode.published_date)
 
     if publication_time is None:
         return None

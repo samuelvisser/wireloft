@@ -6,12 +6,53 @@ from datetime import datetime, timedelta, timezone
 class _EpisodeStub:
     def __init__(self):
         self.metadata: dict[str, str | None] = {}
+        self.published_date = None
 
     def get_meta(self, key: str) -> str | None:
         return self.metadata.get(key)
 
     def set_meta(self, key: str, value: str | None):
         self.metadata[key] = value
+
+    @property
+    def safe_live_ended(self):
+        from backend.utils.episode_publication_timing import (
+            TRUSTED_LIVE_ENDED_META_KEY,
+            safe_live_ended_from_meta,
+        )
+
+        return safe_live_ended_from_meta(self.get_meta(TRUSTED_LIVE_ENDED_META_KEY))
+
+    @property
+    def safe_published_final(self):
+        from backend.utils.episode_publication_timing import (
+            TRUSTED_PUBLISHED_FINAL_META_KEY,
+            safe_published_final_from_meta,
+        )
+
+        return safe_published_final_from_meta(
+            self.get_meta(TRUSTED_PUBLISHED_FINAL_META_KEY)
+        )
+
+    @property
+    def last_known_pending(self):
+        from backend.utils.episode_publication_timing import (
+            LAST_KNOWN_PENDING_META_KEY,
+            last_known_pending_from_meta,
+        )
+
+        return last_known_pending_from_meta(self.get_meta(LAST_KNOWN_PENDING_META_KEY))
+
+    @property
+    def recorded_published_final(self):
+        from backend.utils.episode_publication_timing import (
+            RECORDED_PUBLISHED_FINAL_META_KEY,
+            recorded_published_final_from_meta,
+        )
+
+        return recorded_published_final_from_meta(
+            self.get_meta(RECORDED_PUBLISHED_FINAL_META_KEY)
+        )
 
 
 def test_monitor_timing_uses_first_trusted_exit_from_live():

@@ -17,6 +17,10 @@ def _fake_episode(*, status: str, identifier: str = "ep-extra.other.2500.1"):
         index=2500,
         episode_identifier=identifier,
         publish_status=status,
+        safe_live_ended=None,
+        safe_published_final=None,
+        last_known_pending=None,
+        recorded_published_final=None,
     )
     episode.get_meta = lambda key: metadata.get(key)
     episode.set_meta = lambda key, value: metadata.__setitem__(key, value)

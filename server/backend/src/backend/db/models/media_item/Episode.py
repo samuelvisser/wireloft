@@ -12,8 +12,12 @@ from backend.db.mixins.HasTaskResourcesMixin import HasTaskResourcesMixin
 from backend.db.mixins.MediaContentMetadataMixin import MediaContentMetadataMixin
 from backend.utils.episode import EpisodeIdentifierInfo
 from backend.utils.episode_publication_timing import (
+    LAST_KNOWN_PENDING_META_KEY,
+    RECORDED_PUBLISHED_FINAL_META_KEY,
     TRUSTED_LIVE_ENDED_META_KEY,
     TRUSTED_PUBLISHED_FINAL_META_KEY,
+    last_known_pending_from_meta,
+    recorded_published_final_from_meta,
     safe_live_ended_from_meta,
     safe_published_final_from_meta,
 )
@@ -98,6 +102,20 @@ class Episode(
         """Trusted observed transition to PUBLISHED_FINAL, or None if unknown."""
         return safe_published_final_from_meta(
             self.get_meta(TRUSTED_PUBLISHED_FINAL_META_KEY)
+        )
+
+    @property
+    def last_known_pending(self) -> datetime | None:
+        """Last pending observation preserved when monitoring continuity was lost."""
+        return last_known_pending_from_meta(
+            self.get_meta(LAST_KNOWN_PENDING_META_KEY)
+        )
+
+    @property
+    def recorded_published_final(self) -> datetime | None:
+        """First time WireLoft recorded this lifecycle as PUBLISHED_FINAL."""
+        return recorded_published_final_from_meta(
+            self.get_meta(RECORDED_PUBLISHED_FINAL_META_KEY)
         )
 
     @property

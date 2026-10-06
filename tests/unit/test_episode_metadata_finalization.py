@@ -124,6 +124,7 @@ def test_metadata_refresh_timing_explicitly_prefers_safe_final(monkeypatch, has_
         metadata_is_final=False,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         safe_published_final=safe_final if has_safe_final else None,
+        last_known_pending=None,
         published_date=dailywire_published,
     )
 
@@ -154,6 +155,48 @@ def test_metadata_refresh_timing_explicitly_prefers_safe_final(monkeypatch, has_
     assert scheduled == [
         safe_final if has_safe_final else dailywire_published
     ]
+
+
+def test_metadata_refresh_timing_uses_last_known_pending_when_later(monkeypatch):
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.workers.refresh_episode_metadata import service
+
+    dailywire_published = datetime(2026, 10, 2, 8, tzinfo=timezone.utc)
+    last_known_pending = datetime(2026, 10, 2, 9, tzinfo=timezone.utc)
+    episode = SimpleNamespace(
+        id=42,
+        metadata_is_final=False,
+        publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
+        safe_published_final=None,
+        last_known_pending=last_known_pending,
+        published_date=dailywire_published,
+    )
+
+    class FakeSession:
+        def get(self, model, episode_id):
+            assert episode_id == episode.id
+            return episode
+
+    scheduled: list[datetime | None] = []
+    monkeypatch.setattr(service, "metadata_refresh_offsets_seconds", lambda: (900, 1800))
+    monkeypatch.setattr(
+        service,
+        "schedule_remaining_metadata_checks",
+        lambda *, episode_id, publication_time, now: (
+            scheduled.append(publication_time) or ["future-job"]
+        ),
+    )
+
+    did_refresh = asyncio.run(
+        service.run_refresh_episode_metadata(
+            FakeSession(),
+            episode_id=episode.id,
+            refresh=False,
+        )
+    )
+
+    assert did_refresh is False
+    assert scheduled == [last_known_pending]
 
 
 def test_metadata_worker_uses_registry_trigger_metadata_without_manual_ids():

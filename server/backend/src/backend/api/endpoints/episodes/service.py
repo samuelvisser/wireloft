@@ -12,7 +12,12 @@ from backend.db.models import Show
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
+from backend.utils.episode_publication_timing import record_published_final_observation
 from task_manager.events.transactional import queue_event
+from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
+    invalidate_publication_lifecycle_timing,
+    is_new_publication_lifecycle,
+)
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
     create_operation,
@@ -286,6 +291,9 @@ def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
     s.add(episode)
     s.flush()
 
+    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
+        record_published_final_observation(episode)
+
     queue_event(s, "episode.added", {
         "resource_id": episode.id,
         "id": episode.id,
@@ -315,6 +323,21 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
 
     # Emit status-specific events if status changed
     if hasattr(body, 'publish_status') and body.publish_status is not None and body.publish_status != old_status:
+        new_status = EpisodePublishStatus(body.publish_status)
+        if is_new_publication_lifecycle(
+            old_status=old_status,
+            new_status=new_status,
+        ):
+            invalidate_publication_lifecycle_timing(
+                episode,
+                live_ended=new_status in {
+                    EpisodePublishStatus.SCHEDULED,
+                    EpisodePublishStatus.DELAYED,
+                    EpisodePublishStatus.LIVE,
+                },
+                published_final=True,
+            )
+
         event_data = {
             "old_status": old_status,
             "status": body.publish_status,
@@ -325,9 +348,10 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
         }
         queue_event(s, "episode.status_updated", event_data)
 
-        if body.publish_status == EpisodePublishStatus.PUBLISHED_FINAL:
+        if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
+            record_published_final_observation(episode)
             queue_event(s, "episode.published_final", event_data)
-        elif body.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
+        elif new_status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
             queue_event(s, "episode.published_with_countdown", event_data)
 
     request_show_custom_index_reconciliation(s, episode.show_id)
