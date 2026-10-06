@@ -1,7 +1,7 @@
 """Persist active download filesystem claims for targeted crash recovery.
 
 Revision ID: e7c91a4d2b60
-Revises: f2a6c93d8b14
+Revises: 6d3a9f1c2b7e
 Create Date: 2026-09-14
 """
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "e7c91a4d2b60"
-down_revision = "f2a6c93d8b14"
+down_revision = "6d3a9f1c2b7e"
 branch_labels = None
 depends_on = None
 
