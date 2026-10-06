@@ -657,7 +657,7 @@ def test_ensure_episode_download_respects_user_retry_suppression(db_session):
     assert download.automatic_retry_suppressed is True
 
 
-def test_delayed_final_redownload_keeps_countdown_artifact_until_execution(db_session):
+def test_ensure_episode_download_leaves_final_replacement_to_event_handler(db_session):
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
@@ -668,7 +668,7 @@ def test_delayed_final_redownload_keeps_countdown_artifact_until_execution(db_se
         db_session,
         show,
         season,
-        slug="ep-delayed-final",
+        slug="ep",
         ep_id="ep.1",
         status="published_final",
         published_at=_now(),
@@ -688,40 +688,82 @@ def test_delayed_final_redownload_keeps_countdown_artifact_until_execution(db_se
         profile,
         publish_status="published_with_countdown",
     )
-    existing_path = existing.file_path
+    existing.redownload_when_final = True
+    db_session.commit()
 
-    action = ensure_episode_download(
-        db_session,
-        profile,
-        episode,
-        defer_artifact_preparation=True,
-    )
+    action = ensure_episode_download(db_session, profile, episode)
 
-    assert action.needs_operation is True
-    assert action.is_redownload is True
-    assert action.prepare_existing_artifact is True
+    assert action.needs_operation is False
+    assert action.is_redownload is False
     assert existing.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
-    assert existing.file_path == existing_path
-    assert Path(existing_path).exists()
+    assert existing.downloaded_publish_status == "published_with_countdown"
+    assert existing.redownload_when_final is True
 
 
-def test_ensure_episode_download_redownloads_countdown_artifact_when_final(db_session):
-    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+def test_ensure_episode_download_marks_automatic_countdown_for_final_replacement(db_session):
+    from backend.db.models.media_download import EpisodeMediaDownload
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
     lmp = _make_local_media_profile(db_session)
-    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
-    profile = _make_podcast_profile(db_session, show, lmp, download_with_countdown=True, redownload_final=True)
-    existing = _completed_download(db_session, episode, lmp, profile, publish_status="published_with_countdown")
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="countdown",
+        ep_id="ep.1",
+        status="published_with_countdown",
+        published_at=_now(),
+        index=1,
+    )
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_with_countdown=True,
+        redownload_final=True,
+    )
 
     action = ensure_episode_download(db_session, profile, episode)
+    db_session.commit()
 
+    row = db_session.get(EpisodeMediaDownload, action.media_download_id)
     assert action.needs_operation is True
-    assert action.is_redownload is True
-    assert existing.artifact_status == MediaDownloadArtifactStatus.ABSENT.value
-    assert existing.downloaded_publish_status is None
+    assert row.redownload_when_final is True
+
+
+def test_ensure_episode_download_respects_profile_redownload_policy(db_session):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(
+        db_session,
+        show,
+        season,
+        slug="countdown-no-replace",
+        ep_id="ep.2",
+        status="published_with_countdown",
+        published_at=_now(),
+        index=2,
+    )
+    profile = _make_podcast_profile(
+        db_session,
+        show,
+        lmp,
+        download_with_countdown=True,
+        redownload_final=False,
+    )
+
+    action = ensure_episode_download(db_session, profile, episode)
+    db_session.commit()
+
+    row = db_session.get(EpisodeMediaDownload, action.media_download_id)
+    assert action.needs_operation is True
+    assert row.redownload_when_final is False
 
 
 @pytest.mark.parametrize("artifact_status", ["missing", "corrupted"])

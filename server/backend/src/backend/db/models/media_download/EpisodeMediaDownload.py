@@ -17,9 +17,8 @@ class EpisodeMediaDownload(MediaDownloadBase):
     # Columns
     id: Mapped[int] = mapped_column(ForeignKey("media_downloads.id", ondelete="CASCADE"), primary_key=True)
     download_profile_id: Mapped[Optional[int]] = mapped_column(ForeignKey("download_profiles.id"))
-    # The episode's publish_status when the currently available artifact was
-    # downloaded. This is persistent artifact metadata, not attempt state.
     downloaded_publish_status: Mapped[Optional[str]]
+    redownload_when_final: Mapped[bool] = mapped_column(default=False)
 
     # Relationships
     download_profile: Mapped[Optional["DownloadProfileBase"]] = relationship(back_populates="episode_downloads")

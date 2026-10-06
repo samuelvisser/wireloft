@@ -12,6 +12,7 @@ class EpisodeDownloadAPICreate(RequestBase):
     """Request body for starting an episode download for a Local Media Profile."""
 
     local_media_profile_id: int
+    redownload_when_final: bool = False
 
 
 class MovieDownloadAPICreate(RequestBase):
@@ -59,6 +60,7 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     downloaded_bytes: Optional[int]
     format_downloaded: Optional[str]
     downloaded_at: Optional[datetime]
+    redownload_when_final: Optional[bool] = None
 
 
 class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):

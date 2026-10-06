@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db import get_session
-from backend.db.models.media_download import MediaDownloadBase
+from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.services.media_download_history import record_media_download_history
@@ -148,6 +148,8 @@ def cancel_media_download_action(
             download.automatic_retry_suppressed = (
                 download.artifact_status != MediaDownloadArtifactStatus.AVAILABLE.value
             )
+            if isinstance(download, EpisodeMediaDownload):
+                download.redownload_when_final = False
             s.commit()
             s.refresh(download)
             _ = download.assets
