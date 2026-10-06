@@ -36,7 +36,12 @@ def db_session():
     engine.dispose()
 
 
-def _make_show(session: Session, *, slug: str = "show"):
+def _make_show(
+    session: Session,
+    *,
+    slug: str = "show",
+    episode_identifier: str | None = None,
+):
     from backend.db.models import Show
     from backend.types.show_types import EpisodeIdentifier, ShowType
 
@@ -48,7 +53,9 @@ def _make_show(session: Session, *, slug: str = "show"):
         sharing_url=f"https://example.test/{slug}",
         membership_level="FREE",
         type=ShowType.PODCAST.value,
-        episode_identifier=EpisodeIdentifier.NUMBERED.value,
+        episode_identifier=(
+            episode_identifier or EpisodeIdentifier.NUMBERED.value
+        ),
         author_name="Host",
         author_slug="host",
     )
@@ -57,10 +64,23 @@ def _make_show(session: Session, *, slug: str = "show"):
     return show
 
 
-def _make_season(session: Session, show):
+def _make_season(
+    session: Session,
+    show,
+    *,
+    index: int = 1,
+    season_number: int = 1,
+    name: str = "Season 1",
+):
     from backend.db.models import Season
 
-    season = Season(show=show, index=1, slug="season-1", name="Season 1")
+    season = Season(
+        show=show,
+        index=index,
+        slug=f"season-{index}",
+        name=name,
+        season_number=season_number,
+    )
     session.add(season)
     session.flush()
     return season
@@ -74,6 +94,7 @@ def _make_episode(
     index: int,
     status: str = "published_final",
     when: datetime | None = None,
+    episode_identifier: str | None = None,
 ):
     from backend.db.models import Episode
 
@@ -84,7 +105,7 @@ def _make_episode(
         show=show,
         season=season,
         index=index,
-        episode_identifier=f"ep.{index}",
+        episode_identifier=episode_identifier or f"ep.{index}",
         slug=f"episode-{index}",
         title=f"Episode {index}",
         description="Description",
@@ -385,6 +406,109 @@ def test_max_items_keeps_newest_feed_entries(db_session):
         newest,
         second,
     ]
+
+
+def test_seasonal_feed_emits_apple_and_podcasting20_numbering(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.types.show_types import EpisodeIdentifier
+
+    show = _make_show(
+        db_session,
+        episode_identifier=EpisodeIdentifier.SEASONAL.value,
+    )
+    season = _make_season(
+        db_session,
+        show,
+        index=4,
+        season_number=2,
+        name="Second Season",
+    )
+    _make_episode(
+        db_session,
+        show,
+        season,
+        index=7,
+        episode_identifier="ep.S02E07",
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        mode="mp4",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:type>serial</itunes:type>" in xml
+    assert "<itunes:season>2</itunes:season>" in xml
+    assert "<itunes:episode>7</itunes:episode>" in xml
+    assert "<itunes:episodeType>full</itunes:episodeType>" in xml
+    assert '<podcast:season name="Second Season">2</podcast:season>' in xml
+    assert "<podcast:episode>7</podcast:episode>" in xml
+
+
+def test_seasonal_attached_extra_keeps_parent_episode_number(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+    from backend.types.show_types import EpisodeIdentifier
+
+    show = _make_show(
+        db_session,
+        episode_identifier=EpisodeIdentifier.SEASONAL.value,
+    )
+    season = _make_season(
+        db_session,
+        show,
+        season_number=3,
+        name="Season 3",
+    )
+    _make_episode(
+        db_session,
+        show,
+        season,
+        index=1,
+        episode_identifier="ep-extra.other.S03E12.1",
+    )
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        mode="mp4",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+    profile.ep_id_type_list = ["ep-extra"]
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:season>3</itunes:season>" in xml
+    assert "<itunes:episode>12</itunes:episode>" in xml
+    assert "<itunes:episodeType>bonus</itunes:episodeType>" in xml
+    assert '<podcast:season name="Season 3">3</podcast:season>' in xml
+    assert "<podcast:episode>12.1</podcast:episode>" in xml
+
+
+def test_nonseasonal_feed_does_not_emit_seasonal_podcast_tags(db_session):
+    from backend.api.endpoints.feeds.service import render_rss_feed
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    _make_episode(db_session, show, season, index=1)
+    profile = _make_rss_profile(
+        db_session,
+        show,
+        mode="mp4",
+        use_downloads=False,
+        use_dw_stream=True,
+    )
+
+    xml = render_rss_feed(db_session, _FakeRequest(), profile).decode()
+
+    assert "<itunes:type>serial</itunes:type>" not in xml
+    assert "<itunes:season>" not in xml
+    assert "<itunes:episode>" not in xml
+    assert "<itunes:episodeType>" not in xml
+    assert "<podcast:season" not in xml
+    assert "<podcast:episode>" not in xml
 
 
 def test_get_dailywire_stream_url_selects_requested_media(
