@@ -57,14 +57,18 @@ function ProfileDownloadRow({
                                 profile,
                                 download,
                                 episodeSlug,
+                                confirmCountdownDownload,
                             }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
     episodeSlug: string
+    confirmCountdownDownload: boolean
 }) {
     const qc = useQueryClient()
     const [busy, setBusy] = useState(false)
     const [showLog, setShowLog] = useState(false)
+    const [countdownConfirm, setCountdownConfirm] = useState(false)
+    const [redownloadWhenFinal, setRedownloadWhenFinal] = useState(true)
 
     const invalidate = () =>
         Promise.all([
@@ -88,16 +92,25 @@ function ProfileDownloadRow({
         }
     }
 
-    const startDownload = () =>
+    const startDownload = (redownloadFinal = false) =>
         request(
             `${(window as any).appConfig.API_URL}/episodes/${encodeURIComponent(episodeSlug)}/downloads`,
             {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({localMediaProfileId: profile.id}),
+                body: JSON.stringify({localMediaProfileId: profile.id, redownloadWhenFinal: redownloadFinal}),
             },
             'Could not start the download',
         )
+
+    const requestDownload = () => {
+        if (confirmCountdownDownload) {
+            setRedownloadWhenFinal(true)
+            setCountdownConfirm(true)
+            return
+        }
+        void startDownload()
+    }
 
     const retryDownload = () =>
         request(
@@ -128,7 +141,7 @@ function ProfileDownloadRow({
                     : <button
                         type="button"
                         className="btn btn-primary"
-                        onClick={startDownload}
+                        onClick={requestDownload}
                         disabled={busy}
                         aria-label={`Download ${profile.name}`}
                     >
@@ -180,6 +193,41 @@ function ProfileDownloadRow({
                     </button>
                 </div>
             )}
+            <ConfirmDialog
+                open={countdownConfirm}
+                title="Download episode with countdown?"
+                onDismiss={() => {
+                    if (!busy) setCountdownConfirm(false)
+                }}
+                icon={faIcon('fas', 'circle-exclamation')}
+                dismissOnOverlayClick={!busy}
+                cancelButton={{disabled: busy}}
+                confirmButton={{
+                    label: busy ? 'Starting…' : 'Yes, download',
+                    onClick: async () => {
+                        await startDownload(redownloadWhenFinal)
+                        setCountdownConfirm(false)
+                    },
+                    icon: faIcon('fas', 'download'),
+                    disabled: busy,
+                }}
+            >
+                <p>
+                    This episode is published, but its current media still contains The Daily Wire countdown.
+                </p>
+                <p>
+                    If you continue, WireLoft will download the current media as-is, including that countdown.
+                </p>
+                <label className="confirm-dialog-option">
+                    <input
+                        type="checkbox"
+                        checked={redownloadWhenFinal}
+                        onChange={(event) => setRedownloadWhenFinal(event.target.checked)}
+                        disabled={busy}
+                    />
+                    <span>Re-download automatically when the countdown is gone</span>
+                </label>
+            </ConfirmDialog>
             <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
         </div>
     )
@@ -260,8 +308,14 @@ export default function EpisodePage() {
     const statusLabel = PUBLISH_STATUS_LABELS[publishStatus] ?? publishStatus
     const isLive = publishStatus === 'live' || publishStatus === EpisodePublishStatus.live
     const earlyDeleteAvailable = episode.earlyDeleteAvailable
+    const containsCountdown = (
+        publishStatus === 'published_with_countdown'
+        || publishStatus === EpisodePublishStatus.publishedWithCountdown
+    )
     const isDownloadable = (
-        publishStatus === 'published_final' || publishStatus === EpisodePublishStatus.publishedFinal
+        containsCountdown
+        || publishStatus === 'published_final'
+        || publishStatus === EpisodePublishStatus.publishedFinal
     )
     const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.noUsableMediaDeleteAfterMinutes
     const earlyDeleteDisabledReason = earlyDeleteStarting
@@ -422,6 +476,7 @@ export default function EpisodePage() {
                                         profile={profile}
                                         download={downloadByProfileId.get(profile.id)}
                                         episodeSlug={episode.slug}
+                                        confirmCountdownDownload={containsCountdown}
                                     />
                                 ))}
                             </div>

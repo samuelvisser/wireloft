@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import case, event, func, select
@@ -12,6 +12,7 @@ from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import EpisodeMediaDownload, MediaDownloadBase
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
+from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
 from backend.services.media_download_history import (
@@ -51,6 +52,7 @@ from task_manager.scheduler.types import (
     ResourceType,
     TaskStatus,
 )
+from task_manager.tasks.helpers.episodes.metadata import ensure_utc
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -78,6 +80,27 @@ _ACTIVE_RUN_STATUSES = (
 # free slots and each reserve five before either transaction commits.
 _DOWNLOAD_DISPATCH_LOCK = threading.Lock()
 _DOWNLOAD_DISPATCH_TRANSACTION_KEY = "wireloft.media_download_dispatch_transaction"
+
+
+def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
+    """Return when an automatic episode download may start."""
+    delay_minutes = get_settings().download_settings.automatic_episode_download_delay_minutes
+    if delay_minutes <= 0:
+        return None
+
+    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
+        publication_time = episode.safe_published_final
+    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value:
+        publication_time = episode.safe_live_ended
+    else:
+        publication_time = None
+
+    if publication_time is None and episode.published_date is not None:
+        publication_time = ensure_utc(episode.published_date)
+
+    if publication_time is None:
+        return None
+    return publication_time + timedelta(minutes=delay_minutes)
 
 
 def _hold_download_dispatch_lock_until_transaction_end(session: Session) -> None:
@@ -180,6 +203,7 @@ def _operation_context(
         "episode_slug": episode.slug if episode else None,
         "episode_title": episode.title if episode else None,
         "episode_identifier": episode.episode_identifier if episode else None,
+        "episode_publish_status": episode.publish_status if episode else None,
         "show_slug": show.slug if show else None,
         "show_title": show.title if show else None,
         "movie_slug": movie.slug if movie else None,
@@ -763,6 +787,62 @@ def remaining_media_download_budget(session: Session) -> int:
     return max(0, int(max_concurrent) - in_flight)
 
 
+def _has_active_media_download_run(
+    session: Session,
+    media_download_id: int,
+) -> bool:
+    return session.scalar(
+        select(TaskRun.id)
+        .where(
+            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+            TaskRun.resource_id == media_download_id,
+            TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
+        )
+        .limit(1)
+    ) is not None
+
+
+def queue_final_episode_redownload_if_ready(
+    session: Session,
+    media_download_id: int,
+) -> bool:
+    """Consume final-replacement intent only after the prior attempt is terminal."""
+    download = session.get(EpisodeMediaDownload, media_download_id)
+    if download is None or not download.redownload_when_final:
+        return False
+
+    episode = session.get(Episode, download.media_item_id)
+    if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
+        return False
+
+    active_operation = get_active_media_download_operation(session, download.id)
+    if active_operation is not None:
+        if (
+            isinstance(active_operation.context, dict)
+            and active_operation.context.get("episode_publish_status")
+            == EpisodePublishStatus.PUBLISHED_FINAL.value
+        ):
+            download.redownload_when_final = False
+            session.flush()
+        return False
+
+    if _has_active_media_download_run(session, download.id):
+        return False
+
+    ready_at = automatic_episode_download_ready_at(episode)
+    download.redownload_when_final = False
+    create_media_download_operation(
+        session,
+        download,
+        source=OperationSource.SYSTEM.value,
+        is_redownload=True,
+        prepare_existing_artifact=True,
+        not_before=ready_at,
+    )
+    session.flush()
+    return True
+
+
 
 def _reserve_target_dispatch(
     session: Session,
@@ -780,6 +860,9 @@ def _reserve_target_dispatch(
         return False
     target = operation.targets[0]
     if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
+        return False
+
+    if _has_active_media_download_run(session, target.resource_id):
         return False
 
     definition_id = session.scalar(
@@ -965,10 +1048,17 @@ def dispatch_queued_media_download_operations(
     return dispatched
 
 
-def on_media_download_task_terminal(**_) -> None:
-    """Fill newly freed download slots after a download TaskRun becomes terminal."""
+def on_media_download_task_terminal(
+    *,
+    resource_type: str | None = None,
+    resource_id: int | None = None,
+    **_,
+) -> None:
+    """Finalize pending episode replacements, then fill newly freed download slots."""
     session = get_session()
     try:
+        if resource_type == ResourceType.MEDIA_DOWNLOAD.value and resource_id is not None:
+            queue_final_episode_redownload_if_ready(session, resource_id)
         dispatch_queued_media_download_operations(session)
         session.commit()
     except Exception:

@@ -249,6 +249,19 @@
     color: var(--error, #d64545);
 }
 
+.episode-view .confirm-dialog-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 14px;
+    cursor: pointer;
+}
+
+.episode-view .confirm-dialog-option input {
+    flex: 0 0 auto;
+    margin-top: 3px;
+}
+
 .episode-view .episode-page-skeleton-block {
     background: #e5e7eb;
     animation: episode-page-skeleton-pulse 1.5s ease-in-out infinite;
