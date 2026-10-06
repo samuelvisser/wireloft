@@ -31,8 +31,8 @@ docker run -d \
 
 The normal `npm run build` path deliberately uses Font Awesome Free. The same
 build can be requested explicitly with `npm run build:free-icons`. The Free
-Font Awesome packages are pinned to the same Font Awesome 6 generation as the
-paid WireLoft kit, so icons available in both sets use matching artwork.
+Font Awesome packages are pinned to Font Awesome 7, matching the artwork used
+by the paid WireLoft kit so icons available in both sets stay visually aligned.
 
 For a credential-free checkout, install UI dependencies from the public npm
 registry:
