@@ -11,7 +11,7 @@ from task_manager.tasks.media_download_operations import (
     cancel_media_download_operation,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
-    queue_final_episode_redownload_if_ready,
+    queue_episode_redownload_if_ready,
 )
 
 
@@ -67,7 +67,7 @@ async def run_finalize_countdown_downloads(
             and active.context.get("episode_publish_status")
             == EpisodePublishStatus.PUBLISHED_FINAL.value
         ):
-            queue_final_episode_redownload_if_ready(s, download_id)
+            queue_episode_redownload_if_ready(s, download_id)
             s.commit()
             continue
         active_operation_id = active.id if active is not None else None
@@ -88,7 +88,7 @@ async def run_finalize_countdown_downloads(
 
         # A queued/scheduled cancellation may already be terminal. A RUNNING
         # worker keeps the intent pending until its terminal callback consumes it.
-        if queue_final_episode_redownload_if_ready(s, download_id):
+        if queue_episode_redownload_if_ready(s, download_id):
             queued += 1
         s.commit()
 
