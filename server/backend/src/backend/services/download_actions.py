@@ -16,6 +16,7 @@ from backend.services.media_download_history import record_media_download_histor
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
     automatic_episode_download_delay_passed,
+    automatic_episode_download_ready_at,
     cancel_media_download_operation,
     create_media_download_operation,
     dispatch_queued_media_download_operations,
@@ -58,6 +59,7 @@ def retry_media_download_action(
         source: str = OperationSource.UI,
         reuse_matching_active: bool = False,
         redownload_when_delay_passed: bool = False,
+        schedule_for_delay: bool = False,
 ) -> str:
     """Replace one download attempt and return the new media.download operation ID."""
     active_operation_id: str | None = None
@@ -70,6 +72,7 @@ def retry_media_download_action(
             episode = s.get(Episode, download.media_item_id)
             download.redownload_when_delay_passed = bool(
                 redownload_when_delay_passed
+                and not schedule_for_delay
                 and episode is not None
                 and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
                 and not automatic_episode_download_delay_passed(episode)
@@ -104,12 +107,21 @@ def retry_media_download_action(
             download = s.get(MediaDownloadBase, media_download_id)
             if download is None:
                 raise DownloadActionError("missing", "Media download not found")
+            scheduled_ready_at = None
+            operation_source = source
+            if schedule_for_delay and isinstance(download, EpisodeMediaDownload):
+                episode = s.get(Episode, download.media_item_id)
+                if episode is not None:
+                    scheduled_ready_at = automatic_episode_download_ready_at(episode)
+                operation_source = OperationSource.SYSTEM.value
+
             operation = create_media_download_operation(
                 s,
                 download,
-                source=source,
+                source=operation_source,
                 is_redownload=is_redownload,
                 prepare_existing_artifact=True,
+                not_before=scheduled_ready_at,
             )
             dispatch_queued_media_download_operations(s)
             operation_id = operation.id

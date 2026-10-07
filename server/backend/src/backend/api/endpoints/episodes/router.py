@@ -8,6 +8,7 @@ from ..media_downloads.service import create_episode_download
 from backend.app import db_session
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
+    automatic_episode_download_ready_at,
     create_media_download_operation,
     dispatch_queued_media_download_operations,
 )
@@ -21,14 +22,24 @@ router = APIRouter(prefix="/episodes", tags=["Episodes"])
     status_code=status.HTTP_202_ACCEPTED,
 )
 def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
-    """Start an episode download as a generic UI TaskOperation."""
+    """Start now or schedule an episode download through the canonical operation path."""
     with db_session() as s:
         try:
             download = create_episode_download(s, episode_slug, body)
+            scheduled_ready_at = (
+                automatic_episode_download_ready_at(download.media)
+                if body.schedule_for_delay
+                else None
+            )
             operation = create_media_download_operation(
                 s,
                 download,
-                source=OperationSource.UI,
+                source=(
+                    OperationSource.SYSTEM.value
+                    if body.schedule_for_delay
+                    else OperationSource.UI.value
+                ),
+                not_before=scheduled_ready_at,
             )
             dispatch_queued_media_download_operations(s)
             result = {

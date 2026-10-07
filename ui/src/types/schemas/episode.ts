@@ -42,6 +42,7 @@ export const EpisodeReadSchema = z.looseObject({
     publishStatus: z.union([z.enum(EpisodePublishStatus), z.string()]),
     earlyDeleteAvailable: z.boolean().optional().default(false),
     downloadDelayPassed: z.boolean(),
+    downloadDelayReadyAt: ApiDateTimeSchema.nullable(),
     description: z.string(),
     sharingUrl: z.string(),
     duration: z.number(),

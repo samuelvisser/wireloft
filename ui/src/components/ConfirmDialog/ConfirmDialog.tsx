@@ -26,6 +26,7 @@ type ConfirmDialogProps = {
     icon?: IconProp
     iconTone?: 'default' | 'danger'
     confirmButton: ConfirmDialogButton
+    secondaryButton?: ConfirmDialogButton
     showCancelButton?: boolean
     cancelButton?: ConfirmDialogCancelButton
     dismissOnOverlayClick?: boolean
@@ -40,6 +41,7 @@ export default function ConfirmDialog({
     icon,
     iconTone = 'default',
     confirmButton,
+    secondaryButton,
     showCancelButton = true,
     cancelButton,
     dismissOnOverlayClick = true,
@@ -95,6 +97,23 @@ export default function ConfirmDialog({
                                 />
                             )}
                             {cancelButton?.label ?? 'Cancel'}
+                        </button>
+                    )}
+                    {secondaryButton && (
+                        <button
+                            type="button"
+                            className={secondaryButton.className ?? 'btn'}
+                            disabled={secondaryButton.disabled}
+                            onClick={() => void secondaryButton.onClick()}
+                        >
+                            {secondaryButton.icon && (
+                                <FontAwesomeIcon
+                                    icon={secondaryButton.icon}
+                                    spin={secondaryButton.iconSpin}
+                                    aria-hidden="true"
+                                />
+                            )}
+                            {secondaryButton.label}
                         </button>
                     )}
                     <button

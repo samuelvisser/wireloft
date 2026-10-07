@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
@@ -24,7 +25,7 @@ from task_manager.scheduler.operations import (
     queue_operation_target_dispatch,
 )
 from task_manager.tasks.media_download_operations import (
-    automatic_episode_download_delay_passed,
+    automatic_episode_download_ready_at,
 )
 
 
@@ -34,8 +35,13 @@ _EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
 
 
 def _episode_api_read(episode: Episode) -> EpisodeAPIRead:
+    ready_at = automatic_episode_download_ready_at(episode)
     return EpisodeAPIRead.model_validate(episode).model_copy(update={
-        "download_delay_passed": automatic_episode_download_delay_passed(episode),
+        "download_delay_passed": (
+            ready_at is None
+            or ready_at <= datetime.now(timezone.utc)
+        ),
+        "download_delay_ready_at": ready_at,
     })
 
 

@@ -28,6 +28,7 @@ def retry_media_download_action(
         source: str = OperationSource.UI,
         reuse_matching_active: bool = False,
         redownload_when_delay_passed: bool = False,
+        schedule_for_delay: bool = False,
 ) -> str:
     return _invoke(
         actions.retry_media_download_action,
@@ -35,6 +36,7 @@ def retry_media_download_action(
         source=source,
         reuse_matching_active=reuse_matching_active,
         redownload_when_delay_passed=redownload_when_delay_passed,
+        schedule_for_delay=schedule_for_delay,
     )
 
 

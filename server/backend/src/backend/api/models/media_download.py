@@ -14,12 +14,14 @@ class EpisodeDownloadAPICreate(RequestBase):
     local_media_profile_id: int
     redownload_when_final: bool = False
     redownload_when_delay_passed: bool = False
+    schedule_for_delay: bool = False
 
 
 class MediaDownloadRetryAPIRequest(RequestBase):
     """Optional controls for an explicit retry/re-download request."""
 
     redownload_when_delay_passed: bool = False
+    schedule_for_delay: bool = False
 
 
 class MovieDownloadAPICreate(RequestBase):

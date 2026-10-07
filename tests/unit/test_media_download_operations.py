@@ -164,13 +164,16 @@ def test_episode_api_delay_readiness_and_manual_redownload_intent_use_safe_delay
         episode = session.get(Episode, download.media_item_id)
         assert episode is not None
         episode.published_date = datetime.now(timezone.utc) - timedelta(hours=1)
+        observed_final = datetime.now(timezone.utc) - timedelta(minutes=2)
         record_published_final_observation(
             episode,
-            observed_at=datetime.now(timezone.utc) - timedelta(minutes=2),
+            observed_at=observed_final,
         )
         session.flush()
 
-        assert _episode_api_read(episode).download_delay_passed is False
+        api_episode = _episode_api_read(episode)
+        assert api_episode.download_delay_passed is False
+        assert api_episode.download_delay_ready_at == observed_final + timedelta(minutes=10)
 
         requested = create_episode_download(
             session,
@@ -217,6 +220,133 @@ def test_episode_api_delay_readiness_and_manual_redownload_intent_use_safe_delay
         engine.dispose()
 
 
+def test_manual_schedule_uses_same_system_publication_wait_as_download_profile(monkeypatch):
+    from contextlib import contextmanager
+    import importlib
+
+    from backend.api.models.media_download import EpisodeDownloadAPICreate
+    from backend.db.models import Episode
+    from backend.utils.episode_publication_timing import record_published_final_observation
+    from config import get_settings
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operations import operation_admission_wait_state
+    from task_manager.scheduler.types import OperationStatus
+    from task_manager.tasks import media_download_operations
+
+    episode_router = importlib.import_module("backend.api.endpoints.episodes.router")
+    media_download_service = importlib.import_module(
+        "backend.api.endpoints.media_downloads.service"
+    )
+    session, engine = _session()
+    try:
+        settings = get_settings().download_settings
+        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "ensure_safe_delay", True)
+
+        download = _make_download(session, slug="manual-scheduled-delay")
+        episode = session.get(Episode, download.media_item_id)
+        assert episode is not None
+        observed_final = datetime.now(timezone.utc) - timedelta(minutes=2)
+        record_published_final_observation(episode, observed_at=observed_final)
+        session.commit()
+
+        @contextmanager
+        def fake_db_session():
+            yield session
+
+        monkeypatch.setattr(episode_router, "db_session", fake_db_session)
+        monkeypatch.setattr(
+            media_download_service,
+            "prepare_media_download_artifact",
+            lambda *_args, **_kwargs: None,
+        )
+        scheduled_wakeups: list[tuple[str, datetime]] = []
+        monkeypatch.setattr(
+            media_download_operations,
+            "_schedule_delayed_media_download_dispatch",
+            lambda operation_id, *, run_at: scheduled_wakeups.append((operation_id, run_at)),
+        )
+
+        result = episode_router.episode_download_create(
+            episode.slug,
+            EpisodeDownloadAPICreate(
+                local_media_profile_id=download.local_media_profile_id,
+                schedule_for_delay=True,
+            ),
+        )
+
+        operation = session.get(TaskOperation, result["operation_id"])
+        assert operation is not None
+        assert operation.source == "SYSTEM"
+        assert operation.status == OperationStatus.WAITING.value
+        wait_state = operation_admission_wait_state(operation)
+        assert wait_state is not None
+        assert wait_state["reason"] == "publication_delay"
+        expected_ready_at = observed_final + timedelta(minutes=10)
+        assert wait_state["until"] == expected_ready_at.timestamp()
+        assert scheduled_wakeups == [(operation.id, expected_ready_at)]
+        assert download.redownload_when_delay_passed is False
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_manual_retry_schedule_creates_delayed_system_operation(monkeypatch):
+    from backend.db.models import Episode
+    from backend.services import download_actions
+    from backend.utils.episode_publication_timing import record_published_final_observation
+    from config import get_settings
+    from task_manager.scheduler.db import TaskOperation
+    from task_manager.scheduler.operations import operation_admission_wait_state
+    from task_manager.scheduler.types import OperationStatus
+    from task_manager.tasks import media_download_operations
+
+    setup_session, engine = _session()
+    try:
+        settings = get_settings().download_settings
+        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "ensure_safe_delay", True)
+
+        download = _make_download(setup_session, slug="manual-retry-scheduled-delay")
+        episode = setup_session.get(Episode, download.media_item_id)
+        assert episode is not None
+        observed_final = datetime.now(timezone.utc) - timedelta(minutes=2)
+        record_published_final_observation(episode, observed_at=observed_final)
+        download_id = download.id
+        setup_session.commit()
+        setup_session.close()
+
+        monkeypatch.setattr(download_actions, "get_session", lambda: Session(engine))
+        scheduled_wakeups: list[tuple[str, datetime]] = []
+        monkeypatch.setattr(
+            media_download_operations,
+            "_schedule_delayed_media_download_dispatch",
+            lambda operation_id, *, run_at: scheduled_wakeups.append((operation_id, run_at)),
+        )
+
+        operation_id = download_actions.retry_media_download_action(
+            download_id,
+            schedule_for_delay=True,
+        )
+
+        check_session = Session(engine)
+        try:
+            operation = check_session.get(TaskOperation, operation_id)
+            assert operation is not None
+            assert operation.source == "SYSTEM"
+            assert operation.status == OperationStatus.WAITING.value
+            wait_state = operation_admission_wait_state(operation)
+            assert wait_state is not None
+            expected_ready_at = observed_final + timedelta(minutes=10)
+            assert wait_state["until"] == expected_ready_at.timestamp()
+            assert scheduled_wakeups == [(operation.id, expected_ready_at)]
+        finally:
+            check_session.close()
+    finally:
+        setup_session.close()
+        engine.dispose()
+
+
 def test_manual_unsafe_download_followup_waits_until_delay_passes(monkeypatch):
     from backend.db.models import Episode
     from backend.utils.episode_publication_timing import record_published_final_observation
@@ -250,7 +380,7 @@ def test_manual_unsafe_download_followup_waits_until_delay_passes(monkeypatch):
         wait_state = operation_admission_wait_state(operation)
         assert wait_state is not None
         assert wait_state["reason"] == "publication_delay"
-        assert wait_state["until"] == observed_final + timedelta(minutes=10)
+        assert wait_state["until"] == (observed_final + timedelta(minutes=10)).timestamp()
         assert download.redownload_when_delay_passed is False
     finally:
         session.close()

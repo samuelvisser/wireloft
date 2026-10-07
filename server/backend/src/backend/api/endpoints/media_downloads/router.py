@@ -115,6 +115,9 @@ def media_downloads_retry(
         redownload_when_delay_passed=bool(
             body is not None and body.redownload_when_delay_passed
         ),
+        schedule_for_delay=bool(
+            body is not None and body.schedule_for_delay
+        ),
     )
     return {
         "queued": True,
