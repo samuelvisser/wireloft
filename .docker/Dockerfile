@@ -28,8 +28,7 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
             --no-fund; \
     fi
 
-# Vite reads the canonical application version from the root manifest while
-# building the frontend bundle.
+# Give Vite the correct application version to bake in
 COPY pyproject.toml /pyproject.toml
 COPY ui/ ./
 
