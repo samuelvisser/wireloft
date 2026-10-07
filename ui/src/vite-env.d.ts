@@ -1,9 +1,5 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_WIRELOFT_VERSION: string
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv
+declare module 'virtual:wireloft-version' {
+  export const WIRELOFT_VERSION: string
 }

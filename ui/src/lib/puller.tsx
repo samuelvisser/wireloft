@@ -14,13 +14,13 @@ import {
   type FrontendPullRead,
 } from '../types/schemas/puller'
 import {usePageActive} from './pageActivity'
+import {WIRELOFT_VERSION as FRONTEND_APP_VERSION} from 'virtual:wireloft-version'
 
 
 export const FRONTEND_PULLER_QUERY_KEY = ['frontendPuller'] as const
 export const FRONTEND_PULLER_SLOW_MS = 5_000
 export const FRONTEND_PULLER_FAST_MS = 1_250
 
-const FRONTEND_APP_VERSION = import.meta.env.VITE_WIRELOFT_VERSION
 let reloadRequested = false
 
 type FrontendPullerContextValue = {

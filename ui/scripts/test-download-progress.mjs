@@ -19,9 +19,19 @@ try {
         packages: 'external',
         jsx: 'automatic',
         loader: {'.css': 'empty'},
-        define: {
-            'import.meta.env.VITE_WIRELOFT_VERSION': JSON.stringify('test'),
-        },
+        plugins: [{
+            name: 'wireloft-version-test',
+            setup(build) {
+                build.onResolve({filter: /^virtual:wireloft-version$/}, () => ({
+                    path: 'wireloft-version',
+                    namespace: 'wireloft-version-test',
+                }))
+                build.onLoad({filter: /.*/, namespace: 'wireloft-version-test'}, () => ({
+                    contents: 'export const WIRELOFT_VERSION = "test"',
+                    loader: 'js',
+                }))
+            },
+        }],
     })
     execFileSync(
         process.execPath,
