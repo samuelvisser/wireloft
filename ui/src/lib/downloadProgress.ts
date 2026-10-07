@@ -2,11 +2,29 @@ import type {MediaDownloadDomainViewRead} from '../types/schemas/media_download'
 import type {TaskOperationRead} from '../types/schemas/operation'
 import type {DownloadPresentation, ProgressPresentation} from '../types/progress'
 import {DownloadExecutionSchema, type DownloadExecution, type DownloadStage} from '../types/schemas/download_execution'
-import {formatBytes} from '../utils/formatting'
+import {formatBytes, formatDate} from '../utils/formatting'
 import {waitingPresentation, workingPresentation} from './progressPresentation'
 import {faIcon} from '../icons/faIcon'
 
 export const ACTIVE_OPERATION_STATUSES = new Set(['QUEUED', 'RUNNING', 'WAITING'])
+
+type DownloadWaitState = {
+    reason?: string
+    message?: string
+    until?: number | null
+}
+
+function publicationDelayLabels(wait: DownloadWaitState): {label: string; compactLabel: string} | undefined {
+    if (wait.reason !== 'publication_delay' || wait.until == null || !Number.isFinite(wait.until)) return undefined
+
+    const until = new Date(wait.until * 1000)
+    if (Number.isNaN(until.getTime())) return undefined
+
+    return {
+        label: `Delayed until ${formatDate(until)}...`,
+        compactLabel: 'Delayed...',
+    }
+}
 
 const ACTIVITIES: Record<string, string> = {
     prepare: 'Preparing', authorize: 'Authorizing', resolve_playback: 'Resolving playback',
@@ -42,7 +60,7 @@ export function isPublicationDelayWait(operation?: TaskOperationRead): boolean {
 
     const execution = downloadExecution(operation)
     const main = execution?.stages.find(stage => stage.id === execution.main_activity)
-    const wait = main?.wait || operation.progressMeta?.wait_state as {reason?: string} | undefined
+    const wait = (main?.wait || operation.progressMeta?.wait_state) as DownloadWaitState | undefined
     return wait?.reason === 'publication_delay'
 }
 
@@ -58,8 +76,12 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
         const media = execution?.stages.find(stage => stage.id === 'media')
         const transferPercent = execution?.phase === 'transferring' && main?.id === 'media' && media?.fraction != null
             ? Math.max(0, Math.min(100, Math.floor(media.fraction * 100))) : null
-        const wait = main?.wait || operation.progressMeta?.wait_state as {reason?: string; message?: string} | undefined
-        if (wait?.reason) return {status: 'waiting', ...waitingPresentation(wait.reason, 'message' in wait ? wait.message : undefined, transferPercent)}
+        const wait = (main?.wait || operation.progressMeta?.wait_state) as DownloadWaitState | undefined
+        if (wait?.reason) return {
+            status: 'waiting',
+            ...waitingPresentation(wait.reason, wait.message, transferPercent),
+            ...(publicationDelayLabels(wait) || {}),
+        }
         if (operation.status === 'WAITING') return {status: 'waiting', ...waitingPresentation('dependency', operation.message, transferPercent)}
         const secondary = execution?.stages.filter(stage => stage.id !== main?.id && ['running', 'waiting'].includes(stage.state))
             .map(stage => stage.wait ? `${activityLabel(stage)}: waiting` : activityLabel(stage)).join(' / ')
