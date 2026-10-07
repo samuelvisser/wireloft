@@ -71,7 +71,6 @@ export function useLocalMediaProfiles() {
             LocalMediaProfileReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
     useEffect(() => {
@@ -88,7 +87,6 @@ export function useLocalMediaProfilesView() {
             LocalMediaProfileViewReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -114,7 +112,6 @@ export function usePodcastDownloadProfiles() {
             PodcastDownloadProfileReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -127,7 +124,6 @@ export function useSeriesDownloadProfiles() {
             SeriesDownloadProfileReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -140,7 +136,6 @@ export function useDownloadProfilesView() {
             DownloadProfileReadViewSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -153,7 +148,6 @@ export function useRssStreamProfiles() {
             RssStreamProfileReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -166,7 +160,6 @@ export function useStreamProfilesView() {
             StreamProfileReadViewSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -187,7 +180,6 @@ export function useShowsView() {
             ShowReadViewSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -200,7 +192,6 @@ export function useMovies() {
             MovieReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -349,7 +340,6 @@ export function useEpisode(episodeId?: string) {
             EpisodeReadSchema,
             signal,
         ),
-        placeholderData: keepPreviousData,
     })
 }
 
@@ -440,7 +430,6 @@ export function useDownloadProfilesByShowSlug(showSlug?: string) {
             DownloadProfileReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }
@@ -454,7 +443,6 @@ export function useStreamProfilesByShowSlug(showSlug?: string) {
             StreamProfileReadSchema.array(),
             signal,
         ),
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
 }

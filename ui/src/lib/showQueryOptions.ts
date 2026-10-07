@@ -1,4 +1,4 @@
-import {keepPreviousData, queryOptions, type QueryClient} from '@tanstack/react-query'
+import {queryOptions, type QueryClient} from '@tanstack/react-query'
 
 import {EpisodeReadViewPageSchema} from '../types/schemas/episode'
 import {SeasonReadSchema} from '../types/schemas/season'
@@ -26,7 +26,6 @@ export function showsQueryOptions() {
       ShowReadSchema.array(),
       signal,
     ),
-    placeholderData: keepPreviousData,
     refetchOnMount: 'always' as const,
   })
 }
@@ -39,7 +38,6 @@ export function showQueryOptions(id: string | undefined, queryClient: QueryClien
       ShowReadSchema,
       signal,
     ),
-    placeholderData: keepPreviousData,
     initialData: () => {
       if (!id) return undefined
       const shows = queryClient.getQueryData<ShowRead[]>(showsQueryOptions().queryKey)
@@ -57,7 +55,6 @@ export function seasonsQueryOptions(showSlug: string | undefined) {
       SeasonReadSchema.array(),
       signal,
     ),
-    placeholderData: keepPreviousData,
     refetchOnMount: 'always' as const,
   })
 }

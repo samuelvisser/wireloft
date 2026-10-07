@@ -56,12 +56,11 @@ export default function ShowPage() {
   const {
     data: seasonsData,
     isLoading: seasonsLoading,
-    isPlaceholderData: seasonsPlaceholder,
   } = useShowSeasons(isSeasonal ? id : undefined)
-  const seasons = useMemo(() => {
-    if (seasonsPlaceholder) return []
-    return [...(seasonsData ?? [])].sort((a, b) => b.index - a.index)
-  }, [seasonsData, seasonsPlaceholder])
+  const seasons = useMemo(
+    () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
+    [seasonsData],
+  )
   const seasonReg = useMemo(() => {
     const spec: Record<string, {label: string}> = {}
     const values: string[] = []
