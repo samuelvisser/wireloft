@@ -1,5 +1,6 @@
 import type {ProgressPresentation} from '../types/progress'
 import {faIcon} from '../icons/faIcon'
+import {formatDate, formatTime} from '../utils/formatting'
 
 const WAITS: Record<string, [string, string]> = {
     daily_wire_request_cooldown: ['Cooldown', 'Waiting for The Daily Wire request cooldown. The operation will resume automatically.'],
@@ -15,18 +16,39 @@ const WAITS: Record<string, [string, string]> = {
     publication_delay: ['Delayed', 'Waiting for the post-publication safety delay before downloading.'],
 }
 
+const PUBLICATION_DELAY_TIME_ONLY_THRESHOLD_MS = 12 * 60 * 60 * 1000
+
+function publicationDelayDeadline(until?: number | null): string | undefined {
+    if (until == null || !Number.isFinite(until)) return undefined
+
+    const deadline = new Date(until * 1000)
+    if (Number.isNaN(deadline.getTime())) return undefined
+
+    const delayRemainingMs = deadline.getTime() - Date.now()
+    return delayRemainingMs >= 0 && delayRemainingMs < PUBLICATION_DELAY_TIME_ONLY_THRESHOLD_MS
+        ? formatTime(deadline)
+        : formatDate(deadline)
+}
+
 export function waitingPresentation(
     reason: string,
-    detail?: string | null,
+    backendDetail?: string | null,
     percent: number | null = null,
+    until?: number | null,
 ): ProgressPresentation {
     const value = WAITS[reason]
+    const deadline = reason === 'publication_delay' ? publicationDelayDeadline(until) : undefined
+    const frontendDetail = deadline && value?.[1]
+        ? `${value[1]} The safety delay ends at ${deadline}.`
+        : value?.[1]
+
     return {
         mode: 'waiting',
         active: true,
         percent,
-        label: `${value?.[0] || 'Waiting'}...`,
-        detail: detail || value?.[1] || 'Waiting for a dependency.',
+        label: `${deadline ? `Delayed until ${deadline}` : value?.[0] || 'Waiting'}...`,
+        compactLabel: reason === 'publication_delay' ? 'Delayed...' : undefined,
+        detail: frontendDetail || backendDetail || 'Waiting for a dependency.',
         icon: faIcon('fas', 'clock'),
         canCancel: true,
         canRetry: true,

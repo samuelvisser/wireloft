@@ -8,9 +8,9 @@ export function presentOperationProgress(operation?: TaskOperationRead, starting
     if (starting && !operation) return workingPresentation('Starting')
     if (!operation || !ACTIVE_OPERATION_STATUSES.has(operation.status)) return undefined
     if (operation.kind === 'media.download') return presentDownloadProgress(undefined, operation)
-    if (operation.status === 'QUEUED') return waitingPresentation('download_capacity', 'This operation is queued.')
-    const wait = operation.progressMeta?.wait_state as {reason?: string; message?: string} | undefined
-    if (operation.status === 'WAITING') return waitingPresentation(wait?.reason || 'dependency', wait?.message || operation.message, operation.progress ?? null)
+    if (operation.status === 'QUEUED') return waitingPresentation('download_capacity')
+    const wait = operation.progressMeta?.wait_state as {reason?: string; message?: string; until?: number | null} | undefined
+    if (operation.status === 'WAITING') return waitingPresentation(wait?.reason || 'dependency', wait?.message || operation.message, operation.progress ?? null, wait?.until)
     const batch = operation.progressMeta?.batch as {completed?: number; requested?: number; finishing?: number; failed?: number; canceled?: number} | undefined
     const isBatch = batch != null || operation.kind.includes('bulk_retry') || operation.kind.includes('redownload')
     if (operation.progress == null) return workingPresentation('Working', operation.message || 'Operation in progress.')

@@ -2,7 +2,7 @@ import type {MediaDownloadDomainViewRead} from '../types/schemas/media_download'
 import type {TaskOperationRead} from '../types/schemas/operation'
 import type {DownloadPresentation, ProgressPresentation} from '../types/progress'
 import {DownloadExecutionSchema, type DownloadExecution, type DownloadStage} from '../types/schemas/download_execution'
-import {formatBytes, formatDate, formatTime} from '../utils/formatting'
+import {formatBytes} from '../utils/formatting'
 import {waitingPresentation, workingPresentation} from './progressPresentation'
 import {faIcon} from '../icons/faIcon'
 
@@ -12,25 +12,6 @@ type DownloadWaitState = {
     reason?: string
     message?: string
     until?: number | null
-}
-
-const PUBLICATION_DELAY_TIME_ONLY_THRESHOLD_MS = 12 * 60 * 60 * 1000
-
-function publicationDelayLabels(wait: DownloadWaitState): {label: string; compactLabel: string} | undefined {
-    if (wait.reason !== 'publication_delay' || wait.until == null || !Number.isFinite(wait.until)) return undefined
-
-    const until = new Date(wait.until * 1000)
-    if (Number.isNaN(until.getTime())) return undefined
-
-    const delayRemainingMs = until.getTime() - Date.now()
-    const deadline = delayRemainingMs >= 0 && delayRemainingMs < PUBLICATION_DELAY_TIME_ONLY_THRESHOLD_MS
-        ? formatTime(until)
-        : formatDate(until)
-
-    return {
-        label: `Delayed until ${deadline}...`,
-        compactLabel: 'Delayed...',
-    }
 }
 
 const ACTIVITIES: Record<string, string> = {
@@ -86,8 +67,7 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
         const wait = (main?.wait || operation.progressMeta?.wait_state) as DownloadWaitState | undefined
         if (wait?.reason) return {
             status: 'waiting',
-            ...waitingPresentation(wait.reason, wait.message, transferPercent),
-            ...(publicationDelayLabels(wait) || {}),
+            ...waitingPresentation(wait.reason, wait.message, transferPercent, wait.until),
         }
         if (operation.status === 'WAITING') return {status: 'waiting', ...waitingPresentation('dependency', operation.message, transferPercent)}
         const secondary = execution?.stages.filter(stage => stage.id !== main?.id && ['running', 'waiting'].includes(stage.state))

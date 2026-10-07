@@ -77,13 +77,22 @@ function statusLabel(row: TaskLedgerEntryRead): string {
 }
 
 function taskMessage(row: TaskLedgerEntryRead): string | null {
-    return row.lastError || row.waitState?.message || row.message || null
+    if (row.lastError) return row.lastError
+    if (row.waitState) {
+        return waitingPresentation(
+            row.waitState.reason,
+            row.waitState.message,
+            row.progress ?? null,
+            row.waitState.until,
+        ).detail
+    }
+    return row.message || null
 }
 
 function TaskStatus({row}: {row: TaskLedgerEntryRead}) {
     const active = ACTIVE_STATUSES.has(row.status)
     const wait = active && row.waitState
-        ? waitingPresentation(row.waitState.reason, row.waitState.message, row.progress ?? null)
+        ? waitingPresentation(row.waitState.reason, row.waitState.message, row.progress ?? null, row.waitState.until)
         : null
     const hasProgress = active && !wait && row.progress != null
     const text = row.status === 'RUNNING' && !hasProgress

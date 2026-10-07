@@ -56,16 +56,37 @@ test('global cooldown is not flattened into 0%',()=>{
     const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'daily_wire_request_cooldown'}}}))
     assert.equal(view.mode,'waiting');assert.equal(view.label,'Cooldown...');assert.equal(view.percent,null)
 })
+test('frontend wait messages take precedence over backend operation messages',()=>{
+    const view=presentOperationProgress(operation({
+        kind:'example.operation',
+        status:'WAITING',
+        message:'Backend operation message',
+        progressMeta:{wait_state:{reason:'daily_wire_request_cooldown',message:'Backend wait message'}},
+    }))!
+    assert.equal(view.detail,'Waiting for The Daily Wire request cooldown. The operation will resume automatically.')
+})
+test('unknown waits still fall back to backend messages',()=>{
+    const view=presentOperationProgress(operation({
+        kind:'example.operation',
+        status:'WAITING',
+        message:'Backend operation message',
+        progressMeta:{wait_state:{reason:'unknown_wait',message:'Backend wait message'}},
+    }))!
+    assert.equal(view.detail,'Backend wait message')
+})
 test('post-publication wait within 12 hours shows only its delay time inline',()=>{
     const originalNow=Date.now
     const now=Date.UTC(2026,9,7,18,0)
     Date.now=()=>now
     try {
         const until=(now+11*60*60*1000)/1000
-        const op=operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay',until}}})
+        const op=operation({status:'WAITING',message:'Backend operation message',progressMeta:{wait_state:{reason:'publication_delay',message:'Backend wait message',until}}})
         const view=presentDownloadProgress(undefined,op)
         assert.equal(view.mode,'waiting');assert.match(view.label,/^Delayed until /);assert.doesNotMatch(view.label,/2026/)
         assert.equal(view.compactLabel,'Delayed...');assert.equal(view.percent,null)
+        const deadline=view.label.replace(/^Delayed until /,'').replace(/\.\.\.$/,'')
+        assert.match(view.detail,/post-publication safety delay/);assert.ok(view.detail.includes(deadline))
+        assert.doesNotMatch(view.detail,/Backend/)
         const markup=renderToStaticMarkup(<DownloadProgressStatus download={{id:1,presentation:view,operation:op} as any}/>)
         assert.match(markup,/Delayed until /);assert.doesNotMatch(markup,/2026/)
     } finally {
@@ -78,8 +99,9 @@ test('post-publication wait at least 12 hours away includes the date',()=>{
     Date.now=()=>now
     try {
         const until=(now+12*60*60*1000)/1000
-        const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay',until}}}))
-        assert.match(view.label,/^Delayed until /);assert.match(view.label,/2026/)
+        const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay',message:'Backend wait message',until}}}))
+        assert.match(view.label,/^Delayed until /);assert.match(view.label,/2026/);assert.match(view.detail,/2026/)
+        assert.doesNotMatch(view.detail,/Backend wait message/)
     } finally {
         Date.now=originalNow
     }
