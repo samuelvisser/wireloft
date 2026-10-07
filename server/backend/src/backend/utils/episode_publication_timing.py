@@ -4,6 +4,10 @@ from datetime import datetime, timezone
 from typing import Protocol
 
 from backend.db.datetime_types import utc_datetime
+from backend.types.episode_types import (
+    EpisodePublishStatus,
+    PENDING_EPISODE_PUBLISH_STATUSES,
+)
 
 
 TRUSTED_LIVE_ENDED_META_KEY = "ep_status.trusted_live_ended"
@@ -18,6 +22,7 @@ _RECORDED_PUBLISHED_FINAL_VALUE_PREFIX = "wireloft:recorded_published_final:"
 
 
 class EpisodePublicationTiming(Protocol):
+    safe_live_ended: datetime | None
     safe_published_final: datetime | None
     last_known_pending: datetime | None
     recorded_published_final: datetime | None
@@ -56,6 +61,101 @@ def last_known_pending_from_meta(value: str | None) -> datetime | None:
 
 def recorded_published_final_from_meta(value: str | None) -> datetime | None:
     return _timestamp_from_meta(value, prefix=_RECORDED_PUBLISHED_FINAL_VALUE_PREFIX)
+
+
+def invalidate_safe_publication_timing(
+        episode: EpisodePublicationTiming,
+        *,
+        live_ended: bool = False,
+        published_final: bool = False,
+        observed_at: datetime | None = None,
+) -> None:
+    """Invalidate trusted monitor facts without discarding audit/lower-bound facts."""
+    current = utc_datetime(observed_at or datetime.now(timezone.utc))
+    marker = f"invalidated:{current.isoformat()}"
+    if live_ended and episode.safe_live_ended is not None:
+        episode.set_meta(TRUSTED_LIVE_ENDED_META_KEY, marker)
+    if published_final and episode.safe_published_final is not None:
+        episode.set_meta(TRUSTED_PUBLISHED_FINAL_META_KEY, marker)
+
+
+def _invalidate_publication_lifecycle_timing(
+        episode: EpisodePublicationTiming,
+        *,
+        live_ended: bool = False,
+        published_final: bool = False,
+        observed_at: datetime | None = None,
+) -> None:
+    """Invalidate WireLoft-derived timing facts when a new publication lifecycle starts."""
+    current = utc_datetime(observed_at or datetime.now(timezone.utc))
+    invalidate_safe_publication_timing(
+        episode,
+        live_ended=live_ended,
+        published_final=published_final,
+        observed_at=current,
+    )
+    if not published_final:
+        return
+
+    marker = f"invalidated:{current.isoformat()}"
+    if episode.last_known_pending is not None:
+        episode.set_meta(LAST_KNOWN_PENDING_META_KEY, marker)
+    if episode.recorded_published_final is not None:
+        episode.set_meta(RECORDED_PUBLISHED_FINAL_META_KEY, marker)
+
+
+def _is_new_publication_lifecycle(
+        *,
+        old_status: str | None,
+        new_status: EpisodePublishStatus,
+) -> bool:
+    """Return whether a status transition starts a new publication lifecycle."""
+    if old_status == new_status.value:
+        return False
+    return (
+        new_status in {
+            EpisodePublishStatus.SCHEDULED,
+            EpisodePublishStatus.DELAYED,
+            EpisodePublishStatus.LIVE,
+        }
+        or (
+            old_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+            and new_status in PENDING_EPISODE_PUBLISH_STATUSES
+        )
+    )
+
+
+def record_publication_lifecycle_observation(
+        episode: EpisodePublicationTiming,
+        *,
+        old_status: str | None,
+        new_status: EpisodePublishStatus,
+        observed_at: datetime | None = None,
+) -> bool:
+    """Update lifecycle timing facts and return whether a new lifecycle started."""
+    current = utc_datetime(observed_at or datetime.now(timezone.utc))
+    lifecycle_restarted = _is_new_publication_lifecycle(
+        old_status=old_status,
+        new_status=new_status,
+    )
+    if lifecycle_restarted:
+        _invalidate_publication_lifecycle_timing(
+            episode,
+            live_ended=new_status in {
+                EpisodePublishStatus.SCHEDULED,
+                EpisodePublishStatus.DELAYED,
+                EpisodePublishStatus.LIVE,
+            },
+            published_final=True,
+            observed_at=current,
+        )
+
+    if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
+        record_published_final_observation(
+            episode,
+            observed_at=current,
+        )
+    return lifecycle_restarted
 
 
 def record_published_final_observation(

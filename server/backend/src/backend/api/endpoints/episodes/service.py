@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional, Sequence
 
@@ -13,20 +14,23 @@ from backend.db.models import Show
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.episode_types import EpisodePublishStatus
-from backend.utils.episode_publication_timing import record_published_final_observation
-from task_manager.events.transactional import queue_event
-from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
-    invalidate_publication_lifecycle_timing,
-    is_new_publication_lifecycle,
+from backend.services.episode_download_delay import episode_download_delay_ready_at
+from backend.utils.episode_publication_timing import (
+    record_publication_lifecycle_observation,
 )
+from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operations import (
     OperationTargetSpec,
     create_operation,
     queue_operation_target_dispatch,
 )
-from task_manager.tasks.media_download_operations import (
-    automatic_episode_download_ready_at,
-)
+
+
+@dataclass(frozen=True)
+class _EpisodeAPIReadSource:
+    episode: Episode
+    download_delay_passed: bool
+    download_delay_ready_at: datetime | None
 
 
 METADATA_REFRESH_REQUESTED_EVENT = "episode.metadata_refresh_requested"
@@ -35,14 +39,15 @@ _EARLY_DELETE_TASK_KEY = "monitor_no_usable_media_episode"
 
 
 def _episode_api_read(episode: Episode) -> EpisodeAPIRead:
-    ready_at = automatic_episode_download_ready_at(episode)
-    return EpisodeAPIRead.model_validate(episode).model_copy(update={
-        "download_delay_passed": (
+    ready_at = episode_download_delay_ready_at(episode)
+    return EpisodeAPIRead.model_validate(_EpisodeAPIReadSource(
+        episode=episode,
+        download_delay_passed=(
             ready_at is None
             or ready_at <= datetime.now(timezone.utc)
         ),
-        "download_delay_ready_at": ready_at,
-    })
+        download_delay_ready_at=ready_at,
+    ))
 
 
 def _episodes_for_show_stmt(show_slug: str):
@@ -306,8 +311,11 @@ def create_episode(s: Session, body: EpisodeAPICreate) -> EpisodeAPIRead:
     s.add(episode)
     s.flush()
 
-    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
-        record_published_final_observation(episode)
+    record_publication_lifecycle_observation(
+        episode,
+        old_status=None,
+        new_status=EpisodePublishStatus(episode.publish_status),
+    )
 
     queue_event(s, "episode.added", {
         "resource_id": episode.id,
@@ -339,19 +347,11 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
     # Emit status-specific events if status changed
     if hasattr(body, 'publish_status') and body.publish_status is not None and body.publish_status != old_status:
         new_status = EpisodePublishStatus(body.publish_status)
-        if is_new_publication_lifecycle(
+        record_publication_lifecycle_observation(
+            episode,
             old_status=old_status,
             new_status=new_status,
-        ):
-            invalidate_publication_lifecycle_timing(
-                episode,
-                live_ended=new_status in {
-                    EpisodePublishStatus.SCHEDULED,
-                    EpisodePublishStatus.DELAYED,
-                    EpisodePublishStatus.LIVE,
-                },
-                published_final=True,
-            )
+        )
 
         event_data = {
             "old_status": old_status,
@@ -364,7 +364,6 @@ def update_episode(s: Session, episode_slug: str, body: EpisodeAPIUpdate) -> Epi
         queue_event(s, "episode.status_updated", event_data)
 
         if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
-            record_published_final_observation(episode)
             queue_event(s, "episode.published_final", event_data)
         elif new_status is EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
             queue_event(s, "episode.published_with_countdown", event_data)

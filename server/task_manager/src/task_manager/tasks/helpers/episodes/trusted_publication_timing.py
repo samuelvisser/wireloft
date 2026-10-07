@@ -5,16 +5,18 @@ from uuid import uuid4
 
 from backend.db.datetime_types import utc_datetime
 from backend.db.models import Episode
-from backend.types.episode_types import EpisodePublishStatus
+from backend.types.episode_types import (
+    EpisodePublishStatus,
+    PENDING_EPISODE_PUBLISH_STATUSES,
+)
 from backend.utils.episode_publication_timing import (
     LAST_KNOWN_PENDING_META_KEY,
-    RECORDED_PUBLISHED_FINAL_META_KEY,
     TRUSTED_LIVE_ENDED_META_KEY,
     TRUSTED_PUBLISHED_FINAL_META_KEY,
     encode_last_known_pending,
     encode_safe_live_ended,
     encode_safe_published_final,
-    record_published_final_observation,
+    record_publication_lifecycle_observation,
 )
 
 
@@ -22,13 +24,7 @@ MONITOR_LIVE_SESSION_META_KEY = "ep_status.monitor_live_session"
 MONITOR_PENDING_SESSION_META_KEY = "ep_status.monitor_pending_session"
 
 _MONITOR_SESSION_ID = uuid4().hex
-_MONITORED_PENDING_STATUSES = frozenset({
-    EpisodePublishStatus.SCHEDULED,
-    EpisodePublishStatus.DELAYED,
-    EpisodePublishStatus.LIVE,
-    EpisodePublishStatus.DW_PROCESSING,
-    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
-})
+_MONITORED_PENDING_STATUSES = PENDING_EPISODE_PUBLISH_STATUSES
 _POST_LIVE_STATUSES = frozenset({
     EpisodePublishStatus.DW_PROCESSING,
     EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
@@ -57,66 +53,6 @@ def _session_observed_at(value: str | None) -> datetime | None:
         return None
 
 
-def invalidate_safe_publication_timing(
-        episode: Episode,
-        *,
-        live_ended: bool = False,
-        published_final: bool = False,
-        observed_at: datetime | None = None,
-) -> None:
-    """Invalidate only trusted monitor facts, preserving audit/lower-bound facts."""
-    current = utc_datetime(observed_at or datetime.now(timezone.utc))
-    marker = f"invalidated:{current.isoformat()}"
-    if live_ended and episode.safe_live_ended is not None:
-        episode.set_meta(TRUSTED_LIVE_ENDED_META_KEY, marker)
-    if published_final and episode.safe_published_final is not None:
-        episode.set_meta(TRUSTED_PUBLISHED_FINAL_META_KEY, marker)
-
-
-def invalidate_publication_lifecycle_timing(
-        episode: Episode,
-        *,
-        live_ended: bool = False,
-        published_final: bool = False,
-        observed_at: datetime | None = None,
-) -> None:
-    """Invalidate all timing facts when a genuinely new publication lifecycle starts."""
-    current = utc_datetime(observed_at or datetime.now(timezone.utc))
-    invalidate_safe_publication_timing(
-        episode,
-        live_ended=live_ended,
-        published_final=published_final,
-        observed_at=current,
-    )
-    if not published_final:
-        return
-
-    marker = f"invalidated:{current.isoformat()}"
-    if episode.last_known_pending is not None:
-        episode.set_meta(LAST_KNOWN_PENDING_META_KEY, marker)
-    if episode.recorded_published_final is not None:
-        episode.set_meta(RECORDED_PUBLISHED_FINAL_META_KEY, marker)
-
-
-def is_new_publication_lifecycle(
-        *,
-        old_status: str | None,
-        new_status: EpisodePublishStatus,
-) -> bool:
-    """Return whether a status transition starts a new publication lifecycle."""
-    return (
-        new_status in {EpisodePublishStatus.SCHEDULED, EpisodePublishStatus.DELAYED}
-        or (
-            new_status is EpisodePublishStatus.LIVE
-            and old_status != EpisodePublishStatus.LIVE.value
-        )
-        or (
-            old_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-            and new_status in _MONITORED_PENDING_STATUSES
-        )
-    )
-
-
 def track_monitor_publication_timing(
         episode: Episode,
         *,
@@ -138,22 +74,16 @@ def track_monitor_publication_timing(
     """
     current = utc_datetime(observed_at or datetime.now(timezone.utc))
 
-    if is_new_publication_lifecycle(
+    lifecycle_restarted = record_publication_lifecycle_observation(
+        episode,
         old_status=old_status,
         new_status=new_status,
-    ):
-        invalidate_publication_lifecycle_timing(
-            episode,
-            live_ended=(
-                new_status in {
-                    EpisodePublishStatus.SCHEDULED,
-                    EpisodePublishStatus.DELAYED,
-                    EpisodePublishStatus.LIVE,
-                }
-            ),
-            published_final=True,
-            observed_at=current,
-        )
+        observed_at=current,
+    )
+    if lifecycle_restarted:
+        invalidated = f"invalidated:{current.isoformat()}"
+        episode.set_meta(MONITOR_LIVE_SESSION_META_KEY, invalidated)
+        episode.set_meta(MONITOR_PENDING_SESSION_META_KEY, invalidated)
 
     pending_session = episode.get_meta(MONITOR_PENDING_SESSION_META_KEY)
     trusted_pending_session = _belongs_to_current_session(pending_session)
@@ -188,8 +118,6 @@ def track_monitor_publication_timing(
         new_status is EpisodePublishStatus.PUBLISHED_FINAL
         and old_status != EpisodePublishStatus.PUBLISHED_FINAL.value
     ):
-        record_published_final_observation(episode, observed_at=current)
-
         if trusted_pending_session:
             episode.set_meta(
                 TRUSTED_PUBLISHED_FINAL_META_KEY,

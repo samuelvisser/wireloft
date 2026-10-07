@@ -179,6 +179,70 @@ def test_new_live_cycle_invalidates_previous_publication_timing():
         engine.dispose()
 
 
+def test_repeated_pending_observation_does_not_start_a_new_publication_lifecycle():
+    from backend.types.episode_types import EpisodePublishStatus
+    from backend.utils.episode_publication_timing import (
+        RECORDED_PUBLISHED_FINAL_META_KEY,
+        encode_recorded_published_final,
+        record_publication_lifecycle_observation,
+    )
+
+    engine, session, episode = _episode_fixture()
+    try:
+        recorded_final = datetime(2026, 10, 2, 8, 35, tzinfo=timezone.utc)
+        episode.set_meta(
+            RECORDED_PUBLISHED_FINAL_META_KEY,
+            encode_recorded_published_final(recorded_final),
+        )
+
+        record_publication_lifecycle_observation(
+            episode,
+            old_status=EpisodePublishStatus.SCHEDULED.value,
+            new_status=EpisodePublishStatus.SCHEDULED,
+            observed_at=datetime(2026, 10, 2, 10, tzinfo=timezone.utc),
+        )
+
+        assert episode.recorded_published_final == recorded_final
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_new_lifecycle_does_not_reuse_prior_live_monitor_evidence():
+    from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
+        track_monitor_publication_timing,
+    )
+
+    engine, session, episode = _episode_fixture()
+    try:
+        track_monitor_publication_timing(
+            episode,
+            old_status=EpisodePublishStatus.LIVE.value,
+            new_status=EpisodePublishStatus.LIVE,
+            observed_at=datetime(2026, 10, 2, 8, tzinfo=timezone.utc),
+        )
+        assert episode.safe_live_ended is None
+
+        track_monitor_publication_timing(
+            episode,
+            old_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
+            new_status=EpisodePublishStatus.LIVE,
+            observed_at=datetime(2026, 10, 2, 10, tzinfo=timezone.utc),
+        )
+        track_monitor_publication_timing(
+            episode,
+            old_status=EpisodePublishStatus.LIVE.value,
+            new_status=EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+            observed_at=datetime(2026, 10, 2, 10, 1, tzinfo=timezone.utc),
+        )
+
+        assert episode.safe_live_ended is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_restart_materializes_last_known_pending_without_claiming_safe_final():
     from backend.types.episode_types import EpisodePublishStatus
     from backend.utils.episode_publication_timing import best_effort_published_date

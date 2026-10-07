@@ -6,13 +6,13 @@ import {fas} from '@fortawesome/free-solid-svg-icons'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 
 import {EnsureSafeDelayToggle} from '../src/components/Settings/DownloadsSettingsTab'
+import {EpisodeDownloadRow} from '../src/components/Episode/EpisodeDownloadRow'
 import {
     ImmediateSafeDelayConfirmDialog,
-    ProfileDownloadRow,
     SafeDelayConfirmDialog,
     freezeSafeDelaySchedulePreference,
     shouldPromptForSafeDelay,
-} from '../src/pages/episode/EpisodePage'
+} from '../src/components/Episode/SafeDelayDownloadDialogs'
 import {presentDownloadProgress} from '../src/lib/downloadProgress'
 import {formatDate} from '../src/utils/formatting'
 import type {TaskOperationRead} from '../src/types/schemas/operation'
@@ -52,7 +52,7 @@ function renderDownloadRow(reason: string, status = 'WAITING') {
     const client = new QueryClient()
     return renderToStaticMarkup(
         <QueryClientProvider client={client}>
-            <ProfileDownloadRow
+            <EpisodeDownloadRow
                 profile={{id: 7, name: 'Audio', preferredFormat: 'format_audio_only'} as any}
                 download={downloadFor(reason, status)}
                 episodeSlug="edge-case-episode"

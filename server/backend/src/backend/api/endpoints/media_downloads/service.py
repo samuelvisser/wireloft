@@ -42,13 +42,13 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from dailywire_downloader.storage.artifacts import remove_download_artifacts
+from backend.services.episode_download_delay import episode_download_delay_passed
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
 from task_manager.scheduler.db import TaskDefinition, TaskRun
 from task_manager.scheduler.types import ResourceType
 from task_manager.tasks.media_download_operations import (
-    automatic_episode_download_delay_passed,
     get_active_media_download_operation,
     get_media_download_queue_positions,
     prepare_media_download_artifact,
@@ -368,7 +368,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         body.redownload_when_delay_passed
         and not body.schedule_for_delay
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-        and not automatic_episode_download_delay_passed(episode)
+        and not episode_download_delay_passed(episode)
     )
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)

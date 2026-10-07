@@ -7,20 +7,17 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Season, Show
 from backend.types.download_profile_types import EpIdType
-from backend.types.episode_types import EpisodePublishStatus
+from backend.types.episode_types import (
+    EpisodePublishStatus,
+    PENDING_EPISODE_PUBLISH_STATUS_VALUES,
+)
 from backend.types.show_types import EpisodeIdentifier
 from backend.utils.episode import EpisodeIdentifierInfo
 from dailywire_api.records import DwEpisodeRecord
 from .metadata import ensure_utc
 
 
-PENDING_EPISODE_STATUSES = {
-    EpisodePublishStatus.SCHEDULED.value,
-    EpisodePublishStatus.DELAYED.value,
-    EpisodePublishStatus.LIVE.value,
-    EpisodePublishStatus.DW_PROCESSING.value,
-    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value,
-}
+PENDING_EPISODE_STATUSES = PENDING_EPISODE_PUBLISH_STATUS_VALUES
 
 
 def pending_episodes_for_show(s: Session, show_id: int) -> list[Episode]:

@@ -12,15 +12,18 @@ from backend.db.models.media_download import EpisodeMediaDownload, MediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
+from backend.services.episode_download_delay import (
+    episode_download_delay_passed,
+    episode_download_delay_ready_at,
+)
 from backend.services.media_download_history import record_media_download_history
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
-    automatic_episode_download_delay_passed,
-    automatic_episode_download_ready_at,
     cancel_media_download_operation,
     create_media_download_operation,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
+    is_media_download_publication_delay_wait,
     prepare_media_download_artifact,
 )
 from task_manager.tasks.workers.download_attempt import serialize_download_attempt
@@ -68,6 +71,11 @@ def retry_media_download_action(
         download = s.get(MediaDownloadBase, media_download_id)
         if download is None:
             raise DownloadActionError("missing", "Media download not found")
+
+        active = get_active_media_download_operation(s, media_download_id)
+        if schedule_for_delay and is_media_download_publication_delay_wait(active):
+            return active.id
+
         if isinstance(download, EpisodeMediaDownload):
             episode = s.get(Episode, download.media_item_id)
             download.redownload_when_delay_passed = bool(
@@ -75,7 +83,7 @@ def retry_media_download_action(
                 and not schedule_for_delay
                 and episode is not None
                 and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
-                and not automatic_episode_download_delay_passed(episode)
+                and not episode_download_delay_passed(episode)
             )
 
         record_media_download_history(
@@ -112,7 +120,7 @@ def retry_media_download_action(
             if schedule_for_delay and isinstance(download, EpisodeMediaDownload):
                 episode = s.get(Episode, download.media_item_id)
                 if episode is not None:
-                    scheduled_ready_at = automatic_episode_download_ready_at(episode)
+                    scheduled_ready_at = episode_download_delay_ready_at(episode)
                 operation_source = OperationSource.SYSTEM.value
 
             operation = create_media_download_operation(

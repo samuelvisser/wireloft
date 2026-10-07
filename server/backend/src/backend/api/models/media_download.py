@@ -8,20 +8,22 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
 
 # ---------- Strict input (create/update) ----------
-class EpisodeDownloadAPICreate(RequestBase):
+class _EpisodeDownloadDelayRequest(RequestBase):
+    """Controls for an explicit episode download requested before its safety deadline."""
+
+    redownload_when_delay_passed: bool = False
+    schedule_for_delay: bool = False
+
+
+class EpisodeDownloadAPICreate(_EpisodeDownloadDelayRequest):
     """Request body for starting an episode download for a Local Media Profile."""
 
     local_media_profile_id: int
     redownload_when_final: bool = False
-    redownload_when_delay_passed: bool = False
-    schedule_for_delay: bool = False
 
 
-class MediaDownloadRetryAPIRequest(RequestBase):
+class MediaDownloadRetryAPIRequest(_EpisodeDownloadDelayRequest):
     """Optional controls for an explicit retry/re-download request."""
-
-    redownload_when_delay_passed: bool = False
-    schedule_for_delay: bool = False
 
 
 class MovieDownloadAPICreate(RequestBase):
@@ -71,7 +73,6 @@ class _MediaDownloadAPIBaseOut(ResponseBase):
     format_downloaded: Optional[str]
     downloaded_at: Optional[datetime]
     redownload_when_final: Optional[bool] = None
-    redownload_when_delay_passed: Optional[bool] = None
 
 
 class MediaDownloadAPIRead(_MediaDownloadAPIBaseOut):

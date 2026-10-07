@@ -4,10 +4,8 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode, Show
 from backend.types.episode_types import EpisodePublishStatus
-from backend.utils.episode_publication_timing import record_published_final_observation
-from task_manager.tasks.helpers.episodes.trusted_publication_timing import (
-    invalidate_publication_lifecycle_timing,
-    is_new_publication_lifecycle,
+from backend.utils.episode_publication_timing import (
+    record_publication_lifecycle_observation,
 )
 from task_manager.events.transactional import queue_event
 
@@ -131,21 +129,11 @@ def queue_episode_status_events(
         old_status,
         new_status.value,
     )
-    if is_new_publication_lifecycle(
+    record_publication_lifecycle_observation(
+        episode,
         old_status=old_status,
         new_status=new_status,
-    ):
-        invalidate_publication_lifecycle_timing(
-            episode,
-            live_ended=new_status in {
-                EpisodePublishStatus.SCHEDULED,
-                EpisodePublishStatus.DELAYED,
-                EpisodePublishStatus.LIVE,
-            },
-            published_final=True,
-        )
-    if new_status is EpisodePublishStatus.PUBLISHED_FINAL:
-        record_published_final_observation(episode)
+    )
     event_data = episode_event_payload(
         episode=episode,
         show=show,

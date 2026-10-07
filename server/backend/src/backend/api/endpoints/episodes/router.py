@@ -6,9 +6,9 @@ from ...models.media_download import EpisodeDownloadAPICreate
 from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted, TaskOperationAccepted
 from ..media_downloads.service import create_episode_download
 from backend.app import db_session
+from backend.services.episode_download_delay import episode_download_delay_ready_at
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
-    automatic_episode_download_ready_at,
     create_media_download_operation,
     dispatch_queued_media_download_operations,
 )
@@ -27,7 +27,7 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
         try:
             download = create_episode_download(s, episode_slug, body)
             scheduled_ready_at = (
-                automatic_episode_download_ready_at(download.media)
+                episode_download_delay_ready_at(download.media)
                 if body.schedule_for_delay
                 else None
             )

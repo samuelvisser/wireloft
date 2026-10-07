@@ -44,7 +44,6 @@ export const MediaDownloadReadSchema = z.looseObject({
     formatDownloaded: z.string().nullable(),
     downloadedAt: ApiDateTimeSchema.nullable(),
     redownloadWhenFinal: z.boolean().nullable().optional(),
-    redownloadWhenDelayPassed: z.boolean().nullable().optional(),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,
 })

@@ -10,7 +10,10 @@ from backend.db.models import Episode
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.episode_types import EpisodePublishStatus
-from backend.utils.episode_publication_timing import best_effort_published_date
+from backend.utils.episode_publication_timing import (
+    best_effort_published_date,
+    invalidate_safe_publication_timing,
+)
 from dailywire_api.dw_api.client import MiddlewareAPIError, MiddlewareClient
 from dailywire_api.records import DwEpisodeDetailRecord
 from task_manager.events.transactional import queue_event
@@ -27,10 +30,6 @@ from ...helpers.episodes.metadata import (
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
-from ...helpers.episodes.trusted_publication_timing import (
-    invalidate_publication_lifecycle_timing,
-    invalidate_safe_publication_timing,
-)
 from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode_no_usable_media
 from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
 from .scheduling import remove_episode_metadata_jobs, schedule_remaining_metadata_checks
@@ -246,16 +245,8 @@ def _refresh_episode_from_dailywire(
 
     if new_status.value in PENDING_EPISODE_STATUSES:
         # Explicit scheduled/delayed/live evidence is authoritative even after a
-        # row previously reached final. Transfer it back to pending monitoring.
-        invalidate_publication_lifecycle_timing(
-            episode,
-            published_final=True,
-            live_ended=new_status in {
-                EpisodePublishStatus.SCHEDULED,
-                EpisodePublishStatus.DELAYED,
-                EpisodePublishStatus.LIVE,
-            },
-        )
+        # row previously reached final. The status event helper owns lifecycle
+        # timing invalidation for that transition.
         episode.publish_status = new_status.value
         episode.metadata_is_final = False
         queue_episode_status_events(

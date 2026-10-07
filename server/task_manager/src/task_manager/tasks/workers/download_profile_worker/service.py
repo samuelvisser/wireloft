@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile
 from backend.db.models.media_download import MediaDownloadBase
+from backend.services.episode_download_delay import episode_download_delay_ready_at
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.helpers.download_profiles import lock_enabled_download_profile
 from task_manager.tasks.helpers.custom_index_readiness import wait_for_custom_index_pair
@@ -18,7 +19,6 @@ from task_manager.tasks.media_download_operations import (
 )
 
 from ._helpers import (
-    automatic_episode_download_ready_at,
     cleanup_older_episodes,
     ensure_episode_download,
     get_download_profile_episodes,
@@ -83,9 +83,8 @@ async def run_download_profile_worker(
             s,
             profile,
             only_episode=only_episode,
-            apply_automatic_download_delay=False,
         ):
-            ready_at = automatic_episode_download_ready_at(episode)
+            ready_at = episode_download_delay_ready_at(episode)
             delayed = (
                 ready_at is not None
                 and ready_at > datetime.now(timezone.utc)

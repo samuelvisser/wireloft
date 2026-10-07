@@ -328,6 +328,11 @@ def test_manual_retry_schedule_creates_delayed_system_operation(monkeypatch):
             download_id,
             schedule_for_delay=True,
         )
+        same_operation_id = download_actions.retry_media_download_action(
+            download_id,
+            schedule_for_delay=True,
+        )
+        assert same_operation_id == operation_id
 
         check_session = Session(engine)
         try:
@@ -340,6 +345,7 @@ def test_manual_retry_schedule_creates_delayed_system_operation(monkeypatch):
             expected_ready_at = observed_final + timedelta(minutes=10)
             assert wait_state["until"] == expected_ready_at.timestamp()
             assert scheduled_wakeups == [(operation.id, expected_ready_at)]
+            assert check_session.query(TaskOperation).count() == 1
         finally:
             check_session.close()
     finally:
@@ -381,6 +387,43 @@ def test_manual_unsafe_download_followup_waits_until_delay_passes(monkeypatch):
         assert wait_state is not None
         assert wait_state["reason"] == "publication_delay"
         assert wait_state["until"] == (observed_final + timedelta(minutes=10)).timestamp()
+        assert download.redownload_when_delay_passed is False
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_manual_unsafe_download_finishing_after_delay_queues_replacement_immediately(monkeypatch):
+    from backend.db.models import Episode
+    from backend.utils.episode_publication_timing import record_published_final_observation
+    from config import get_settings
+    from task_manager.scheduler.types import OperationStatus
+    from task_manager.tasks.media_download_operations import (
+        get_active_media_download_operation,
+        queue_episode_redownload_if_ready,
+    )
+
+    session, engine = _session()
+    try:
+        settings = get_settings().download_settings
+        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "ensure_safe_delay", True)
+
+        download = _make_download(session, slug="manual-safe-delay-already-passed")
+        episode = session.get(Episode, download.media_item_id)
+        assert episode is not None
+        record_published_final_observation(
+            episode,
+            observed_at=datetime.now(timezone.utc) - timedelta(minutes=11),
+        )
+        download.redownload_when_delay_passed = True
+        session.flush()
+
+        assert queue_episode_redownload_if_ready(session, download.id) is True
+
+        operation = get_active_media_download_operation(session, download.id)
+        assert operation is not None
+        assert operation.status == OperationStatus.QUEUED.value
         assert download.redownload_when_delay_passed is False
     finally:
         session.close()

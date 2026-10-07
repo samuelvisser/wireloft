@@ -31,3 +31,15 @@ class EpisodePublishStatus(StrEnum):
     # Daily Wire reports PUBLISHED with settled usable media, and the episode is downloadable,
     # or WireLoft's countdown-only final safeguard has elapsed.
     PUBLISHED_FINAL = "published_final"
+
+PENDING_EPISODE_PUBLISH_STATUSES = frozenset({
+    EpisodePublishStatus.SCHEDULED,
+    EpisodePublishStatus.DELAYED,
+    EpisodePublishStatus.LIVE,
+    EpisodePublishStatus.DW_PROCESSING,
+    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+})
+PENDING_EPISODE_PUBLISH_STATUS_VALUES = frozenset(
+    status.value for status in PENDING_EPISODE_PUBLISH_STATUSES
+)
+

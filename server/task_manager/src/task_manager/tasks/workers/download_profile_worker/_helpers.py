@@ -18,7 +18,6 @@ from backend.services.media_download_history import record_media_download_histor
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from task_manager.tasks.media_download_operations import (
-    automatic_episode_download_ready_at,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
     prepare_media_download_artifact,
@@ -99,17 +98,11 @@ def get_download_profile_episodes(
         profile: DownloadProfileBase,
         *,
         only_episode: Optional[Episode] = None,
-        apply_automatic_download_delay: bool = True,
 ) -> list[Episode]:
     """Episodes a Download Profile currently wants represented by artifacts.
 
     Apply the stable profile predicates in SQL so large shows do not materialize
     thousands of Episode ORM objects merely to discard nearly all of them.
-
-    Automatic downloads also observe the configured post-publication delay. The
-    delay is applied after a Podcast Download Profile's episode-count scope is
-    selected so a newly published episode does not temporarily backfill an older
-    episode outside that scope.
     """
     podcast_profile = (
         profile if isinstance(profile, PodcastDownloadProfile) else None
@@ -194,19 +187,7 @@ def get_download_profile_episodes(
     if needs_global_podcast_scope:
         stmt = stmt.order_by(published_at.desc(), Episode.id.desc())
 
-    episodes = list(s.scalars(stmt))
-    if not apply_automatic_download_delay:
-        return episodes
-
-    now = _utc_now()
-    return [
-        episode
-        for episode in episodes
-        if (
-            (ready_at := automatic_episode_download_ready_at(episode)) is None
-            or ready_at <= now
-        )
-    ]
+    return list(s.scalars(stmt))
 
 
 @dataclass(frozen=True)

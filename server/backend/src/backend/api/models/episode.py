@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import AwareDatetime, computed_field, model_validator
 
-from backend.api.models.base import ResponseBase, RequestBase
+from backend.api.models.base import ResponseBase, RequestBase, response_model_config
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import EpisodeIdentifierInfo
 
@@ -91,8 +91,8 @@ class _EpisodeAPIBaseOut(_EpisodeIdentifierAPIOut):
     scheduled_date: Optional[datetime]
     sharing_url: str
     early_delete_available: bool = False
-    download_delay_passed: bool = True
-    download_delay_ready_at: Optional[datetime] = None
+    download_delay_passed: bool
+    download_delay_ready_at: Optional[datetime]
 
     title: str
     description: str
@@ -107,6 +107,8 @@ class _EpisodeAPIBaseOut(_EpisodeIdentifierAPIOut):
 
 class EpisodeAPIRead(_EpisodeAPIBaseOut):
     """Represents a complete episode returned by the detail/full-list API."""
+
+    model_config = response_model_config(nested_source="episode")
 
     created_at: datetime
     updated_at: datetime

@@ -230,7 +230,7 @@ def test_slug_marks_no_show_today_without_persisted_boolean(db_session):
 
 
 def test_episode_api_does_not_return_is_no_show_today(db_session):
-    from backend.api.models.episode import EpisodeAPIRead
+    from backend.api.endpoints.episodes.service import get_episode
     from task_manager.tasks.helpers.episodes.save import (
         resolve_dw_episodes,
         save_resolved_episodes_per_season_asc,
@@ -251,7 +251,7 @@ def test_episode_api_does_not_return_is_no_show_today(db_session):
         start_index=1,
     )
 
-    payload = EpisodeAPIRead.model_validate(saved[0].episode).model_dump(by_alias=True)
+    payload = get_episode(db_session, saved[0].episode.slug).model_dump(by_alias=True)
     assert "isNoShowToday" not in payload
     assert payload["earlyDeleteAvailable"] is False
 

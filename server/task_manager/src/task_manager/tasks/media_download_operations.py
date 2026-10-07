@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import case, event, func, select
@@ -15,7 +15,7 @@ from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
 from backend.types.media_types import MediaType
-from backend.utils.episode_publication_timing import best_effort_published_date
+from backend.services.episode_download_delay import episode_download_delay_ready_at
 from backend.services.media_download_history import (
     record_media_download_history,
     record_media_download_operation_history_once,
@@ -53,7 +53,6 @@ from task_manager.scheduler.types import (
     ResourceType,
     TaskStatus,
 )
-from task_manager.tasks.helpers.episodes.metadata import ensure_utc
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
 
 
@@ -83,49 +82,17 @@ _DOWNLOAD_DISPATCH_LOCK = threading.Lock()
 _DOWNLOAD_DISPATCH_TRANSACTION_KEY = "wireloft.media_download_dispatch_transaction"
 
 
-def automatic_episode_download_ready_at(episode: Episode) -> datetime | None:
-    """Return when an automatic Download Profile episode download may start."""
-    download_settings = get_settings().download_settings
-    delay_minutes = download_settings.automatic_episode_download_delay_minutes
-    if delay_minutes <= 0:
-        return None
-
-    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
-        if download_settings.ensure_safe_delay:
-            publication_time = (
-                episode.safe_published_final
-                or episode.recorded_published_final
-            )
-            if publication_time is None:
-                # Rows finalized before WireLoft started recording this audit fact
-                # retain the ordinary best-effort behavior rather than becoming
-                # permanently undispatchable.
-                publication_time = best_effort_published_date(episode)
-        else:
-            publication_time = best_effort_published_date(episode)
-    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value:
-        publication_time = episode.safe_live_ended
-        if publication_time is None and episode.published_date is not None:
-            publication_time = ensure_utc(episode.published_date)
-    else:
-        publication_time = None
-
-    if publication_time is None:
-        return None
-    return publication_time + timedelta(minutes=delay_minutes)
-
-
-def automatic_episode_download_delay_passed(
-        episode: Episode,
-        *,
-        now: datetime | None = None,
+def is_media_download_publication_delay_wait(
+        operation: TaskOperation | None,
 ) -> bool:
-    """Return whether the configured post-publication download safety delay has elapsed."""
-    ready_at = automatic_episode_download_ready_at(episode)
-    if ready_at is None:
-        return True
-    current = now or datetime.now(timezone.utc)
-    return ready_at <= current
+    """Whether an active media download is waiting only for publication delay."""
+    if operation is None or operation.status != OperationStatus.WAITING.value:
+        return False
+    wait_state = operation_admission_wait_state(operation)
+    return (
+        wait_state is not None
+        and wait_state.get("reason") == MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON
+    )
 
 
 def _hold_download_dispatch_lock_until_transaction_end(session: Session) -> None:
@@ -861,7 +828,7 @@ def queue_episode_redownload_if_ready(
     if _has_active_media_download_run(session, download.id):
         return False
 
-    ready_at = automatic_episode_download_ready_at(episode)
+    ready_at = episode_download_delay_ready_at(episode)
     download.redownload_when_final = False
     download.redownload_when_delay_passed = False
     create_media_download_operation(
