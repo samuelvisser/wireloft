@@ -56,14 +56,33 @@ test('global cooldown is not flattened into 0%',()=>{
     const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'daily_wire_request_cooldown'}}}))
     assert.equal(view.mode,'waiting');assert.equal(view.label,'Cooldown...');assert.equal(view.percent,null)
 })
-test('post-publication wait shows its delay deadline inline',()=>{
-    const until=Date.UTC(2026,9,7,18,48)/1000
-    const op=operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay',until}}})
-    const view=presentDownloadProgress(undefined,op)
-    assert.equal(view.mode,'waiting');assert.match(view.label,/^Delayed until /);assert.match(view.label,/2026/)
-    assert.equal(view.compactLabel,'Delayed...');assert.equal(view.percent,null)
-    const markup=renderToStaticMarkup(<DownloadProgressStatus download={{id:1,presentation:view,operation:op} as any}/>)
-    assert.match(markup,/Delayed until /);assert.match(markup,/2026/)
+test('post-publication wait within 12 hours shows only its delay time inline',()=>{
+    const originalNow=Date.now
+    const now=Date.UTC(2026,9,7,18,0)
+    Date.now=()=>now
+    try {
+        const until=(now+11*60*60*1000)/1000
+        const op=operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay',until}}})
+        const view=presentDownloadProgress(undefined,op)
+        assert.equal(view.mode,'waiting');assert.match(view.label,/^Delayed until /);assert.doesNotMatch(view.label,/2026/)
+        assert.equal(view.compactLabel,'Delayed...');assert.equal(view.percent,null)
+        const markup=renderToStaticMarkup(<DownloadProgressStatus download={{id:1,presentation:view,operation:op} as any}/>)
+        assert.match(markup,/Delayed until /);assert.doesNotMatch(markup,/2026/)
+    } finally {
+        Date.now=originalNow
+    }
+})
+test('post-publication wait at least 12 hours away includes the date',()=>{
+    const originalNow=Date.now
+    const now=Date.UTC(2026,9,7,18,0)
+    Date.now=()=>now
+    try {
+        const until=(now+12*60*60*1000)/1000
+        const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay',until}}}))
+        assert.match(view.label,/^Delayed until /);assert.match(view.label,/2026/)
+    } finally {
+        Date.now=originalNow
+    }
 })
 test('post-publication wait without a deadline is still presented as delayed',()=>{
     const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay'}}}))

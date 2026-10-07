@@ -14,6 +14,19 @@ export function formatDate(value: Date | string | null | undefined) {
     }
 }
 
+export function formatTime(value: Date | string | null | undefined) {
+    if (!value) return '—'
+    const d = value instanceof Date ? value : new Date(value)
+    try {
+        return new Intl.DateTimeFormat(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+        }).format(d)
+    } catch {
+        return d?.toString() ?? ''
+    }
+}
+
 export function formatBytes(n: number | null | undefined) {
     if (!n && n !== 0) return ''
     if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`
