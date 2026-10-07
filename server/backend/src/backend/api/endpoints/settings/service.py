@@ -44,7 +44,7 @@ from config.settings.settings import (
 from dailywire_downloader.storage import inspect_filesystem
 from task_manager.scheduler.operation_factory import create_operation
 from task_manager.scheduler.operations import complete_operation, queue_operation_target_dispatch
-from task_manager.tasks.helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
+from task_manager.tasks.helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from .operations import (
     FileWatcherCronOperation,
     FindEpisodesCronOperation,
@@ -656,7 +656,7 @@ def run_cron_job_now(session, job: str) -> dict[str, bool | str]:
     if job == "monitor-pending-episodes":
         episode_ids = tuple(
             session.scalars(
-                select(Episode.id).where(Episode.publish_status.in_(PENDING_EPISODE_STATUSES))
+                select(Episode.id).where(Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES))
             )
         )
         operation = create_operation(

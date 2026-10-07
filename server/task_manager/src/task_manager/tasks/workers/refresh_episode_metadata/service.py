@@ -28,7 +28,7 @@ from ...helpers.episodes.metadata import (
     update_episode_from_dailywire,
 )
 from ...helpers.episodes.no_show import is_no_show_today_slug
-from ...helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
+from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
 from ...helpers.episodes.unusable_media import NoUsableMediaReason, mark_episode_no_usable_media
 from ..monitor_pending_episode.scheduling import MONITOR_REQUESTED_EVENT
@@ -243,7 +243,7 @@ def _refresh_episode_from_dailywire(
         )
         return False
 
-    if new_status.value in PENDING_EPISODE_STATUSES:
+    if new_status in PENDING_EPISODE_PUBLISH_STATUSES:
         # Explicit scheduled/delayed/live evidence is authoritative even after a
         # row previously reached final. The status event helper owns lifecycle
         # timing invalidation for that transition.

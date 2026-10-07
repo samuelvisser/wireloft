@@ -9,7 +9,7 @@ from backend.db.models import Episode, Season, Show
 from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import (
     EpisodePublishStatus,
-    PENDING_EPISODE_PUBLISH_STATUS_VALUES,
+    PENDING_EPISODE_PUBLISH_STATUSES,
 )
 from backend.types.show_types import EpisodeIdentifier
 from backend.utils.episode import EpisodeIdentifierInfo
@@ -17,15 +17,12 @@ from dailywire_api.records import DwEpisodeRecord
 from .metadata import ensure_utc
 
 
-PENDING_EPISODE_STATUSES = PENDING_EPISODE_PUBLISH_STATUS_VALUES
-
-
 def pending_episodes_for_show(s: Session, show_id: int) -> list[Episode]:
     return list(
         s.scalars(
             select(Episode).where(
                 Episode.show_id == show_id,
-                Episode.publish_status.in_(PENDING_EPISODE_STATUSES),
+                Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
             )
         )
     )

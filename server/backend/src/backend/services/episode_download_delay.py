@@ -17,19 +17,18 @@ def episode_download_delay_ready_at(episode: Episode) -> datetime | None:
         return None
 
     publication_time: datetime | None
-    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value:
+    if episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL:
         if settings.ensure_safe_delay:
             publication_time = (
                 episode.safe_published_final
                 or episode.recorded_published_final
             )
             if publication_time is None:
-                # Episodes finalized before this timing fact existed retain the
-                # ordinary best-effort clock rather than becoming unschedulable.
+                # For episodes finalized before this timing fact existed
                 publication_time = best_effort_published_date(episode)
         else:
             publication_time = best_effort_published_date(episode)
-    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN.value:
+    elif episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN:
         publication_time = episode.safe_live_ended
         if publication_time is None and episode.published_date is not None:
             publication_time = utc_datetime(episode.published_date)

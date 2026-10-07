@@ -39,7 +39,3 @@ PENDING_EPISODE_PUBLISH_STATUSES = frozenset({
     EpisodePublishStatus.DW_PROCESSING,
     EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
 })
-PENDING_EPISODE_PUBLISH_STATUS_VALUES = frozenset(
-    status.value for status in PENDING_EPISODE_PUBLISH_STATUSES
-)
-

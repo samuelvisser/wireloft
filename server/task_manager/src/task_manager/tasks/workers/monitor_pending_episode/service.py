@@ -25,7 +25,7 @@ from ...helpers.episodes.metadata import (
 )
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.same_episode import (
-    PENDING_EPISODE_STATUSES,
+    PENDING_EPISODE_PUBLISH_STATUSES,
     reconcile_single_pending_episode_slug,
 )
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
@@ -240,7 +240,7 @@ async def run_monitor_pending_episode(
         )
 
     old_status = episode.publish_status
-    if old_status not in PENDING_EPISODE_STATUSES:
+    if old_status not in PENDING_EPISODE_PUBLISH_STATUSES:
         queue_monitor_completion_if_settled(
             s,
             episode=episode,
@@ -322,7 +322,7 @@ async def run_monitor_pending_episode(
         show_id=show_db_id,
     )
     old_status = episode.publish_status
-    if old_status not in PENDING_EPISODE_STATUSES:
+    if old_status not in PENDING_EPISODE_PUBLISH_STATUSES:
         queue_monitor_completion_if_settled(
             s,
             episode=episode,
@@ -375,7 +375,7 @@ async def run_monitor_pending_episode(
             previous_publish_status=old_status,
         )
 
-    if new_status.value in PENDING_EPISODE_STATUSES:
+    if new_status in PENDING_EPISODE_PUBLISH_STATUSES:
         save_status_metadata(
             s,
             episode=episode,

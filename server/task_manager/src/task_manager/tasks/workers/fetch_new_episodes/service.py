@@ -27,7 +27,7 @@ from ...helpers.episodes.mapper import (
 )
 from ...helpers.episodes.quarantine import vacated_canonical_identifiers_for_show
 from ...helpers.episodes.same_episode import (
-    PENDING_EPISODE_STATUSES,
+    PENDING_EPISODE_PUBLISH_STATUSES,
     reconcile_single_pending_episode_slug,
 )
 from ...helpers.episodes.save import (
@@ -216,7 +216,7 @@ async def _fetch_show(
         episode.id: _monitor_request_for_db_episode(show, episode)
         for episode in s.scalars(select(Episode).where(
             Episode.show_id == show_id,
-            Episode.publish_status.in_(PENDING_EPISODE_STATUSES),
+            Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
         ))
     }
 
@@ -338,7 +338,7 @@ async def _fetch_show(
             # Refresh requests with the newly adopted slug while keeping immutable id identity.
             for episode in s.scalars(select(Episode).where(
                 Episode.show_id == show_id,
-                Episode.publish_status.in_(PENDING_EPISODE_STATUSES),
+                Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
             )):
                 monitor_requests[episode.id] = _monitor_request_for_db_episode(show, episode)
 
@@ -464,7 +464,7 @@ def _announce_new_episodes(
             new_status=saved.status,
             was_created=True,
         )
-        if saved.status.value in PENDING_EPISODE_STATUSES:
+        if saved.status.value in PENDING_EPISODE_PUBLISH_STATUSES:
             monitor_requests[saved.episode.id] = _monitor_request_for_db_episode(show, saved.episode)
 
 

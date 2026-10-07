@@ -21,7 +21,7 @@ from ...helpers.episodes.identifier_reconciliation import reconcile_episode_iden
 from ...helpers.episodes.metadata import METADATA_REFRESH_REQUESTED_EVENT, update_episode_from_dailywire
 from ...helpers.episodes.no_show import is_no_show_today_slug
 from ...helpers.episodes.quarantine import PREVIOUS_IDENTIFIER_META_KEY, restore_quarantined_identifier
-from ...helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
+from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 from ...helpers.episodes.status import observe_episode_detail, resolve_episode_status
 from ...helpers.episodes.unusable_media import (
     NoUsableMediaReason,
@@ -143,7 +143,7 @@ def _recover_episode(
         new_status=resolved.status,
         was_created=False,
     )
-    if resolved.status.value in PENDING_EPISODE_STATUSES:
+    if resolved.status in PENDING_EPISODE_PUBLISH_STATUSES:
         queue_event(
             s,
             MONITOR_REQUESTED_EVENT,

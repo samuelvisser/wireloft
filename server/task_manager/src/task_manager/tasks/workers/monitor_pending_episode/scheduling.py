@@ -19,7 +19,7 @@ from task_manager.events.transactional import queue_event
 from task_manager.scheduler.executor import execute_task
 from task_manager.scheduler.scheduler import start_scheduler
 from ...helpers.episodes.events import episode_event_payload
-from ...helpers.episodes.same_episode import PENDING_EPISODE_STATUSES
+from ...helpers.episodes.same_episode import PENDING_EPISODE_PUBLISH_STATUSES
 
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,7 @@ def queue_monitor_completion_if_settled(
     show: Show,
     old_status: str | None,
 ) -> bool:
-    if episode.publish_status in PENDING_EPISODE_STATUSES:
+    if episode.publish_status in PENDING_EPISODE_PUBLISH_STATUSES:
         return False
     queue_event(
         s,
