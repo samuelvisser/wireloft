@@ -27,6 +27,20 @@ export function formatTime(value: Date | string | null | undefined) {
     }
 }
 
+const TIME_ONLY_DEADLINE_WINDOW_MS = 12 * 60 * 60 * 1000
+
+export function formatDateTimeForDeadline(
+    value: Date | string | null | undefined,
+    nowMs = Date.now(),
+) {
+    if (!value) return '—'
+    const d = value instanceof Date ? value : new Date(value)
+    const remainingMs = d.getTime() - nowMs
+    return remainingMs >= 0 && remainingMs < TIME_ONLY_DEADLINE_WINDOW_MS
+        ? formatTime(d)
+        : formatDate(d)
+}
+
 export function formatBytes(n: number | null | undefined) {
     if (!n && n !== 0) return ''
     if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GiB`

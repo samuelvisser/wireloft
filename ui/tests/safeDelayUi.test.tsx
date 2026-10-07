@@ -14,7 +14,7 @@ import {
     shouldPromptForSafeDelay,
 } from '../src/components/Episode/SafeDelayDownloadDialogs'
 import {presentDownloadProgress} from '../src/lib/downloadProgress'
-import {formatDate} from '../src/utils/formatting'
+import {formatDate, formatTime} from '../src/utils/formatting'
 import type {TaskOperationRead} from '../src/types/schemas/operation'
 
 library.add(fas)
@@ -78,16 +78,18 @@ function renderSafeDelayDialog({
     schedulePreferred,
     isRetry = false,
     checked = true,
+    safeDelayReadyAt = new Date('2026-10-07T08:00:00Z'),
 }: {
     schedulePreferred: boolean
     isRetry?: boolean
     checked?: boolean
+    safeDelayReadyAt?: Date | null
 }) {
     return renderToStaticMarkup(
         <SafeDelayConfirmDialog
             open
             isRetry={isRetry}
-            safeDelayReadyAt={new Date('2026-10-07T08:00:00Z')}
+            safeDelayReadyAt={safeDelayReadyAt}
             schedulePreferred={schedulePreferred}
             busy={false}
             submitting={null}
@@ -141,10 +143,37 @@ test('Ensure Safe Delay is hidden when automatic delay is zero', () => {
     assert.match(shown, /Ensure Safe Delay/)
 })
 
-test('pre-delay dialog shows the exact calculated safe time', () => {
-    const readyAt = new Date('2026-10-07T08:00:00Z')
+test('pre-delay dialog shows only the time when the deadline is less than 12 hours away', () => {
+    const originalNow = Date.now
+    const now = Date.parse('2026-10-07T07:00:00Z')
+    Date.now = () => now
+    try {
+        const readyAt = new Date(now + 11 * 60 * 60 * 1000)
+        const markup = renderSafeDelayDialog({schedulePreferred: true, safeDelayReadyAt: readyAt})
+        assert.ok(markup.includes(formatTime(readyAt)))
+        assert.doesNotMatch(markup, /2026/)
+    } finally {
+        Date.now = originalNow
+    }
+})
+
+test('pre-delay dialog includes the date when the deadline is at least 12 hours away', () => {
+    const originalNow = Date.now
+    const now = Date.parse('2026-10-07T07:00:00Z')
+    Date.now = () => now
+    try {
+        const readyAt = new Date(now + 12 * 60 * 60 * 1000)
+        const markup = renderSafeDelayDialog({schedulePreferred: true, safeDelayReadyAt: readyAt})
+        assert.ok(markup.includes(formatDate(readyAt)))
+        assert.match(markup, /2026/)
+    } finally {
+        Date.now = originalNow
+    }
+})
+
+test('pre-delay dialog uses the wider safety-delay modal', () => {
     const markup = renderSafeDelayDialog({schedulePreferred: true})
-    assert.ok(markup.includes(formatDate(readyAt)))
+    assert.match(markup, /class="modal safe-delay-confirm-dialog"/)
 })
 
 test('schedule is primary when the safety deadline is ten minutes or less away', () => {

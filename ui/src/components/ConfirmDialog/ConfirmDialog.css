@@ -15,3 +15,7 @@
 .confirm-dialog-content > p + :not(p) {
     margin-top: 16px;
 }
+
+.safe-delay-confirm-dialog {
+    max-width: 560px;
+}

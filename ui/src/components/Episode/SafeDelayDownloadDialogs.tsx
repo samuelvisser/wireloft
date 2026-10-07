@@ -1,4 +1,4 @@
-import {formatDate} from '../../utils/formatting'
+import {formatDateTimeForDeadline} from '../../utils/formatting'
 import {faIcon} from '../../icons/faIcon'
 import ConfirmDialog from '../ConfirmDialog/ConfirmDialog'
 
@@ -78,10 +78,14 @@ export function SafeDelayConfirmDialog({
 }) {
     const scheduleActionLabel = isRetry ? 'Schedule re-download' : 'Schedule download'
     const immediateActionLabel = isRetry ? 'Re-download now' : 'Download now'
+    const safeDelayReadyLabel = safeDelayReadyAt
+        ? formatDateTimeForDeadline(safeDelayReadyAt)
+        : null
 
     return (
         <ConfirmDialog
             open={open}
+            className="safe-delay-confirm-dialog"
             title="Download before the safety delay has passed?"
             onDismiss={onDismiss}
             icon={faIcon('fas', 'circle-exclamation')}
@@ -114,9 +118,9 @@ export function SafeDelayConfirmDialog({
                 WireLoft&apos;s configured post-publication safety delay has not passed yet. The Daily Wire may still be
                 processing this episode, so the current file may be incomplete.
             </p>
-            {safeDelayReadyAt && (
+            {safeDelayReadyLabel && (
                 <p>
-                    WireLoft considers this episode safe to download at <strong>{formatDate(safeDelayReadyAt)}</strong>.
+                    WireLoft considers this episode safe to download at <strong>{safeDelayReadyLabel}</strong>.
                 </p>
             )}
             <p>
