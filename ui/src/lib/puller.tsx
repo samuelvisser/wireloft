@@ -56,9 +56,7 @@ function reloadIfFrontendIsOutdated(backendAppVersion: string) {
     }
     if (previousBackendVersion === backendAppVersion) return
 
-    // In development the running backend is authoritative. Changing the
-    // manifest alone must not make the frontend adopt a version that the
-    // backend has not started reporting yet.
+    // In development the running backend is authoritative.
     window.sessionStorage.setItem(DEV_BACKEND_VERSION_KEY, backendAppVersion)
   } else if (backendAppVersion === FRONTEND_APP_VERSION) {
     return
