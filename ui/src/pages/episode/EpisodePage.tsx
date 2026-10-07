@@ -73,6 +73,7 @@ function ProfileDownloadRow({
     const [showLog, setShowLog] = useState(false)
     const [countdownConfirm, setCountdownConfirm] = useState(false)
     const [safeDelayAction, setSafeDelayAction] = useState<'download' | 'retry' | null>(null)
+    const [safeDelaySchedulePreferred, setSafeDelaySchedulePreferred] = useState<boolean | null>(null)
     const [safeDelaySubmitting, setSafeDelaySubmitting] = useState<'schedule' | 'immediate' | null>(null)
     const [redownloadWhenFinal, setRedownloadWhenFinal] = useState(true)
     const [redownloadWhenDelayPassed, setRedownloadWhenDelayPassed] = useState(true)
@@ -131,6 +132,18 @@ function ProfileDownloadRow({
         )
     )
 
+    const openSafeDelayDialog = (action: 'download' | 'retry') => {
+        // Freeze the primary action the first time this row shows the dialog.
+        // Do not let unrelated re-renders move a button under the user's cursor
+        // as the remaining delay crosses the ten-minute threshold. Reloading
+        // the page remounts the row and recalculates this preference.
+        setSafeDelaySchedulePreferred((current) => current ?? (
+            safeDelayReadyAt !== null
+            && safeDelayReadyAt.getTime() - Date.now() <= 10 * 60 * 1000
+        ))
+        setSafeDelayAction(action)
+    }
+
     const requestDownload = () => {
         if (confirmCountdownDownload) {
             setRedownloadWhenFinal(true)
@@ -139,7 +152,7 @@ function ProfileDownloadRow({
         }
         if (safetyDelayStillPending()) {
             setRedownloadWhenDelayPassed(true)
-            setSafeDelayAction('download')
+            openSafeDelayDialog('download')
             return
         }
         void startDownload()
@@ -168,7 +181,7 @@ function ProfileDownloadRow({
     const requestRetry = () => {
         if (safetyDelayStillPending()) {
             setRedownloadWhenDelayPassed(true)
-            setSafeDelayAction('retry')
+            openSafeDelayDialog('retry')
             return
         }
         void retryDownload()
@@ -202,10 +215,7 @@ function ProfileDownloadRow({
         }
     }
 
-    const schedulePreferred = (
-        safeDelayReadyAt !== null
-        && safeDelayReadyAt.getTime() - Date.now() <= 10 * 60 * 1000
-    )
+    const schedulePreferred = safeDelaySchedulePreferred === true
 
     const safeDelayIsRetry = safeDelayAction === 'retry'
     const scheduleActionLabel = safeDelayIsRetry ? 'Schedule re-download' : 'Schedule download'
