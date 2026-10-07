@@ -191,6 +191,17 @@
     min-width: 0;
 }
 
+.episode-view .download-row-loading,
+.episode-view .episode-downloads-loading {
+    color: var(--muted, #777);
+}
+
+.episode-view .download-row-loading {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+}
+
 .episode-view .download-row-actions {
     display: inline-flex;
     align-items: center;

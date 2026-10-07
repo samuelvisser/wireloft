@@ -64,6 +64,22 @@ function renderDownloadRow(reason: string, status = 'WAITING') {
     )
 }
 
+function renderMissingDownloadRow(downloadStateKnown: boolean) {
+    const client = new QueryClient()
+    return renderToStaticMarkup(
+        <QueryClientProvider client={client}>
+            <EpisodeDownloadRow
+                profile={{id: 7, name: 'Audio', preferredFormat: 'format_audio_only'} as any}
+                downloadStateKnown={downloadStateKnown}
+                episodeSlug="edge-case-episode"
+                confirmCountdownDownload={false}
+                confirmSafeDelayDownload={false}
+                safeDelayReadyAt={null}
+            />
+        </QueryClientProvider>,
+    )
+}
+
 function buttonClassForLabel(markup: string, label: string): string {
     const labelIndex = markup.indexOf(label)
     assert.notEqual(labelIndex, -1, `Expected button label "${label}"`)
@@ -262,6 +278,19 @@ test('stale API readiness does not reopen the warning after the actual deadline 
         shouldPromptForSafeDelay(true, readyAt, Date.parse('2026-10-07T07:10:00Z')),
         false,
     )
+})
+
+test('unknown download state never renders a temporary download action', () => {
+    const markup = renderMissingDownloadRow(false)
+    assert.match(markup, /aria-label="Loading download status for Audio"/)
+    assert.doesNotMatch(markup, /aria-label="Download Audio"/)
+    assert.doesNotMatch(markup, /aria-label="Actions for Audio"/)
+})
+
+test('known empty download state renders the download action', () => {
+    const markup = renderMissingDownloadRow(true)
+    assert.match(markup, /aria-label="Download Audio"/)
+    assert.doesNotMatch(markup, /Loading download status for Audio/)
 })
 
 test('scheduled publication-delay wait replaces the normal download button with status plus override', () => {

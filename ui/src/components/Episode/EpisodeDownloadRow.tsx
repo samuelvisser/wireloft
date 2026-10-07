@@ -29,6 +29,7 @@ type SafeDelayDialogState = {
 export function EpisodeDownloadRow({
     profile,
     download,
+    downloadStateKnown = true,
     episodeSlug,
     confirmCountdownDownload,
     confirmSafeDelayDownload,
@@ -36,6 +37,7 @@ export function EpisodeDownloadRow({
 }: {
     profile: LocalMediaProfileRead
     download?: MediaDownloadViewRead
+    downloadStateKnown?: boolean
     episodeSlug: string
     confirmCountdownDownload: boolean
     confirmSafeDelayDownload: boolean
@@ -207,8 +209,10 @@ export function EpisodeDownloadRow({
             'Could not cancel the download',
         )
 
-    const showDownloadButton = !download
+    const showDownloadButton = downloadStateKnown && (
+        !download
         || (!download.presentation.active && download.presentation.status === 'not_downloaded')
+    )
     const showRetryButton = Boolean(
         download
         && (
@@ -224,20 +228,30 @@ export function EpisodeDownloadRow({
                 <div className="download-row-format">{PreferredFormatReg.getLabelLoose(profile.preferredFormat)}</div>
             </div>
             <div className="download-row-state">
-                {download && !showDownloadButton
-                    ? <DownloadProgressStatus download={download} details={false}/>
-                    : <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={requestDownload}
-                        disabled={busy}
-                        aria-label={`Download ${profile.name}`}
-                    >
-                        <FontAwesomeIcon icon={faIcon('fas', 'download')}/>
-                        Download
-                    </button>}
+                {!downloadStateKnown
+                    ? (
+                        <span
+                            className="download-row-loading"
+                            role="status"
+                            aria-label={`Loading download status for ${profile.name}`}
+                        >
+                            Loading…
+                        </span>
+                    )
+                    : download && !showDownloadButton
+                        ? <DownloadProgressStatus download={download} details={false}/>
+                        : <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={requestDownload}
+                            disabled={busy}
+                            aria-label={`Download ${profile.name}`}
+                        >
+                            <FontAwesomeIcon icon={faIcon('fas', 'download')}/>
+                            Download
+                        </button>}
             </div>
-            {download && (
+            {downloadStateKnown && download && (
                 <div className="download-row-actions" aria-label={`Actions for ${profile.name}`}>
                     <ProgressExplanation
                         detail={download.presentation.detail + (download.presentation.secondary

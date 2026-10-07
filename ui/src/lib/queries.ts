@@ -630,7 +630,6 @@ function useMediaDownloadPresentation(scope: MediaDownloadScope) {
             )
             return MediaDownloadViewReadSchema.array().parse(value)
         },
-        placeholderData: keepPreviousData,
         refetchOnMount: 'always',
     })
     const {data: pullData} = useFrontendPuller()
@@ -659,7 +658,11 @@ function useMediaDownloadPresentation(scope: MediaDownloadScope) {
             .sort((left, right) => right.id - left.id)
     }, [domainQuery.data, operations])
 
-    return {...domainQuery, data}
+    return {
+        ...domainQuery,
+        data,
+        hasDomainData: domainQuery.data !== undefined,
+    }
 }
 
 export function useEpisodeDownloads(episodeSlug?: string) {

@@ -63,8 +63,12 @@ export default function EpisodePage() {
         isPending: isEpisodePending,
         isFetching: isEpisodeFetching,
     } = useEpisode(episodeId)
-    const {data: profiles} = useLocalMediaProfiles()
-    const {data: downloads} = useEpisodeDownloads(episodeId)
+    const {data: profiles, error: profilesError} = useLocalMediaProfiles()
+    const {
+        data: downloads,
+        error: downloadsError,
+        hasDomainData: hasDownloadState,
+    } = useEpisodeDownloads(episodeId)
     const settingsQuery = useSettings()
     const showProfiles = profiles?.filter((profile) => isShowLocalMediaProfileAvailableFor(profile, show?.type))
     const metadataRefreshOperation = useActiveOperation(
@@ -133,6 +137,9 @@ export default function EpisodePage() {
         || publishStatus === 'published_final'
         || publishStatus === EpisodePublishStatus.publishedFinal
     )
+    const downloadStateError = (profiles === undefined ? profilesError : null)
+        ?? (!hasDownloadState ? downloadsError : null)
+
     const earlyDeleteAfterMinutes = settingsQuery.data?.values.episodeStatusTiming.noUsableMediaDeleteAfterMinutes
     const earlyDeleteDisabledReason = earlyDeleteStarting
         ? OPERATION_STARTING_MESSAGE
@@ -278,25 +285,39 @@ export default function EpisodePage() {
                 {isDownloadable && (
                     <div className="episode-downloads" aria-labelledby="episode-downloads-title">
                         <h2 id="episode-downloads-title">Downloads</h2>
-                        {!showProfiles?.length && (
+                        {downloadStateError && (
+                            <div className="form-error-card" role="alert">
+                                Could not load download status: {downloadStateError.message}
+                            </div>
+                        )}
+                        {!downloadStateError && profiles === undefined && (
+                            <div role="status" aria-busy="true" className="episode-downloads-loading">
+                                Loading download options…
+                            </div>
+                        )}
+                        {!downloadStateError && profiles !== undefined && !showProfiles?.length && (
                             <p>
                                 No Local Media Profiles configured yet.{' '}
                                 <Link to="/add-local-media-profile">Add one</Link> to download this episode.
                             </p>
                         )}
-                        {!!showProfiles?.length && (
+                        {!downloadStateError && !!showProfiles?.length && (
                             <div role="list" aria-label="Available downloads per Local Media Profile">
-                                {showProfiles.map((profile) => (
-                                    <EpisodeDownloadRow
-                                        key={profile.id}
-                                        profile={profile}
-                                        download={downloadByProfileId.get(profile.id)}
-                                        episodeSlug={episode.slug}
-                                        confirmCountdownDownload={containsCountdown}
-                                        confirmSafeDelayDownload={!containsCountdown && !episode.downloadDelayPassed}
-                                        safeDelayReadyAt={episode.downloadDelayReadyAt}
-                                    />
-                                ))}
+                                {showProfiles.map((profile) => {
+                                    const download = downloadByProfileId.get(profile.id)
+                                    return (
+                                        <EpisodeDownloadRow
+                                            key={profile.id}
+                                            profile={profile}
+                                            download={download}
+                                            downloadStateKnown={hasDownloadState || download !== undefined}
+                                            episodeSlug={episode.slug}
+                                            confirmCountdownDownload={containsCountdown}
+                                            confirmSafeDelayDownload={!containsCountdown && !episode.downloadDelayPassed}
+                                            safeDelayReadyAt={episode.downloadDelayReadyAt}
+                                        />
+                                    )
+                                })}
                             </div>
                         )}
                     </div>
