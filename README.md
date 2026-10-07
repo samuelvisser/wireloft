@@ -11,7 +11,7 @@
     <img
       src="docs/assets/logos/logo-wide-wireloft-black.png"
       alt="WireLoft Logo"
-      width="500"
+      width="450"
     >
   </picture>
 </p>
