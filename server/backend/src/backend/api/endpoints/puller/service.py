@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from config import get_settings
+
 from backend.api.endpoints.operations.service import list_operations
 from backend.api.models.puller import FrontendPullAPIRead, FrontendPullData
 from task_manager.scheduler.types import OperationStatus
@@ -20,6 +22,7 @@ def get_frontend_pull() -> FrontendPullAPIRead:
         for operation in operations
     )
     return FrontendPullAPIRead(
+        app_version=get_settings().app_version,
         mode="fast" if has_active_operation else "slow",
         data=FrontendPullData(operations=operations),
     )

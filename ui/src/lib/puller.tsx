@@ -9,6 +9,7 @@ import {
 import {type QueryClient, useQuery} from '@tanstack/react-query'
 import {
   FrontendPullReadSchema,
+  FrontendPullVersionSchema,
   type FrontendPullData,
   type FrontendPullRead,
 } from '../types/schemas/puller'
@@ -18,6 +19,9 @@ import {usePageActive} from './pageActivity'
 export const FRONTEND_PULLER_QUERY_KEY = ['frontendPuller'] as const
 export const FRONTEND_PULLER_SLOW_MS = 5_000
 export const FRONTEND_PULLER_FAST_MS = 1_250
+
+const FRONTEND_APP_VERSION = import.meta.env.VITE_WIRELOFT_VERSION
+let reloadRequested = false
 
 type FrontendPullerContextValue = {
   snapshot: FrontendPullRead | undefined
@@ -40,11 +44,22 @@ class FrontendPullError extends Error {
 
 const FrontendPullerContext = createContext<FrontendPullerContextValue | null>(null)
 
+function reloadIfFrontendIsOutdated(backendAppVersion: string) {
+  if (reloadRequested || backendAppVersion === FRONTEND_APP_VERSION) return
+
+  reloadRequested = true
+  window.location.reload()
+}
+
 async function fetchFrontendPuller(signal?: AbortSignal): Promise<FrontendPullRead> {
   const base = (window as any).appConfig?.API_URL || '/api'
   const response = await fetch(base + '/pull', {credentials: 'include', signal})
   if (!response.ok) throw new FrontendPullError(response.status)
-  return FrontendPullReadSchema.parse(await response.json())
+
+  const payload: unknown = await response.json()
+  const {appVersion} = FrontendPullVersionSchema.parse(payload)
+  reloadIfFrontendIsOutdated(appVersion)
+  return FrontendPullReadSchema.parse(payload)
 }
 
 export function refreshFrontendPuller(queryClient: QueryClient) {

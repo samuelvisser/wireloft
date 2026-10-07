@@ -15,5 +15,6 @@ class FrontendPullData(ResponseBase):
 class FrontendPullAPIRead(ResponseBase):
     """One generic execution snapshot and the cadence the frontend should use next."""
 
+    app_version: str
     mode: Literal["slow", "fast"]
     data: FrontendPullData

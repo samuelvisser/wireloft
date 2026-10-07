@@ -14,6 +14,7 @@ import DownloadProgressStatus from '../src/components/DownloadProgress/DownloadP
 import DownloadProgressActionItem from '../src/components/DownloadProgress/DownloadProgressActionItem'
 import DownloadProgressButton from '../src/components/DownloadProgress/DownloadProgressButton'
 import type {TaskOperationRead} from '../src/types/schemas/operation'
+import {FrontendPullReadSchema, FrontendPullVersionSchema} from '../src/types/schemas/puller'
 library.add(fas)
 
 function operation(extra: Partial<TaskOperationRead> = {}): TaskOperationRead {
@@ -103,6 +104,11 @@ test('media download completion invalidates cached history for that download', a
     assert.equal(client.getQueryState(history50)?.isInvalidated,true)
     assert.equal(client.getQueryState(history100)?.isInvalidated,true)
     assert.equal(client.getQueryState(otherHistory)?.isInvalidated,false)
+})
+test('application version remains readable from a future incompatible pull payload',()=>{
+    const incompatible={appVersion:'2.0.0',mode:'future',data:null}
+    assert.equal(FrontendPullVersionSchema.parse(incompatible).appVersion,'2.0.0')
+    assert.throws(()=>FrontendPullReadSchema.parse(incompatible))
 })
 test('stale sequence is rejected but newer attempt and removals win',()=>{
     const previous={mode:'fast' as const,data:{operations:[active()]}}

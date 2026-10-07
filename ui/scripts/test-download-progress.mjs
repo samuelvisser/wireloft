@@ -19,6 +19,9 @@ try {
         packages: 'external',
         jsx: 'automatic',
         loader: {'.css': 'empty'},
+        define: {
+            'import.meta.env.VITE_WIRELOFT_VERSION': JSON.stringify('test'),
+        },
     })
     execFileSync(
         process.execPath,

@@ -28,6 +28,9 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
             --no-fund; \
     fi
 
+# Vite reads the canonical application version from the root manifest while
+# building the frontend bundle.
+COPY pyproject.toml /pyproject.toml
 COPY ui/ ./
 
 RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
