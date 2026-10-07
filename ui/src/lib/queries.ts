@@ -547,6 +547,7 @@ function syntheticDownload(operation: TaskOperationRead): MediaDownloadDomainVie
         assets: [],
         artifactStatus: 'absent',
         artifactError: null,
+        artifactSizeBytes: null,
         automaticRetrySuppressed: false,
         downloadedBytes: null,
         formatDownloaded: null,
