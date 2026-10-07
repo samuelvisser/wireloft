@@ -6,9 +6,29 @@ import {execFileSync} from 'node:child_process'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const directory = mkdtempSync(join(root, '.progress-tests-'))
 try {
-    const outfile = join(directory, 'tests.mjs')
-    await build({entryPoints:[resolve(root, 'tests/downloadProgress.test.tsx')],outfile,bundle:true,platform:'node',format:'esm',packages:'external',jsx:'automatic',loader:{'.css':'empty'}})
-    execFileSync(process.execPath, ['--test', outfile], {stdio:'inherit'})
+    const entryPoints = [
+        resolve(root, 'tests/downloadProgress.test.tsx'),
+        resolve(root, 'tests/safeDelayUi.test.tsx'),
+    ]
+    await build({
+        entryPoints,
+        outdir: directory,
+        bundle: true,
+        platform: 'node',
+        format: 'esm',
+        packages: 'external',
+        jsx: 'automatic',
+        loader: {'.css': 'empty'},
+    })
+    execFileSync(
+        process.execPath,
+        [
+            '--test',
+            join(directory, 'downloadProgress.test.js'),
+            join(directory, 'safeDelayUi.test.js'),
+        ],
+        {stdio:'inherit'},
+    )
 } finally {
     rmSync(directory, {recursive:true,force:true})
 }

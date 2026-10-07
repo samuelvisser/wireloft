@@ -50,6 +50,45 @@ const ShowArtworkFallbackFormatReg = createSelectRegistry('ShowArtworkFallbackFo
     png: {label: 'PNG'},
 })
 
+export function EnsureSafeDelayToggle({
+    delayMinutes,
+    checked,
+    onChange,
+    environmentVariable,
+}: {
+    delayMinutes: number
+    checked: boolean
+    onChange: (checked: boolean) => void
+    environmentVariable?: string
+}) {
+    if (delayMinutes <= 0) return null
+
+    return (
+        <ToggleField
+            id="settings-ensure-safe-delay"
+            label="Ensure Safe Delay"
+            checked={checked}
+            environmentVariable={environmentVariable}
+            onChange={onChange}
+            help={
+                <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the automatic episode delay.</span>}>
+                    <p>
+                        When enabled, final episode downloads first use a trusted publication timestamp when WireLoft
+                        continuously observed the transition. If that is unavailable, WireLoft uses the first time it
+                        recorded the episode as fully published.
+                    </p>
+                    <p>
+                        This can delay a download longer after WireLoft was offline, but avoids relying on The Daily Wire&apos;s
+                        publication timestamp when its meaning is ambiguous. Download Profiles wait for this safety point, and
+                        manual downloads show a warning while it has not passed but can still start immediately.
+                    </p>
+                </ReadMore>
+            }
+            wide
+        />
+    )
+}
+
 function childPath(root: string, name: string) {
     const trimmedRoot = root.trim()
     if (!trimmedRoot) return ''
@@ -325,32 +364,14 @@ export default function DownloadsSettingsTab({
                         </ReadMore>
                     }
                 />
-                {draft.downloadSettings.automaticEpisodeDownloadDelayMinutes > 0 && (
-                    <ToggleField
-                        id="settings-ensure-safe-delay"
-                        label="Ensure Safe Delay"
-                        checked={draft.downloadSettings.ensureSafeDelay}
-                        environmentVariable={environmentVariableFor('downloadSettings.ensureSafeDelay')}
-                        onChange={(checked) => updateDraft((next) => {
-                            next.downloadSettings.ensureSafeDelay = checked
-                        })}
-                        help={
-                            <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the automatic episode delay.</span>}>
-                                <p>
-                                    When enabled, final episode downloads first use a trusted publication timestamp when WireLoft
-                                    continuously observed the transition. If that is unavailable, WireLoft uses the first time it
-                                    recorded the episode as fully published.
-                                </p>
-                                <p>
-                                    This can delay a download longer after WireLoft was offline, but avoids relying on The Daily Wire&apos;s
-                                    publication timestamp when its meaning is ambiguous. Download Profiles wait for this safety point, and
-                                    manual downloads show a warning while it has not passed but can still start immediately.
-                                </p>
-                            </ReadMore>
-                        }
-                        wide
-                    />
-                )}
+                <EnsureSafeDelayToggle
+                    delayMinutes={draft.downloadSettings.automaticEpisodeDownloadDelayMinutes}
+                    checked={draft.downloadSettings.ensureSafeDelay}
+                    environmentVariable={environmentVariableFor('downloadSettings.ensureSafeDelay')}
+                    onChange={(checked) => updateDraft((next) => {
+                        next.downloadSettings.ensureSafeDelay = checked
+                    })}
+                />
                 <NumberField
                     id="settings-download-concurrency"
                     label="Concurrent downloads"

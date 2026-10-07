@@ -54,7 +54,116 @@ function EpisodePageSkeleton() {
     )
 }
 
-function ProfileDownloadRow({
+export function shouldPromptForSafeDelay(
+    confirmSafeDelayDownload: boolean,
+    safeDelayReadyAt: Date | null,
+    nowMs = Date.now(),
+): boolean {
+    return (
+        confirmSafeDelayDownload
+        && (
+            safeDelayReadyAt === null
+            || safeDelayReadyAt.getTime() > nowMs
+        )
+    )
+}
+
+export function freezeSafeDelaySchedulePreference(
+    current: boolean | null,
+    safeDelayReadyAt: Date | null,
+    nowMs = Date.now(),
+): boolean {
+    return current ?? (
+        safeDelayReadyAt !== null
+        && safeDelayReadyAt.getTime() - nowMs <= 10 * 60 * 1000
+    )
+}
+
+export function SafeDelayConfirmDialog({
+    open,
+    isRetry,
+    safeDelayReadyAt,
+    schedulePreferred,
+    busy,
+    submitting,
+    redownloadWhenDelayPassed,
+    onRedownloadWhenDelayPassedChange,
+    onDismiss,
+    onSchedule,
+    onImmediate,
+}: {
+    open: boolean
+    isRetry: boolean
+    safeDelayReadyAt: Date | null
+    schedulePreferred: boolean
+    busy: boolean
+    submitting: 'schedule' | 'immediate' | null
+    redownloadWhenDelayPassed: boolean
+    onRedownloadWhenDelayPassedChange: (checked: boolean) => void
+    onDismiss: () => void
+    onSchedule: () => void | Promise<void>
+    onImmediate: () => void | Promise<void>
+}) {
+    const scheduleActionLabel = isRetry ? 'Schedule re-download' : 'Schedule download'
+    const immediateActionLabel = isRetry ? 'Re-download now' : 'Download now'
+
+    return (
+        <ConfirmDialog
+            open={open}
+            title="Download before the safety delay has passed?"
+            onDismiss={onDismiss}
+            icon={faIcon('fas', 'circle-exclamation')}
+            dismissOnOverlayClick={!busy}
+            cancelButton={{disabled: busy}}
+            confirmButton={schedulePreferred ? {
+                label: submitting === 'schedule' ? 'Scheduling…' : scheduleActionLabel,
+                onClick: onSchedule,
+                icon: faIcon('fas', 'clock'),
+                disabled: busy,
+            } : {
+                label: submitting === 'immediate' ? 'Starting…' : immediateActionLabel,
+                onClick: onImmediate,
+                icon: faIcon('fas', 'download'),
+                disabled: busy,
+            }}
+            secondaryButton={schedulePreferred ? {
+                label: submitting === 'immediate' ? 'Starting…' : immediateActionLabel,
+                onClick: onImmediate,
+                icon: faIcon('fas', 'download'),
+                disabled: busy,
+            } : {
+                label: submitting === 'schedule' ? 'Scheduling…' : scheduleActionLabel,
+                onClick: onSchedule,
+                icon: faIcon('fas', 'clock'),
+                disabled: busy,
+            }}
+        >
+            <p>
+                WireLoft&apos;s configured post-publication safety delay has not passed yet. The Daily Wire may still be
+                processing this episode, so the current file may be incomplete.
+            </p>
+            {safeDelayReadyAt && (
+                <p>
+                    WireLoft considers this episode safe to download at <strong>{formatDate(safeDelayReadyAt)}</strong>.
+                </p>
+            )}
+            <p>
+                You can schedule it for that time, or download it immediately.
+            </p>
+            <label className="confirm-dialog-option">
+                <input
+                    type="checkbox"
+                    checked={redownloadWhenDelayPassed}
+                    onChange={(event) => onRedownloadWhenDelayPassedChange(event.target.checked)}
+                    disabled={busy}
+                />
+                <span>If downloading now, re-download automatically when the safety delay has passed</span>
+            </label>
+        </ConfirmDialog>
+    )
+}
+
+export function ProfileDownloadRow({
                                 profile,
                                 download,
                                 episodeSlug,
@@ -125,22 +234,13 @@ function ProfileDownloadRow({
             scheduleForDelay ? 'Could not schedule the download' : 'Could not start the download',
         )
 
-    const safetyDelayStillPending = () => (
-        confirmSafeDelayDownload
-        && (
-            safeDelayReadyAt === null
-            || safeDelayReadyAt.getTime() > Date.now()
-        )
-    )
-
     const openSafeDelayDialog = (action: 'download' | 'retry') => {
         // Freeze the primary action the first time this row shows the dialog.
         // Do not let unrelated re-renders move a button under the user's cursor
         // as the remaining delay crosses the ten-minute threshold. Reloading
         // the page remounts the row and recalculates this preference.
-        setSafeDelaySchedulePreferred((current) => current ?? (
-            safeDelayReadyAt !== null
-            && safeDelayReadyAt.getTime() - Date.now() <= 10 * 60 * 1000
+        setSafeDelaySchedulePreferred((current) => (
+            freezeSafeDelaySchedulePreference(current, safeDelayReadyAt)
         ))
         setSafeDelayAction(action)
     }
@@ -151,7 +251,7 @@ function ProfileDownloadRow({
             setCountdownConfirm(true)
             return
         }
-        if (safetyDelayStillPending()) {
+        if (shouldPromptForSafeDelay(confirmSafeDelayDownload, safeDelayReadyAt)) {
             setRedownloadWhenDelayPassed(true)
             openSafeDelayDialog('download')
             return
@@ -180,7 +280,7 @@ function ProfileDownloadRow({
         )
 
     const requestRetry = () => {
-        if (safetyDelayStillPending()) {
+        if (shouldPromptForSafeDelay(confirmSafeDelayDownload, safeDelayReadyAt)) {
             setRedownloadWhenDelayPassed(true)
             openSafeDelayDialog('retry')
             return
@@ -217,10 +317,7 @@ function ProfileDownloadRow({
     }
 
     const schedulePreferred = safeDelaySchedulePreferred === true
-
     const safeDelayIsRetry = safeDelayAction === 'retry'
-    const scheduleActionLabel = safeDelayIsRetry ? 'Schedule re-download' : 'Schedule download'
-    const immediateActionLabel = safeDelayIsRetry ? 'Re-download now' : 'Download now'
 
     const cancelDownload = () =>
         request(
@@ -349,60 +446,21 @@ function ProfileDownloadRow({
                     <span>Re-download automatically when the countdown is gone</span>
                 </label>
             </ConfirmDialog>
-            <ConfirmDialog
+            <SafeDelayConfirmDialog
                 open={safeDelayAction !== null}
-                title="Download before the safety delay has passed?"
+                isRetry={safeDelayIsRetry}
+                safeDelayReadyAt={safeDelayReadyAt}
+                schedulePreferred={schedulePreferred}
+                busy={busy}
+                submitting={safeDelaySubmitting}
+                redownloadWhenDelayPassed={redownloadWhenDelayPassed}
+                onRedownloadWhenDelayPassedChange={setRedownloadWhenDelayPassed}
                 onDismiss={() => {
                     if (!busy) setSafeDelayAction(null)
                 }}
-                icon={faIcon('fas', 'circle-exclamation')}
-                dismissOnOverlayClick={!busy}
-                cancelButton={{disabled: busy}}
-                confirmButton={schedulePreferred ? {
-                    label: safeDelaySubmitting === 'schedule' ? 'Scheduling…' : scheduleActionLabel,
-                    onClick: scheduleSafeDelayDownload,
-                    icon: faIcon('fas', 'clock'),
-                    disabled: busy,
-                } : {
-                    label: safeDelaySubmitting === 'immediate' ? 'Starting…' : immediateActionLabel,
-                    onClick: downloadImmediately,
-                    icon: faIcon('fas', 'download'),
-                    disabled: busy,
-                }}
-                secondaryButton={schedulePreferred ? {
-                    label: safeDelaySubmitting === 'immediate' ? 'Starting…' : immediateActionLabel,
-                    onClick: downloadImmediately,
-                    icon: faIcon('fas', 'download'),
-                    disabled: busy,
-                } : {
-                    label: safeDelaySubmitting === 'schedule' ? 'Scheduling…' : scheduleActionLabel,
-                    onClick: scheduleSafeDelayDownload,
-                    icon: faIcon('fas', 'clock'),
-                    disabled: busy,
-                }}
-            >
-                <p>
-                    WireLoft&apos;s configured post-publication safety delay has not passed yet. The Daily Wire may still be
-                    processing this episode, so the current file may be incomplete.
-                </p>
-                {safeDelayReadyAt && (
-                    <p>
-                        WireLoft considers this episode safe to download at <strong>{formatDate(safeDelayReadyAt)}</strong>.
-                    </p>
-                )}
-                <p>
-                    You can schedule it for that time, or download it immediately.
-                </p>
-                <label className="confirm-dialog-option">
-                    <input
-                        type="checkbox"
-                        checked={redownloadWhenDelayPassed}
-                        onChange={(event) => setRedownloadWhenDelayPassed(event.target.checked)}
-                        disabled={busy}
-                    />
-                    <span>If downloading now, re-download automatically when the safety delay has passed</span>
-                </label>
-            </ConfirmDialog>
+                onSchedule={scheduleSafeDelayDownload}
+                onImmediate={downloadImmediately}
+            />
             <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>
         </div>
     )
