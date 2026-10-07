@@ -82,7 +82,7 @@ def retry_media_download_action(
                 redownload_when_delay_passed
                 and not schedule_for_delay
                 and episode is not None
-                and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+                and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL
                 and not episode_download_delay_passed(episode)
             )
 

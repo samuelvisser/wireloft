@@ -71,20 +71,26 @@ export function EnsureSafeDelayToggle({
             environmentVariable={environmentVariable}
             onChange={onChange}
             help={
-                <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the automatic episode delay.</span>}>
+                <ReadMore summary={<span>Use a deliberately conservative timestamp when applying the episode download delay.</span>}>
                     <p>
-                        When enabled, final episode downloads first use a trusted publication timestamp when WireLoft
-                        continuously observed the transition. If that is unavailable, WireLoft uses the first time it
-                        recorded the episode as fully published.
+                        Unfortunately, The Daily Wire does not currently provide an accurate time at which an episode was published.
+                        The time they define as published differs wildly per show, and is at times very inaccurate. Therefore, to
+                        apply the download delay, WireLoft tries to make a best- effort guess when the episode was published based
+                        primarily on when it observed it being published, but with with fallback to other timestamps or the official
+                        time as reported by The Daily Wire if WireLoft cannot prove it was online while the episode was published.
                     </p>
                     <p>
-                        This can delay a download longer after WireLoft was offline, but avoids relying on The Daily Wire&apos;s
-                        publication timestamp when its meaning is ambiguous. Download Profiles wait for this safety point, and
-                        manual downloads show a warning while it has not passed but can still start immediately.
+                        When this setting is enabled, that best- effort guess is replaced by the timestamp WireLoft first recorded
+                        the episode being published. In this way, you can be sure downloads never automatically happen before at
+                        least it's configured delay after publishing.
+                    </p>
+                    <p>
+                        The disadvantage of that approach is that, if WireLoft was shut down when the episode was published, the
+                        date at which it recorded it being published might vary wildly from the actual date, especially if WireLoft
+                        was down for an extended time. Therefore this conservative value is not used by default.
                     </p>
                 </ReadMore>
             }
-            wide
         />
     )
 }
@@ -342,7 +348,7 @@ export default function DownloadsSettingsTab({
             >
                 <DurationField
                     id="settings-automatic-episode-download-delay"
-                    label="Automatic episode download delay"
+                    label="Episode download delay"
                     value={draft.downloadSettings.automaticEpisodeDownloadDelayMinutes}
                     backendUnit="minutes"
                     error={errorFor('downloadSettings.automaticEpisodeDownloadDelayMinutes')}
@@ -351,7 +357,7 @@ export default function DownloadsSettingsTab({
                         next.downloadSettings.automaticEpisodeDownloadDelayMinutes = value
                     })}
                     help={
-                        <ReadMore summary={<span>Delay before automatically downloading published episodes.</span>}>
+                        <ReadMore summary={<span>Delay before downloading published episodes.</span>}>
                             <p>
                                 Sometimes when an episode has just been published, its length is mere minutes even for hours long
                                 episodes. Presumably, The Daily Wire is still processing it on their end even while their API reports

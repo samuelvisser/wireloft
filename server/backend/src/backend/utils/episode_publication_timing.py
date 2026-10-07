@@ -7,6 +7,7 @@ from backend.db.datetime_types import utc_datetime
 from backend.types.episode_types import (
     EpisodePublishStatus,
     PENDING_EPISODE_PUBLISH_STATUSES,
+    PRE_PUBLISH_EPISODE_PUBLISH_STATUSES
 )
 
 
@@ -110,16 +111,12 @@ def _is_new_publication_lifecycle(
         new_status: EpisodePublishStatus,
 ) -> bool:
     """Return whether a status transition starts a new publication lifecycle."""
-    if old_status == new_status.value:
+    if old_status == new_status:
         return False
     return (
-        new_status in {
-            EpisodePublishStatus.SCHEDULED,
-            EpisodePublishStatus.DELAYED,
-            EpisodePublishStatus.LIVE,
-        }
+        new_status in PRE_PUBLISH_EPISODE_PUBLISH_STATUSES
         or (
-            old_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+            old_status == EpisodePublishStatus.PUBLISHED_FINAL
             and new_status in PENDING_EPISODE_PUBLISH_STATUSES
         )
     )

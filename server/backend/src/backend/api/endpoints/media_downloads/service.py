@@ -367,7 +367,7 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
     redownload_when_delay_passed = (
         body.redownload_when_delay_passed
         and not body.schedule_for_delay
-        and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value
+        and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL
         and not episode_download_delay_passed(episode)
     )
     existing: Optional[EpisodeMediaDownload] = (

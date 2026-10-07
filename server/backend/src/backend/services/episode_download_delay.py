@@ -24,7 +24,7 @@ def episode_download_delay_ready_at(episode: Episode) -> datetime | None:
                 or episode.recorded_published_final
             )
             if publication_time is None:
-                # For episodes finalized before this timing fact existed
+                # For episodes added during an initial index
                 publication_time = best_effort_published_date(episode)
         else:
             publication_time = best_effort_published_date(episode)

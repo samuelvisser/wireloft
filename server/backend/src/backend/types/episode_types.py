@@ -32,10 +32,23 @@ class EpisodePublishStatus(StrEnum):
     # or WireLoft's countdown-only final safeguard has elapsed.
     PUBLISHED_FINAL = "published_final"
 
+
 PENDING_EPISODE_PUBLISH_STATUSES = frozenset({
     EpisodePublishStatus.SCHEDULED,
     EpisodePublishStatus.DELAYED,
     EpisodePublishStatus.LIVE,
     EpisodePublishStatus.DW_PROCESSING,
     EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+})
+
+POST_LIVE_EPISODE_PUBLISH_STATUSES = frozenset({
+    EpisodePublishStatus.DW_PROCESSING,
+    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+    EpisodePublishStatus.PUBLISHED_FINAL,
+})
+
+PRE_PUBLISH_EPISODE_PUBLISH_STATUSES = frozenset({
+    EpisodePublishStatus.SCHEDULED,
+    EpisodePublishStatus.DELAYED,
+    EpisodePublishStatus.LIVE,
 })

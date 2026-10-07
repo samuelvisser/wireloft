@@ -8,6 +8,7 @@ from backend.db.models import Episode
 from backend.types.episode_types import (
     EpisodePublishStatus,
     PENDING_EPISODE_PUBLISH_STATUSES,
+    POST_LIVE_EPISODE_PUBLISH_STATUSES
 )
 from backend.utils.episode_publication_timing import (
     LAST_KNOWN_PENDING_META_KEY,
@@ -24,12 +25,6 @@ MONITOR_LIVE_SESSION_META_KEY = "ep_status.monitor_live_session"
 MONITOR_PENDING_SESSION_META_KEY = "ep_status.monitor_pending_session"
 
 _MONITOR_SESSION_ID = uuid4().hex
-_MONITORED_PENDING_STATUSES = PENDING_EPISODE_PUBLISH_STATUSES
-_POST_LIVE_STATUSES = frozenset({
-    EpisodePublishStatus.DW_PROCESSING,
-    EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
-    EpisodePublishStatus.PUBLISHED_FINAL,
-})
 
 
 def _session_marker(current: datetime) -> str:
@@ -62,14 +57,17 @@ def track_monitor_publication_timing(
 ) -> None:
     """Persist publication facts that monitoring can prove or bound.
 
+    Saves episode metadata regarding its publication timing. As The Daily Wire-provided
+    publication timestamp sometimes is not accurate to its actual publication, for
+    WireLoft automations, this trusted timing might be used instead.
+
     safe_live_ended requires a LIVE -> LIVE observation before the episode leaves
     LIVE. safe_published_final requires an earlier pending-state observation in
     the same process.
 
     When a previous process observed a pending state but restarted before it could
-    observe PUBLISHED_FINAL, that old observation is materialized as
-    last_known_pending. It is only a lower bound, never promoted to a safe final
-    timestamp. recorded_published_final stores the first time WireLoft observed
+    observe PUBLISHED_FINAL, that old observation is materialized as last_known_pending.
+    recorded_published_final stores the first time WireLoft observed
     the final state regardless of monitor continuity.
     """
     current = utc_datetime(observed_at or datetime.now(timezone.utc))
@@ -89,7 +87,7 @@ def track_monitor_publication_timing(
     trusted_pending_session = _belongs_to_current_session(pending_session)
 
     if (
-        old_status == EpisodePublishStatus.LIVE.value
+        old_status == EpisodePublishStatus.LIVE
         and new_status is EpisodePublishStatus.LIVE
     ):
         episode.set_meta(
@@ -98,7 +96,7 @@ def track_monitor_publication_timing(
         )
 
     if (
-        old_status == EpisodePublishStatus.LIVE.value
+        old_status == EpisodePublishStatus.LIVE
         and new_status is not EpisodePublishStatus.LIVE
     ):
         live_session = episode.get_meta(MONITOR_LIVE_SESSION_META_KEY)
@@ -108,7 +106,7 @@ def track_monitor_publication_timing(
                 MONITOR_LIVE_SESSION_META_KEY,
                 f"consumed:{current.isoformat()}",
             )
-        if trusted_live_session and new_status in _POST_LIVE_STATUSES:
+        if trusted_live_session and new_status in POST_LIVE_EPISODE_PUBLISH_STATUSES:
             episode.set_meta(
                 TRUSTED_LIVE_ENDED_META_KEY,
                 encode_safe_live_ended(current),
@@ -116,7 +114,7 @@ def track_monitor_publication_timing(
 
     if (
         new_status is EpisodePublishStatus.PUBLISHED_FINAL
-        and old_status != EpisodePublishStatus.PUBLISHED_FINAL.value
+        and old_status != EpisodePublishStatus.PUBLISHED_FINAL
     ):
         if trusted_pending_session:
             episode.set_meta(
@@ -140,7 +138,7 @@ def track_monitor_publication_timing(
                 )
         return
 
-    if new_status in _MONITORED_PENDING_STATUSES:
+    if new_status in PENDING_EPISODE_PUBLISH_STATUSES:
         episode.set_meta(
             MONITOR_PENDING_SESSION_META_KEY,
             _session_marker(current),

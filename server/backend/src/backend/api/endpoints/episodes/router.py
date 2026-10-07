@@ -35,9 +35,9 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
                 s,
                 download,
                 source=(
-                    OperationSource.SYSTEM.value
+                    OperationSource.SYSTEM
                     if body.schedule_for_delay
-                    else OperationSource.UI.value
+                    else OperationSource.UI
                 ),
                 not_before=scheduled_ready_at,
             )

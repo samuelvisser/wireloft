@@ -333,8 +333,6 @@ async def run_monitor_pending_episode(
         return EpisodePublishStatus(old_status)
 
     # Record the observed publication timing before applying status fallbacks.
-    # safe_* facts still require continuous evidence, while interrupted monitor
-    # evidence is kept separately as a lower bound for best-effort timing.
     track_monitor_publication_timing(
         episode,
         old_status=old_status,
@@ -358,7 +356,7 @@ async def run_monitor_pending_episode(
             reason=_no_usable_reason(detail, observed_status=observed.status),
         )
     else:
-        episode.publish_status = new_status.value
+        episode.publish_status = new_status
         clear_episode_no_usable_media_tracking(episode)
 
     if new_status is not EpisodePublishStatus.NO_USABLE_MEDIA:
