@@ -37,6 +37,15 @@ function terminal(status: string, label: string, detail: string, outcome?: Progr
     }
 }
 
+export function isPublicationDelayWait(operation?: TaskOperationRead): boolean {
+    if (operation?.status !== 'WAITING') return false
+
+    const execution = downloadExecution(operation)
+    const main = execution?.stages.find(stage => stage.id === execution.main_activity)
+    const wait = main?.wait || operation.progressMeta?.wait_state as {reason?: string} | undefined
+    return wait?.reason === 'publication_delay'
+}
+
 export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, operation?: TaskOperationRead, starting = false): DownloadPresentation {
     if (starting) return {status: 'preparing', ...workingPresentation('Starting', 'Starting the requested download.')}
     if (operation && ACTIVE_OPERATION_STATUSES.has(operation.status)) {

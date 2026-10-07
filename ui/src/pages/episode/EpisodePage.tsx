@@ -11,6 +11,7 @@ import {EpisodePublishStatus, PUBLISH_STATUS_LABELS} from '../../types/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
 import {LocalMediaProfileRead} from '../../types/schemas/local_media_profile'
 import {getErrorMessageFromResponse} from '../../utils/helpers'
+import {isPublicationDelayWait} from '../../lib/downloadProgress'
 import DownloadProgressStatus from '../../components/DownloadProgress/DownloadProgressStatus'
 import DownloadLogDialog from '../../components/MediaDownload/DownloadLogDialog'
 import ProgressExplanation from '../../components/common/ProgressExplanation'
@@ -231,6 +232,18 @@ function ProfileDownloadRow({
     const showDownloadButton = !download
         || (!download.presentation.active && download.presentation.status === 'not_downloaded')
 
+    const showPublicationDelayRedownload = Boolean(
+        download
+        && isPublicationDelayWait(download.operation)
+    )
+    const showRetryButton = Boolean(
+        download
+        && (
+            (!download.presentation.active && download.presentation.canRetry)
+            || showPublicationDelayRedownload
+        )
+    )
+
     return (
         <div className="download-row" role="listitem" aria-label={`Download for ${profile.name}`}>
             <div className="download-row-info">
@@ -270,16 +283,22 @@ function ProfileDownloadRow({
                             <FontAwesomeIcon icon={faIcon('fas', 'ban')}/>
                         </button>
                     )}
-                    {!download.presentation.active && download.presentation.canRetry && (
+                    {showRetryButton && (
                         <button
                             type="button"
                             className="icon-btn"
                             onClick={requestRetry}
                             disabled={busy}
-                            title={download.presentation.outcome === 'success' ? 'Re-download' : 'Retry download'}
-                            aria-label={download.presentation.outcome === 'success'
-                                ? `Re-download ${profile.name}`
-                                : `Retry download for ${profile.name}`}
+                            title={showPublicationDelayRedownload
+                                ? 'Download now'
+                                : download.presentation.outcome === 'success'
+                                    ? 'Re-download'
+                                    : 'Retry download'}
+                            aria-label={showPublicationDelayRedownload
+                                ? `Download ${profile.name} now`
+                                : download.presentation.outcome === 'success'
+                                    ? `Re-download ${profile.name}`
+                                    : `Retry download for ${profile.name}`}
                         >
                             <FontAwesomeIcon icon={faIcon('fas', 'rotate-right')}/>
                         </button>

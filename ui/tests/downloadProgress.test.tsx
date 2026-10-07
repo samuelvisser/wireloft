@@ -5,7 +5,7 @@ import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@fortawesome/free-solid-svg-icons'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import FrontendPuller from '../src/lib/puller'
-import {presentDownloadProgress} from '../src/lib/downloadProgress'
+import {isPublicationDelayWait, presentDownloadProgress} from '../src/lib/downloadProgress'
 import {presentOperationProgress} from '../src/lib/operationProgress'
 import {invalidateForOperation} from '../src/lib/operationDefinitions'
 import {reconcileOperationSnapshots} from '../src/lib/operationSnapshots'
@@ -58,6 +58,20 @@ test('global cooldown is not flattened into 0%',()=>{
 test('post-publication wait is presented as delayed',()=>{
     const view=presentDownloadProgress(undefined,operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay'}}}))
     assert.equal(view.mode,'waiting');assert.equal(view.label,'Delayed...');assert.equal(view.percent,null)
+})
+test('only a publication-delay wait is eligible for the manual override action',()=>{
+    assert.equal(
+        isPublicationDelayWait(operation({status:'WAITING',progressMeta:{wait_state:{reason:'publication_delay'}}})),
+        true,
+    )
+    assert.equal(
+        isPublicationDelayWait(operation({status:'WAITING',progressMeta:{wait_state:{reason:'daily_wire_request_cooldown'}}})),
+        false,
+    )
+    assert.equal(
+        isPublicationDelayWait(operation({status:'RUNNING',progressMeta:{wait_state:{reason:'publication_delay'}}})),
+        false,
+    )
 })
 test('sidecar wait does not hide an active media transfer',()=>{
     const snapshot=execution();snapshot.stages[1].wait={reason:'upstream_retry'} as any
