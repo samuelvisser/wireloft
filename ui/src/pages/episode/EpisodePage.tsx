@@ -79,6 +79,28 @@ export function freezeSafeDelaySchedulePreference(
     )
 }
 
+function RedownloadAfterDelayOption({
+    checked,
+    disabled,
+    onChange,
+}: {
+    checked: boolean
+    disabled: boolean
+    onChange: (checked: boolean) => void
+}) {
+    return (
+        <label className="confirm-dialog-option">
+            <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => onChange(event.target.checked)}
+                disabled={disabled}
+            />
+            <span>Re-download automatically when the safety delay has passed</span>
+        </label>
+    )
+}
+
 export function SafeDelayConfirmDialog({
     open,
     isRetry,
@@ -150,15 +172,61 @@ export function SafeDelayConfirmDialog({
             <p>
                 You can schedule it for that time, or download it immediately.
             </p>
-            <label className="confirm-dialog-option">
-                <input
-                    type="checkbox"
+            {!schedulePreferred && (
+                <RedownloadAfterDelayOption
                     checked={redownloadWhenDelayPassed}
-                    onChange={(event) => onRedownloadWhenDelayPassedChange(event.target.checked)}
                     disabled={busy}
+                    onChange={onRedownloadWhenDelayPassedChange}
                 />
-                <span>If downloading now, re-download automatically when the safety delay has passed</span>
-            </label>
+            )}
+        </ConfirmDialog>
+    )
+}
+
+export function ImmediateSafeDelayConfirmDialog({
+    open,
+    isRetry,
+    busy,
+    submitting,
+    redownloadWhenDelayPassed,
+    onRedownloadWhenDelayPassedChange,
+    onDismiss,
+    onImmediate,
+}: {
+    open: boolean
+    isRetry: boolean
+    busy: boolean
+    submitting: 'schedule' | 'immediate' | null
+    redownloadWhenDelayPassed: boolean
+    onRedownloadWhenDelayPassedChange: (checked: boolean) => void
+    onDismiss: () => void
+    onImmediate: () => void | Promise<void>
+}) {
+    const immediateActionLabel = isRetry ? 'Re-download now' : 'Download now'
+
+    return (
+        <ConfirmDialog
+            open={open}
+            title={isRetry ? 'Re-download before the safety delay?' : 'Download before the safety delay?'}
+            onDismiss={onDismiss}
+            icon={faIcon('fas', 'circle-exclamation')}
+            dismissOnOverlayClick={!busy}
+            cancelButton={{disabled: busy}}
+            confirmButton={{
+                label: submitting === 'immediate' ? 'Starting…' : immediateActionLabel,
+                onClick: onImmediate,
+                icon: faIcon('fas', 'download'),
+                disabled: busy,
+            }}
+        >
+            <p>
+                This download will start immediately, before WireLoft considers the episode safely ready.
+            </p>
+            <RedownloadAfterDelayOption
+                checked={redownloadWhenDelayPassed}
+                disabled={busy}
+                onChange={onRedownloadWhenDelayPassedChange}
+            />
         </ConfirmDialog>
     )
 }
@@ -183,6 +251,7 @@ export function ProfileDownloadRow({
     const [showLog, setShowLog] = useState(false)
     const [countdownConfirm, setCountdownConfirm] = useState(false)
     const [safeDelayAction, setSafeDelayAction] = useState<'download' | 'retry' | null>(null)
+    const [safeDelayImmediateConfirm, setSafeDelayImmediateConfirm] = useState(false)
     const [safeDelaySchedulePreferred, setSafeDelaySchedulePreferred] = useState<boolean | null>(null)
     const [safeDelaySubmitting, setSafeDelaySubmitting] = useState<'schedule' | 'immediate' | null>(null)
     const [redownloadWhenFinal, setRedownloadWhenFinal] = useState(true)
@@ -242,6 +311,7 @@ export function ProfileDownloadRow({
         setSafeDelaySchedulePreferred((current) => (
             freezeSafeDelaySchedulePreference(current, safeDelayReadyAt)
         ))
+        setSafeDelayImmediateConfirm(false)
         setSafeDelayAction(action)
     }
 
@@ -288,6 +358,11 @@ export function ProfileDownloadRow({
         void retryDownload()
     }
 
+    const closeSafeDelayDialogs = () => {
+        setSafeDelayImmediateConfirm(false)
+        setSafeDelayAction(null)
+    }
+
     const scheduleSafeDelayDownload = async () => {
         setSafeDelaySubmitting('schedule')
         try {
@@ -296,7 +371,7 @@ export function ProfileDownloadRow({
             } else {
                 await startDownload({scheduleForDelay: true})
             }
-            setSafeDelayAction(null)
+            closeSafeDelayDialogs()
         } finally {
             setSafeDelaySubmitting(null)
         }
@@ -310,13 +385,23 @@ export function ProfileDownloadRow({
             } else {
                 await startDownload({redownloadDelayPassed: redownloadWhenDelayPassed})
             }
-            setSafeDelayAction(null)
+            closeSafeDelayDialogs()
         } finally {
             setSafeDelaySubmitting(null)
         }
     }
 
     const schedulePreferred = safeDelaySchedulePreferred === true
+
+    const requestImmediateSafeDelayDownload = () => {
+        if (!schedulePreferred) {
+            void downloadImmediately()
+            return
+        }
+        setRedownloadWhenDelayPassed(true)
+        setSafeDelayImmediateConfirm(true)
+    }
+
     const safeDelayIsRetry = safeDelayAction === 'retry'
 
     const cancelDownload = () =>
@@ -447,7 +532,7 @@ export function ProfileDownloadRow({
                 </label>
             </ConfirmDialog>
             <SafeDelayConfirmDialog
-                open={safeDelayAction !== null}
+                open={safeDelayAction !== null && !safeDelayImmediateConfirm}
                 isRetry={safeDelayIsRetry}
                 safeDelayReadyAt={safeDelayReadyAt}
                 schedulePreferred={schedulePreferred}
@@ -456,9 +541,21 @@ export function ProfileDownloadRow({
                 redownloadWhenDelayPassed={redownloadWhenDelayPassed}
                 onRedownloadWhenDelayPassedChange={setRedownloadWhenDelayPassed}
                 onDismiss={() => {
-                    if (!busy) setSafeDelayAction(null)
+                    if (!busy) closeSafeDelayDialogs()
                 }}
                 onSchedule={scheduleSafeDelayDownload}
+                onImmediate={requestImmediateSafeDelayDownload}
+            />
+            <ImmediateSafeDelayConfirmDialog
+                open={safeDelayAction !== null && safeDelayImmediateConfirm}
+                isRetry={safeDelayIsRetry}
+                busy={busy}
+                submitting={safeDelaySubmitting}
+                redownloadWhenDelayPassed={redownloadWhenDelayPassed}
+                onRedownloadWhenDelayPassedChange={setRedownloadWhenDelayPassed}
+                onDismiss={() => {
+                    if (!busy) closeSafeDelayDialogs()
+                }}
                 onImmediate={downloadImmediately}
             />
             <DownloadLogDialog row={showLog ? (download ?? null) : null} onClose={() => setShowLog(false)}/>

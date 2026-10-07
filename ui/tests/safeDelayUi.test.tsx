@@ -7,6 +7,7 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 
 import {EnsureSafeDelayToggle} from '../src/components/Settings/DownloadsSettingsTab'
 import {
+    ImmediateSafeDelayConfirmDialog,
     ProfileDownloadRow,
     SafeDelayConfirmDialog,
     freezeSafeDelaySchedulePreference,
@@ -99,6 +100,27 @@ function renderSafeDelayDialog({
     )
 }
 
+function renderImmediateSafeDelayDialog({
+    isRetry = false,
+    checked = true,
+}: {
+    isRetry?: boolean
+    checked?: boolean
+}) {
+    return renderToStaticMarkup(
+        <ImmediateSafeDelayConfirmDialog
+            open
+            isRetry={isRetry}
+            busy={false}
+            submitting={null}
+            redownloadWhenDelayPassed={checked}
+            onRedownloadWhenDelayPassedChange={() => {}}
+            onDismiss={() => {}}
+            onImmediate={() => {}}
+        />,
+    )
+}
+
 test('Ensure Safe Delay is hidden when automatic delay is zero', () => {
     const hidden = renderToStaticMarkup(
         <EnsureSafeDelayToggle
@@ -143,10 +165,30 @@ test('re-download dialog uses re-download-specific action labels', () => {
     assert.match(markup, /Re-download now/)
 })
 
-test('immediate path keeps the replacement checkbox visible and checked by default', () => {
+test('schedule-primary choice hides the replacement checkbox', () => {
     const markup = renderSafeDelayDialog({schedulePreferred: true, checked: true})
+    assert.doesNotMatch(markup, /re-download automatically when the safety delay has passed/i)
+    assert.doesNotMatch(markup, /type="checkbox"/)
+})
+
+test('download-now-primary choice shows the replacement checkbox', () => {
+    const markup = renderSafeDelayDialog({schedulePreferred: false, checked: true})
     assert.match(markup, /re-download automatically when the safety delay has passed/i)
     assert.match(markup, /type="checkbox"[^>]*checked=""/)
+})
+
+test('second-stage immediate confirmation shows the replacement checkbox', () => {
+    const markup = renderImmediateSafeDelayDialog({checked: true})
+    assert.match(markup, /Download before the safety delay\?/)
+    assert.match(markup, /Re-download automatically when the safety delay has passed/)
+    assert.match(markup, /type="checkbox"[^>]*checked=""/)
+    assert.equal(buttonClassForLabel(markup, 'Download now'), 'btn btn-primary')
+})
+
+test('second-stage immediate re-download uses the re-download action', () => {
+    const markup = renderImmediateSafeDelayDialog({isRetry: true, checked: true})
+    assert.match(markup, /Re-download before the safety delay\?/)
+    assert.equal(buttonClassForLabel(markup, 'Re-download now'), 'btn btn-primary')
 })
 
 test('ten-minute preference calculation keeps the schedule action at the boundary', () => {
