@@ -1,6 +1,6 @@
 [project]
 name = "Wireloft"
-version = "1.2.3-dev"
+version = "1.2.3-rc1"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "backend",

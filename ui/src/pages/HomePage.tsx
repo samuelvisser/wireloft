@@ -19,7 +19,7 @@ import {movieExtraTypeLabel} from '../utils/movieExtras'
 
 const PROBLEMS = new Set(['error', 'missing', 'corrupted'])
 const COMPLETE = new Set(['downloaded', 'redownloaded'])
-const RECENT_ACTIVITY_LIMIT = 7
+const RECENT_ACTIVITY_LIMIT = 9
 
 type RecentActivityItem =
     | {kind: 'download'; occurredAt: Date; download: MediaDownloadViewRead}
@@ -154,7 +154,7 @@ export default function HomePage() {
             </div>
 
             <section className="operation-section recent-activity" aria-labelledby="recent-title">
-                <div className="operation-section-header"><h2 id="recent-title">Recent activity</h2><button type="button" onClick={() => navigate('/downloads')}>View downloads</button></div>
+                <div className="operation-section-header"><h2 id="recent-title">Recent activity</h2></div>
                 {recentActivity.length ? recentActivity.map((activity) => {
                     if (activity.kind === 'download') {
                         const {download} = activity
