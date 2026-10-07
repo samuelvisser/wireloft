@@ -21,6 +21,7 @@ export const FRONTEND_PULLER_QUERY_KEY = ['frontendPuller'] as const
 export const FRONTEND_PULLER_SLOW_MS = 5_000
 export const FRONTEND_PULLER_FAST_MS = 1_250
 
+const DEV_BACKEND_VERSION_KEY = 'wireloft.dev.backend-version'
 let reloadRequested = false
 
 type FrontendPullerContextValue = {
@@ -45,7 +46,23 @@ class FrontendPullError extends Error {
 const FrontendPullerContext = createContext<FrontendPullerContextValue | null>(null)
 
 function reloadIfFrontendIsOutdated(backendAppVersion: string) {
-  if (reloadRequested || backendAppVersion === FRONTEND_APP_VERSION) return
+  if (reloadRequested) return
+
+  if (import.meta.env.DEV) {
+    const previousBackendVersion = window.sessionStorage.getItem(DEV_BACKEND_VERSION_KEY)
+    if (previousBackendVersion === null) {
+      window.sessionStorage.setItem(DEV_BACKEND_VERSION_KEY, backendAppVersion)
+      return
+    }
+    if (previousBackendVersion === backendAppVersion) return
+
+    // In development the running backend is authoritative. Changing the
+    // manifest alone must not make the frontend adopt a version that the
+    // backend has not started reporting yet.
+    window.sessionStorage.setItem(DEV_BACKEND_VERSION_KEY, backendAppVersion)
+  } else if (backendAppVersion === FRONTEND_APP_VERSION) {
+    return
+  }
 
   reloadRequested = true
   window.location.reload()

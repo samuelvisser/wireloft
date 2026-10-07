@@ -44,9 +44,6 @@ function readWireLoftVersion(): string {
 function wireLoftVersionPlugin(): Plugin {
   return {
     name: 'wireloft-version',
-    configureServer(server) {
-      server.watcher.add(wireLoftManifest)
-    },
     resolveId(id) {
       if (id === VIRTUAL_VERSION_MODULE) {
         return RESOLVED_VIRTUAL_VERSION_MODULE
@@ -54,22 +51,7 @@ function wireLoftVersionPlugin(): Plugin {
     },
     load(id) {
       if (id !== RESOLVED_VIRTUAL_VERSION_MODULE) return
-
-      this.addWatchFile(wireLoftManifest)
       return `export const WIRELOFT_VERSION = ${JSON.stringify(readWireLoftVersion())}`
-    },
-    handleHotUpdate({file, server}) {
-      if (resolve(file) !== wireLoftManifest) return
-
-      const versionModule = server.moduleGraph.getModuleById(RESOLVED_VIRTUAL_VERSION_MODULE)
-      if (versionModule) {
-        server.moduleGraph.invalidateModule(versionModule)
-      }
-
-      // Reload the browser normally. The virtual module is then loaded again
-      // with the new version; the Vite server itself never needs to restart.
-      server.ws.send({type: 'full-reload'})
-      return []
     },
   }
 }
