@@ -1,10 +1,10 @@
 import {existsSync, readFileSync} from 'node:fs'
 import {resolve} from 'node:path'
-import {defineConfig} from 'vite'
+import {defineConfig, type Plugin} from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import {fontAwesomeCompiler} from './scripts/font-awesome-compiler.mjs'
 
-function readWireLoftVersion(): string {
+function findWireLoftManifest(): string {
   const manifestPath = [
     resolve(process.cwd(), '../pyproject.toml'),
     resolve(process.cwd(), 'pyproject.toml'),
@@ -13,8 +13,13 @@ function readWireLoftVersion(): string {
   if (!manifestPath) {
     throw new Error('Could not find the root WireLoft pyproject.toml')
   }
+  return manifestPath
+}
 
-  const manifest = readFileSync(manifestPath, 'utf8')
+const wireLoftManifest = findWireLoftManifest()
+
+function readWireLoftVersion(): string {
+  const manifest = readFileSync(wireLoftManifest, 'utf8')
   const projectStart = manifest.indexOf('[project]')
   if (projectStart < 0) {
     throw new Error('Root pyproject.toml does not define a [project] section')
@@ -33,6 +38,26 @@ function readWireLoftVersion(): string {
   return version
 }
 
+function restartDevServerOnVersionChange(): Plugin {
+  return {
+    name: 'wireloft-version-reload',
+    configureServer(server) {
+      // The application manifest lives outside Vite's normal UI root. Watch it
+      // explicitly so a development version bump cannot leave the old version
+      // baked into the running dev server.
+      server.watcher.add(wireLoftManifest)
+    },
+    async handleHotUpdate({file, server}) {
+      if (resolve(file) !== wireLoftManifest) return
+
+      // Restarting reloads this config and therefore recomputes the value below.
+      // The browser can then reload against a frontend and backend that agree.
+      await server.restart()
+      return []
+    },
+  }
+}
+
 const wireLoftVersion = readWireLoftVersion()
 
 // Normal WireLoft development and production builds deliberately use Font Awesome Free.
@@ -42,6 +67,7 @@ export default defineConfig(({mode}) => ({
     'import.meta.env.VITE_WIRELOFT_VERSION': JSON.stringify(wireLoftVersion),
   },
   plugins: [
+    restartDevServerOnVersionChange(),
     fontAwesomeCompiler({proIcons: mode === 'pro-icons'}),
     react(),
   ],
