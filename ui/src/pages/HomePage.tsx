@@ -6,19 +6,23 @@ import {faIcon} from '../icons/faIcon'
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
 import {
     useLocalMediaProfiles,
-    useMediaDownloadsView,
+    useMediaDownloadsCollection,
     useMovies,
     useRecentlyIndexedEpisodes,
     useShows,
 } from '../lib/queries'
-import {downloadsUrlForStatusFilters} from '../lib/downloadStatusFilters'
-import {ACTIVE_DOWNLOAD_STATUSES} from '../types/media_download'
+import {
+    DEFAULT_DOWNLOAD_STATUS_FILTER,
+    downloadsUrlForStatusFilters,
+} from '../lib/downloadStatusFilters'
 import {EpisodeIndexedActivityRead} from '../types/schemas/episode'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 
-const PROBLEMS = new Set(['error', 'missing', 'corrupted'])
-const COMPLETE = new Set(['downloaded', 'redownloaded'])
+const IN_PROGRESS = ['preparing', 'waiting', 'canceling', 'downloading', 'local_processing'] as const
+const QUEUED = ['pending'] as const
+const PROBLEMS = ['error', 'missing', 'corrupted'] as const
+const COMPLETE = ['downloaded', 'redownloaded'] as const
 const RECENT_ACTIVITY_LIMIT = 9
 
 type RecentActivityItem =
@@ -41,27 +45,62 @@ export default function HomePage() {
     const {data: shows} = useShows()
     const {data: movies} = useMovies()
     const {data: profiles} = useLocalMediaProfiles()
-    const {data: downloads, isLoading, error} = useMediaDownloadsView()
+    const defaultDownloadStatuses = useMemo(
+        () => [...DEFAULT_DOWNLOAD_STATUS_FILTER].sort(),
+        [],
+    )
+    const downloadsQuery = useMediaDownloadsCollection({
+        statuses: defaultDownloadStatuses,
+        order: 'workflow',
+        initialCount: RECENT_ACTIVITY_LIMIT,
+        batchSize: 50,
+    })
+    const problemsQuery = useMediaDownloadsCollection({
+        statuses: PROBLEMS,
+        order: 'workflow',
+        initialCount: 3,
+        batchSize: 3,
+    })
+    const recentDownloadsQuery = useMediaDownloadsCollection({
+        statuses: COMPLETE,
+        order: 'recent',
+        initialCount: RECENT_ACTIVITY_LIMIT,
+        batchSize: RECENT_ACTIVITY_LIMIT,
+    })
     const {data: indexedEpisodes} = useRecentlyIndexedEpisodes(RECENT_ACTIVITY_LIMIT)
-    const active = downloads?.filter((download) => ACTIVE_DOWNLOAD_STATUSES.has(String(download.downloadStatus))) || []
-    const problems = downloads?.filter((download) => PROBLEMS.has(String(download.downloadStatus))) || []
+    const active = downloadsQuery.data
+        .filter((download) => (
+            IN_PROGRESS.includes(download.downloadStatus as typeof IN_PROGRESS[number])
+            || QUEUED.includes(download.downloadStatus as typeof QUEUED[number])
+        ))
+        .slice(0, 3)
+    const problems = problemsQuery.data
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
-    const hasAttention = problems.length > 0 || metadataProblems.length > 0 || profiles?.length === 0
-    const activeSectionIsEmpty = !isLoading && downloads !== undefined && active.length === 0
-    const attentionSectionIsEmpty = downloads !== undefined
+    const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0
+    const downloadsLoading = (
+        downloadsQuery.isPending
+        || problemsQuery.isPending
+        || recentDownloadsQuery.isPending
+    )
+    const downloadError = (
+        downloadsQuery.error
+        ?? problemsQuery.error
+        ?? recentDownloadsQuery.error
+    )
+    const activeSectionIsEmpty = !downloadsLoading && active.length === 0
+    const attentionSectionIsEmpty = !problemsQuery.isPending
         && movies !== undefined
         && profiles !== undefined
         && !hasAttention
     const attentionSummary = [
-        problems.length ? `${problems.length} download problem${problems.length === 1 ? '' : 's'}` : null,
+        problemsQuery.total ? `${problemsQuery.total} download problem${problemsQuery.total === 1 ? '' : 's'}` : null,
         metadataProblems.length ? `${metadataProblems.length} movie metadata problem${metadataProblems.length === 1 ? '' : 's'}` : null,
         profiles?.length === 0 ? 'No Local Media Profiles' : null,
     ].filter(Boolean).join(' • ')
     const recentActivity = useMemo(() => {
         const activity: RecentActivityItem[] = []
 
-        for (const download of downloads ?? []) {
-            if (!COMPLETE.has(String(download.downloadStatus))) continue
+        for (const download of recentDownloadsQuery.data) {
             const occurredAt = download.finishedAt ?? download.downloadedAt
             if (!occurredAt) continue
             activity.push({kind: 'download', occurredAt, download})
@@ -78,7 +117,7 @@ export default function HomePage() {
         return activity
             .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
             .slice(0, RECENT_ACTIVITY_LIMIT)
-    }, [downloads, indexedEpisodes])
+    }, [indexedEpisodes, recentDownloadsQuery.data])
 
     const openDownload = (download: MediaDownloadViewRead) => {
         if (download.movieSlug) navigate(`/movie/${download.movieSlug}`)
@@ -107,13 +146,13 @@ export default function HomePage() {
             </div>
 
             <div className="operation-stats" aria-label="WireLoft status summary">
-                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('downloading', 'local_processing'))}><span>Active</span><strong>{active.filter((item) => item.downloadStatus !== 'pending').length}</strong></button>
-                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('pending'))}><span>Queued</span><strong>{active.filter((item) => item.downloadStatus === 'pending').length}</strong></button>
-                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('error', 'missing', 'corrupted'))}><span>Failed</span><strong>{problems.length}</strong></button>
+                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('downloading', 'local_processing'))}><span>Active</span><strong>{IN_PROGRESS.reduce((total, status) => total + (downloadsQuery.facets[status] ?? 0), 0)}</strong></button>
+                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('pending'))}><span>Queued</span><strong>{downloadsQuery.facets.pending ?? 0}</strong></button>
+                <button type="button" onClick={() => navigate(downloadsUrlForStatusFilters('error', 'missing', 'corrupted'))}><span>Failed</span><strong>{problemsQuery.total}</strong></button>
                 <button type="button" onClick={() => navigate('/library')}><span>Library</span><strong>{(shows?.length || 0) + (movies?.length || 0)}</strong></button>
             </div>
 
-            {error && <div className="form-error-card" role="alert">Could not load download status: {error.message}</div>}
+            {downloadError && <div className="form-error-card" role="alert">Could not load download status: {downloadError.message}</div>}
 
             <div className="operations-grid">
                 <section
@@ -121,7 +160,7 @@ export default function HomePage() {
                     aria-labelledby="active-downloads-title"
                 >
                     <div className="operation-section-header"><h2 id="active-downloads-title">Downloading now</h2><button type="button" onClick={() => navigate('/downloads')}>All downloads</button></div>
-                    {isLoading && !downloads ? <p>Loading downloads…</p> : active.length ? active.slice(0, 3).map((download) => (
+                    {downloadsLoading && active.length === 0 ? <p>Loading downloads…</p> : active.length ? active.map((download) => (
                         <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
                             <span className="operation-icon"><FontAwesomeIcon icon={faIcon('fas', download.movieSlug ? 'clapperboard' : 'podcast')}/></span>
                             <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><DownloadProgressStatus download={download} compact details={false}/></span>

@@ -2,6 +2,7 @@ import {presentDownloadProgress} from './downloadProgress'
 import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
 import {useEffect, useMemo} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
+import {updateLazyCollectionEntities, useLazyCollection} from './lazyCollection'
 import {useFrontendPuller} from './puller'
 import {
     episodeQueryKeys,
@@ -34,6 +35,7 @@ import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schem
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {
     MediaDownloadDomainViewRead,
+    MediaDownloadPageReadSchema,
     MediaDownloadViewRead,
     MediaDownloadViewReadSchema,
 } from "../types/schemas/media_download";
@@ -667,6 +669,131 @@ export function useShowDownloads(showSlug?: string) {
 
 export function useMediaDownloadsView() {
     return useMediaDownloadPresentation({kind: 'all'})
+}
+
+
+export type MediaDownloadCollectionOrder = 'workflow' | 'recent'
+
+export type MediaDownloadCollectionQuery = {
+    statuses?: readonly string[]
+    order?: MediaDownloadCollectionOrder
+    initialCount?: number
+    batchSize?: number
+    enabled?: boolean
+}
+
+const MEDIA_DOWNLOAD_COLLECTION_PREFIX = ['mediaDownloads'] as const
+
+export function compareMediaDownloadWorkflowOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
+    const leftStatus = String(left.downloadStatus)
+    const rightStatus = String(right.downloadStatus)
+    const activeStatuses = new Set(['downloading', 'preparing', 'waiting', 'canceling', 'local_processing'])
+    const leftActive = activeStatuses.has(leftStatus)
+    const rightActive = activeStatuses.has(rightStatus)
+    if (leftActive !== rightActive) return leftActive ? -1 : 1
+
+    const leftQueued = leftStatus === 'pending'
+    const rightQueued = rightStatus === 'pending'
+    if (leftQueued !== rightQueued) return leftQueued ? -1 : 1
+
+    if (leftQueued && rightQueued) {
+        if (left.queuePosition == null && right.queuePosition != null) return -1
+        if (left.queuePosition != null && right.queuePosition == null) return 1
+        if (left.queuePosition != null && right.queuePosition != null) {
+            const byPosition = left.queuePosition - right.queuePosition
+            if (byPosition !== 0) return byPosition
+        }
+    }
+
+    return right.id - left.id
+}
+
+function mediaDownloadRecentOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
+    const leftAt = left.finishedAt ?? left.downloadedAt ?? left.createdAt
+    const rightAt = right.finishedAt ?? right.downloadedAt ?? right.createdAt
+    const byTime = rightAt.getTime() - leftAt.getTime()
+    return byTime || right.id - left.id
+}
+
+export function useMediaDownloadsCollection({
+    statuses,
+    order = 'workflow',
+    initialCount = 50,
+    batchSize = 50,
+    enabled = true,
+}: MediaDownloadCollectionQuery = {}) {
+    const normalizedStatuses = useMemo(
+        () => statuses === undefined ? undefined : [...new Set(statuses)].sort(),
+        [statuses],
+    )
+    const collection = useLazyCollection({
+        collectionPrefix: MEDIA_DOWNLOAD_COLLECTION_PREFIX,
+        queryKey: [normalizedStatuses ?? null, order] as const,
+        initialCount,
+        batchSize,
+        enabled,
+        fetchPage: async ({offset, limit}, signal) => {
+            const params = new URLSearchParams({
+                order,
+                offset: String(offset),
+                limit: String(limit),
+            })
+            for (const status of normalizedStatuses ?? []) params.append('status', status)
+            return MediaDownloadPageReadSchema.parse(await fetchJSON<unknown>(
+                `${(window as any).appConfig.API_URL}/media-downloads/as-view/page?${params}`,
+                signal,
+            ))
+        },
+    })
+
+    const {data: pullData} = useFrontendPuller()
+    const operations = (pullData?.operations ?? []).filter(
+        (operation) => operation.kind === 'media.download',
+    )
+
+    const data = useMemo(() => {
+        const downloads = new Map<number, MediaDownloadDomainViewRead>()
+        for (const download of collection.items) downloads.set(download.id, download)
+
+        for (const operation of operations) {
+            if (operation.resourceId == null || downloads.has(operation.resourceId)) continue
+            const synthetic = syntheticDownload(operation)
+            if (synthetic) downloads.set(synthetic.id, synthetic)
+        }
+
+        const presented = [...downloads.values()]
+            .map((download) => presentDownload(
+                download,
+                operationForDownload(operations, download.id),
+            ))
+            .filter((download) => (
+                normalizedStatuses === undefined
+                || normalizedStatuses.includes(String(download.downloadStatus))
+            ))
+
+        presented.sort(order === 'recent' ? mediaDownloadRecentOrder : compareMediaDownloadWorkflowOrder)
+        return presented
+    }, [collection.items, normalizedStatuses, operations, order])
+
+    return {
+        ...collection,
+        data,
+    }
+}
+
+export function applyMediaDownloadQueuePositions(
+    queryClient: QueryClient,
+    positions: Record<number, number>,
+) {
+    updateLazyCollectionEntities<MediaDownloadDomainViewRead>(
+        queryClient,
+        MEDIA_DOWNLOAD_COLLECTION_PREFIX,
+        (download) => {
+            const queuePosition = positions[download.id] ?? null
+            if ((download.queuePosition ?? null) === queuePosition) return download
+            return {...download, queuePosition}
+        },
+    )
 }
 
 type TaskLedgerQuery = {

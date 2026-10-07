@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import case, event, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
@@ -922,6 +922,11 @@ def _ordered_queued_media_download_operations(
             TaskOperationTarget,
             TaskOperationTarget.operation_id == TaskOperation.id,
         )
+        .options(
+            selectinload(TaskOperation.targets)
+            .selectinload(TaskOperationTarget.run_links)
+            .selectinload(TaskOperationRun.task_run),
+        )
         .where(
             TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
             TaskOperation.status == OperationStatus.QUEUED.value,
@@ -956,7 +961,7 @@ def get_media_download_queue_positions(session: Session) -> dict[int, int]:
         if not operation.targets:
             continue
         target = operation.targets[0]
-        if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
+        if any(link.task_run is not None for link in target.run_links):
             continue
         if operation.resource_id is None:
             continue

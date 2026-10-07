@@ -1,4 +1,5 @@
-import {keepPreviousData, type InfiniteData, useInfiniteQuery, useQuery} from '@tanstack/react-query'
+import {keepPreviousData, useQuery} from '@tanstack/react-query'
+import {useLazyCollection} from './lazyCollection'
 import {TaskLedgerPageReadSchema, type TaskLedgerPageRead} from '../types/schemas/task'
 import {usePageActive} from './pageActivity'
 
@@ -22,7 +23,7 @@ function normalizeResourceIds(value: TaskLedgerPageQuery['resourceId']): number[
 }
 
 function normalizeStatuses(value: TaskLedgerPageQuery['status']): string[] | undefined {
-  if (!value?.length) return undefined
+  if (value === undefined) return undefined
   return [...new Set(value)].sort()
 }
 
@@ -104,42 +105,28 @@ export function useTaskLedgerInfinite({
   const statuses = normalizeStatuses(status)
   const startedAfterValue = normalizeStartedAfter(startedAfter)
 
-  const queryKey = [
-    'taskLedger',
-    definitionKey ?? null,
-    resourceType,
-    resourceIds,
-    statuses,
-    startedAfterValue,
-    orderBy,
-    order,
-    limit,
-    'infinite',
-  ] as const
-
-  return useInfiniteQuery<
-    TaskLedgerPageRead,
-    Error,
-    InfiniteData<TaskLedgerPageRead, number>,
-    typeof queryKey,
-    number
-  >({
-    queryKey,
+  return useLazyCollection({
+    collectionPrefix: ['taskLedger'] as const,
+    queryKey: [
+      definitionKey ?? null,
+      resourceType ?? null,
+      resourceIds ?? null,
+      statuses ?? null,
+      startedAfterValue ?? null,
+      orderBy,
+      order,
+    ] as const,
+    initialCount: limit,
+    batchSize: limit,
     enabled: pageActive && enabled && (definitionKey === undefined || definitionKey.length > 0),
-    initialPageParam: 0,
-    refetchOnMount: 'always',
-    refetchOnWindowFocus: false,
-    refetchIntervalInBackground: false,
-    refetchInterval: (query) => {
-      const pageCount = query.state.data?.pages.length ?? 0
-      return pageCount <= 2 ? 3000 : false
-    },
-    queryFn: async ({pageParam, signal}): Promise<TaskLedgerPageRead> => {
+    pollIntervalMs: 3000,
+    pollWhilePageCountAtMost: 2,
+    fetchPage: async ({offset, limit: pageLimit}, signal): Promise<TaskLedgerPageRead> => {
       const params = new URLSearchParams({
         order_by: orderBy,
         order,
-        offset: String(pageParam),
-        limit: String(limit),
+        offset: String(offset),
+        limit: String(pageLimit),
       })
       if (definitionKey) params.set('definition_key', definitionKey)
       if (resourceType) params.set('resource_type', resourceType)
@@ -154,8 +141,5 @@ export function useTaskLedgerInfinite({
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       return TaskLedgerPageReadSchema.parse(await response.json())
     },
-    getNextPageParam: (lastPage) => lastPage.hasMore
-      ? lastPage.offset + lastPage.items.length
-      : undefined,
   })
 }

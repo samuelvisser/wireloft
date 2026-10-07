@@ -145,3 +145,202 @@ def test_queue_positions_preserve_creation_order_when_timestamps_tie():
     finally:
         session.close()
         engine.dispose()
+
+
+
+def test_download_page_uses_dispatcher_queue_order_and_paginates():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        normal_download = _make_download(session, slug="page-normal")
+        first_download = _make_download(session, slug="page-priority-first")
+        second_download = _make_download(session, slug="page-priority-second")
+
+        create_media_download_operation(session, normal_download)
+        first = create_media_download_operation(session, first_download)
+        second = create_media_download_operation(session, second_download)
+
+        first_click = datetime(2026, 9, 10, 1, 0, tzinfo=timezone.utc)
+        first.prioritized_at = first_click
+        second.prioritized_at = first_click + timedelta(seconds=1)
+        session.commit()
+
+        first_page = get_media_downloads_page(
+            session,
+            statuses=["pending"],
+            order="workflow",
+            offset=0,
+            limit=2,
+        )
+        assert first_page.total == 3
+        assert first_page.facets["pending"] == 3
+        assert first_page.actions["cancel"] == 3
+        assert first_page.actions["retry"] == 0
+        assert first_page.actions["delete-unavailable"] == 3
+        assert first_page.has_more is True
+        assert [item.id for item in first_page.items] == [
+            first_download.id,
+            second_download.id,
+        ]
+        assert [item.queue_position for item in first_page.items] == [1, 2]
+
+        second_page = get_media_downloads_page(
+            session,
+            statuses=["pending"],
+            order="workflow",
+            offset=2,
+            limit=2,
+        )
+        assert second_page.total == 3
+        assert second_page.has_more is False
+        assert [item.id for item in second_page.items] == [normal_download.id]
+        assert second_page.items[0].queue_position == 3
+        assert second_page.revision
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_download_page_filters_status_before_applying_limit():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        older = _make_download(session, slug="page-downloaded-old")
+        newer = _make_download(session, slug="page-not-downloaded-new")
+        older.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        session.commit()
+
+        page = get_media_downloads_page(
+            session,
+            statuses=["downloaded"],
+            order="recent",
+            offset=0,
+            limit=1,
+        )
+
+        assert page.total == 1
+        assert page.facets["downloaded"] == 1
+        assert page.facets["not_downloaded"] == 1
+        assert [item.id for item in page.items] == [older.id]
+        assert newer.id not in {item.id for item in page.items}
+    finally:
+        session.close()
+        engine.dispose()
+
+
+
+def test_download_collection_status_matches_live_transfer_phase():
+    from types import SimpleNamespace
+
+    from backend.api.endpoints.media_downloads.service import _download_collection_status
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    download = SimpleNamespace(
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        automatic_retry_suppressed=False,
+    )
+    operation = SimpleNamespace(
+        status="RUNNING",
+        context={},
+    )
+    run = SimpleNamespace(
+        status="RUNNING",
+        progress_metadata={
+            "download": {
+                "phase": "transferring",
+                "main_activity": "media",
+                "stages": [],
+                "primary_transfer_complete": False,
+            },
+        },
+    )
+
+    assert _download_collection_status(
+        download,
+        latest_run=run,
+        active_operation=operation,
+    ) == "downloading"
+
+    run.progress_metadata["download"]["primary_transfer_complete"] = True
+    assert _download_collection_status(
+        download,
+        latest_run=run,
+        active_operation=operation,
+    ) == "local_processing"
+
+
+def test_download_collection_status_prefers_live_wait_state():
+    from types import SimpleNamespace
+
+    from backend.api.endpoints.media_downloads.service import _download_collection_status
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    download = SimpleNamespace(
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        automatic_retry_suppressed=False,
+    )
+    operation = SimpleNamespace(
+        status="RUNNING",
+        context={},
+    )
+    run = SimpleNamespace(
+        status="RUNNING",
+        progress_metadata={
+            "wait_state": {"reason": "daily_wire_request_cooldown"},
+            "download": {
+                "phase": "preparing",
+                "main_activity": "media",
+                "stages": [],
+            },
+        },
+    )
+
+    assert _download_collection_status(
+        download,
+        latest_run=run,
+        active_operation=operation,
+    ) == "waiting"
+
+
+
+def test_filtered_bulk_action_ids_do_not_depend_on_loaded_pages():
+    from backend.api.endpoints.media_downloads.service import (
+        get_media_download_bulk_action_ids,
+    )
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        queued_one = _make_download(session, slug="bulk-filter-queued-one")
+        queued_two = _make_download(session, slug="bulk-filter-queued-two")
+        downloaded = _make_download(session, slug="bulk-filter-downloaded")
+        create_media_download_operation(session, queued_one)
+        create_media_download_operation(session, queued_two)
+        downloaded.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        session.commit()
+
+        assert set(get_media_download_bulk_action_ids(
+            session,
+            statuses=["pending"],
+            action="cancel",
+        )) == {queued_one.id, queued_two.id}
+
+        assert get_media_download_bulk_action_ids(
+            session,
+            statuses=["pending"],
+            action="retry",
+        ) == []
+
+        assert get_media_download_bulk_action_ids(
+            session,
+            statuses=["downloaded"],
+            action="retry",
+        ) == [downloaded.id]
+    finally:
+        session.close()
+        engine.dispose()

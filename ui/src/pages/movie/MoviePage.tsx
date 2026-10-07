@@ -252,6 +252,7 @@ export default function MoviePage() {
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['movies']}),
                 queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
+                queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
             ])
         } catch {
@@ -283,6 +284,7 @@ export default function MoviePage() {
         } finally {
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
+                queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
             ])
             setDownloadControlBusy((current) => current === busyKey ? null : current)
@@ -422,6 +424,7 @@ export default function MoviePage() {
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['movies']}),
                 queryClient.invalidateQueries({queryKey: ['movieDownloads', slug]}),
+                queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
             ])
             navigate('/library?type=movies')

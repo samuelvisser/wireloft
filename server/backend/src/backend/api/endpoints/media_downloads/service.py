@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import (
     Session,
     joinedload,
@@ -19,6 +19,7 @@ from backend.api.models.media_download import (
     MediaDownloadAPIRead,
     MediaDownloadAPIReadView,
     MediaDownloadAPIUpdate,
+    MediaDownloadPageRead,
     MovieDownloadAPICreate,
 )
 from backend.db.model_mapping import update_database_fields
@@ -46,8 +47,8 @@ from backend.services.episode_download_delay import episode_download_delay_passe
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
-from task_manager.scheduler.db import TaskDefinition, TaskRun
-from task_manager.scheduler.types import ResourceType
+from task_manager.scheduler.db import TaskDefinition, TaskOperation, TaskRun
+from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStatus
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
     get_media_download_queue_positions,
@@ -82,21 +83,28 @@ def _latest_download_runs(s: Session, media_download_ids: list[int]) -> dict[int
     if not media_download_ids:
         return {}
 
-    rows = s.scalars(
-        select(TaskRun)
+    latest_ids = (
+        select(
+            TaskRun.resource_id.label("resource_id"),
+            func.max(TaskRun.id).label("run_id"),
+        )
         .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
         .where(
             TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
             TaskRun.resource_id.in_(media_download_ids),
             TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
         )
-        .order_by(TaskRun.id.desc())
+        .group_by(TaskRun.resource_id)
+        .subquery()
     )
-    latest: dict[int, TaskRun] = {}
-    for run in rows:
-        if run.resource_id is not None:
-            latest.setdefault(run.resource_id, run)
-    return latest
+    rows = s.scalars(
+        select(TaskRun).join(latest_ids, TaskRun.id == latest_ids.c.run_id)
+    )
+    return {
+        int(run.resource_id): run
+        for run in rows
+        if run.resource_id is not None
+    }
 
 
 @dataclass(frozen=True)
@@ -250,6 +258,7 @@ def _media_download_view_statement(
         show_slug: Optional[str],
         statuses: Optional[list[str]],
         limit: Optional[int],
+        ids: Optional[list[int]] = None,
 ):
     """Build the scoped download query while returning complete ORM models."""
     download = with_polymorphic(MediaDownloadBase, "*")
@@ -270,6 +279,9 @@ def _media_download_view_statement(
 
     if statuses:
         stmt = stmt.where(download.artifact_status.in_(statuses))
+
+    if ids is not None:
+        stmt = stmt.where(download.id.in_(ids))
 
     if episode_slug is not None:
         episode_ids = select(Episode.id).where(Episode.slug == episode_slug)
@@ -299,6 +311,30 @@ def _media_download_view_statement(
     return stmt
 
 
+def _build_media_download_views(
+        s: Session,
+        downloads: list[MediaDownloadBase],
+        *,
+        latest_runs: dict[int, TaskRun] | None = None,
+        queue_positions: dict[int, int] | None = None,
+) -> list[MediaDownloadAPIReadView]:
+    media_by_id = _load_media_items_for_view(s, downloads)
+    if latest_runs is None:
+        latest_runs = _latest_download_runs(s, [download.id for download in downloads])
+    queue_positions = queue_positions if queue_positions is not None else get_media_download_queue_positions(s)
+    return [
+        MediaDownloadAPIReadView.model_validate(
+            _MediaDownloadViewSource(
+                download=download,
+                media=media_by_id.get(download.media_item_id),
+                latest_run=latest_runs.get(download.id),
+                queue_position=queue_positions.get(download.id),
+            )
+        )
+        for download in downloads
+    ]
+
+
 def get_media_downloads_view(
         s: Session,
         *,
@@ -316,21 +352,321 @@ def get_media_downloads_view(
         statuses=statuses,
         limit=limit,
     )))
-    media_by_id = _load_media_items_for_view(s, downloads)
-    latest_runs = _latest_download_runs(s, [download.id for download in downloads])
+    return _build_media_download_views(s, downloads)
+
+
+def _active_download_operations(
+        s: Session,
+        media_download_ids: list[int],
+) -> dict[int, TaskOperation]:
+    if not media_download_ids:
+        return {}
+    rows = s.scalars(
+        select(TaskOperation)
+        .where(
+            TaskOperation.kind == "media.download",
+            TaskOperation.resource_type == ResourceType.MEDIA_DOWNLOAD.value,
+            TaskOperation.resource_id.in_(media_download_ids),
+            TaskOperation.status.in_([
+                OperationStatus.QUEUED.value,
+                OperationStatus.RUNNING.value,
+                OperationStatus.WAITING.value,
+            ]),
+        )
+        .order_by(TaskOperation.created_at.desc(), TaskOperation.id.desc())
+    )
+    result: dict[int, TaskOperation] = {}
+    for operation in rows:
+        if operation.resource_id is not None:
+            result.setdefault(int(operation.resource_id), operation)
+    return result
+
+
+def _task_status_value(run: TaskRun | None) -> str | None:
+    if run is None:
+        return None
+    return run.status.value if isinstance(run.status, TaskStatus) else str(run.status)
+
+
+def _download_collection_status(
+        download: MediaDownloadBase,
+        *,
+        latest_run: TaskRun | None,
+        active_operation: TaskOperation | None,
+) -> str:
+    if active_operation is not None:
+        context = active_operation.context if isinstance(active_operation.context, dict) else {}
+        progress_meta = latest_run.progress_metadata if latest_run is not None else None
+        progress_meta = progress_meta if isinstance(progress_meta, dict) else {}
+        execution = progress_meta.get("download")
+        execution = execution if isinstance(execution, dict) else {}
+
+        if (
+            context.get("cancel_requested") is True
+            or progress_meta.get("canceling") is True
+            or execution.get("canceling") is True
+        ):
+            return "canceling"
+        if active_operation.status == OperationStatus.QUEUED.value:
+            return "pending"
+
+        main_activity = execution.get("main_activity")
+        stages = execution.get("stages")
+        main_stage = next((
+            stage for stage in stages
+            if isinstance(stage, dict) and stage.get("id") == main_activity
+        ), None) if isinstance(stages, list) else None
+        wait_state = (
+            main_stage.get("wait")
+            if isinstance(main_stage, dict) and isinstance(main_stage.get("wait"), dict)
+            else progress_meta.get("wait_state")
+        )
+        if isinstance(wait_state, dict) and wait_state.get("reason"):
+            return "waiting"
+        if active_operation.status == OperationStatus.WAITING.value:
+            return "waiting"
+
+        if execution.get("phase") == "transferring" and main_activity == "media":
+            return "downloading"
+        if execution.get("primary_transfer_complete") is True:
+            return "local_processing"
+        return "preparing"
+
+    task_status = _task_status_value(latest_run)
+    if download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
+        return "redownloaded" if _run_is_redownload(latest_run) else "downloaded"
+    if download.artifact_status == MediaDownloadArtifactStatus.MISSING.value:
+        return "missing"
+    if download.artifact_status == MediaDownloadArtifactStatus.CORRUPTED.value:
+        return "corrupted"
+    if task_status == TaskStatus.RUNNING.value:
+        return "preparing"
+    if task_status == TaskStatus.FAILED.value:
+        return "error"
+    if (
+        download.automatic_retry_suppressed
+        or task_status == TaskStatus.CANCELED.value
+    ):
+        return "cancelled"
+    return "not_downloaded"
+
+
+def _download_bulk_action_matches(
+        download: MediaDownloadBase,
+        status: str,
+        action: str,
+) -> bool:
+    if action == "retry":
+        return status in {
+            "preparing",
+            "waiting",
+            "downloading",
+            "local_processing",
+            "downloaded",
+            "redownloaded",
+            "error",
+            "missing",
+            "corrupted",
+            "cancelled",
+        }
+    if action == "cancel":
+        return status in {
+            "pending",
+            "preparing",
+            "waiting",
+            "downloading",
+            "local_processing",
+        }
+    if action == "delete-unavailable":
+        return download.artifact_status in {
+            MediaDownloadArtifactStatus.ABSENT.value,
+            MediaDownloadArtifactStatus.MISSING.value,
+        }
+    raise ValueError(f"Unknown media download bulk action: {action}")
+
+
+def _download_collection_revision(s: Session) -> str:
+    download_count, download_updated = s.execute(
+        select(func.count(MediaDownloadBase.id), func.max(MediaDownloadBase.updated_at))
+    ).one()
+    operation_count, operation_updated = s.execute(
+        select(func.count(TaskOperation.id), func.max(TaskOperation.updated_at)).where(
+            TaskOperation.kind == "media.download",
+        )
+    ).one()
+    run_count, run_updated = s.execute(
+        select(func.count(TaskRun.id), func.max(TaskRun.updated_at)).where(
+            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+        )
+    ).one()
+    return "|".join([
+        str(download_count or 0),
+        download_updated.isoformat() if download_updated is not None else "",
+        str(operation_count or 0),
+        operation_updated.isoformat() if operation_updated is not None else "",
+        str(run_count or 0),
+        run_updated.isoformat() if run_updated is not None else "",
+    ])
+
+
+def get_media_downloads_page(
+        s: Session,
+        *,
+        statuses: Optional[list[str]] = None,
+        order: str = "workflow",
+        offset: int = 0,
+        limit: int = 50,
+) -> MediaDownloadPageRead:
+    """Return one stable page after applying UI status filters and workflow ordering."""
+    downloads = list(s.scalars(
+        select(MediaDownloadBase)
+        .options(
+            load_only(
+                MediaDownloadBase.id,
+                MediaDownloadBase.artifact_status,
+                MediaDownloadBase.automatic_retry_suppressed,
+                MediaDownloadBase.downloaded_at,
+                MediaDownloadBase.created_at,
+                MediaDownloadBase.updated_at,
+                raiseload=True,
+            ),
+            raiseload("*"),
+        )
+    ))
+    ids = [download.id for download in downloads]
+    latest_runs = _latest_download_runs(s, ids)
+    active_operations = _active_download_operations(s, ids)
     queue_positions = get_media_download_queue_positions(s)
 
-    return [
-        MediaDownloadAPIReadView.model_validate(
-            _MediaDownloadViewSource(
-                download=download,
-                media=media_by_id.get(download.media_item_id),
-                latest_run=latest_runs.get(download.id),
-                queue_position=queue_positions.get(download.id),
-            )
+    requested_statuses = set(statuses or [])
+    status_counts: dict[str, int] = {}
+    rows: list[tuple[MediaDownloadBase, str]] = []
+    for download in downloads:
+        status = _download_collection_status(
+            download,
+            latest_run=latest_runs.get(download.id),
+            active_operation=active_operations.get(download.id),
         )
-        for download in downloads
-    ]
+        status_counts[status] = status_counts.get(status, 0) + 1
+        if requested_statuses and status not in requested_statuses:
+            continue
+        rows.append((download, status))
+
+    if order == "recent":
+        def recent_key(item: tuple[MediaDownloadBase, str]):
+            download, status = item
+            run = latest_runs.get(download.id)
+            if status in {"downloaded", "redownloaded"}:
+                occurred_at = (
+                    (run.finished_at if run is not None else None)
+                    or download.downloaded_at
+                    or download.created_at
+                )
+            else:
+                occurred_at = (
+                    (run.finished_at if run is not None else None)
+                    or download.updated_at
+                    or download.created_at
+                )
+            return (occurred_at, download.id)
+        rows.sort(key=recent_key, reverse=True)
+    else:
+        def workflow_key(item: tuple[MediaDownloadBase, str]):
+            download, status = item
+            if status in {"downloading", "preparing", "waiting", "canceling", "local_processing"}:
+                return (0, 0, -download.id)
+            if status == "pending":
+                queue_position = queue_positions.get(download.id)
+                return (1, -1 if queue_position is None else queue_position, -download.id)
+            return (2, 0, -download.id)
+        rows.sort(key=workflow_key)
+
+    action_counts = {
+        action: sum(
+            1 for download, status in rows
+            if _download_bulk_action_matches(download, status, action)
+        )
+        for action in ("retry", "cancel", "delete-unavailable")
+    }
+
+    total = len(rows)
+    selected = rows[offset:offset + limit]
+    selected_ids = [download.id for download, _ in selected]
+    if selected_ids:
+        selected_downloads_by_id = {
+            download.id: download
+            for download in s.scalars(
+                _media_download_view_statement(
+                    episode_slug=None,
+                    movie_slug=None,
+                    show_slug=None,
+                    statuses=None,
+                    limit=None,
+                    ids=selected_ids,
+                )
+            )
+        }
+        selected_downloads = [
+            selected_downloads_by_id[media_download_id]
+            for media_download_id in selected_ids
+            if media_download_id in selected_downloads_by_id
+        ]
+    else:
+        selected_downloads = []
+
+    return MediaDownloadPageRead(
+        items=_build_media_download_views(
+            s,
+            selected_downloads,
+            latest_runs=latest_runs,
+            queue_positions=queue_positions,
+        ),
+        total=total,
+        offset=offset,
+        limit=limit,
+        has_more=offset + len(selected_downloads) < total,
+        revision=_download_collection_revision(s),
+        facets=status_counts,
+        actions=action_counts,
+    )
+
+
+def get_media_download_bulk_action_ids(
+        s: Session,
+        *,
+        statuses: Optional[list[str]],
+        action: str,
+) -> list[int]:
+    """Return every row in the filtered collection that supports one bulk action."""
+    downloads = list(s.scalars(
+        select(MediaDownloadBase)
+        .options(
+            load_only(
+                MediaDownloadBase.id,
+                MediaDownloadBase.artifact_status,
+                MediaDownloadBase.automatic_retry_suppressed,
+                raiseload=True,
+            ),
+            raiseload("*"),
+        )
+    ))
+    ids = [download.id for download in downloads]
+    latest_runs = _latest_download_runs(s, ids)
+    active_operations = _active_download_operations(s, ids)
+    requested_statuses = set(statuses or [])
+
+    matching: list[int] = []
+    for download in downloads:
+        status = _download_collection_status(
+            download,
+            latest_run=latest_runs.get(download.id),
+            active_operation=active_operations.get(download.id),
+        )
+        if requested_statuses and status not in requested_statuses:
+            continue
+        if _download_bulk_action_matches(download, status, action):
+            matching.append(download.id)
+    return matching
 
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:

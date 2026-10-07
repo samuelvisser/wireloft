@@ -132,3 +132,16 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
         default=None,
         validation_alias=AliasPath("latest_run", "finished_at"),
     )
+
+class MediaDownloadPageRead(ResponseBase):
+    """One deterministic page of the shared media-download collection."""
+
+    items: list[MediaDownloadAPIReadView]
+    total: int
+    offset: int
+    limit: int
+    has_more: bool
+    revision: str
+    facets: dict[str, int] = Field(default_factory=dict)
+    actions: dict[str, int] = Field(default_factory=dict)
+

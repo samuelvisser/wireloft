@@ -154,6 +154,7 @@ export default function LocalMediaProfilePage() {
             await Promise.all([
                 queryClient.invalidateQueries({queryKey: ['localMediaProfiles']}),
                 queryClient.invalidateQueries({queryKey: ['downloadProfilesView']}),
+                queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
                 queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
             ])
             toast.success(`Deleted ${profile.name}`)

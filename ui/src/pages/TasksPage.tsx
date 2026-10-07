@@ -167,11 +167,8 @@ export default function TasksPage() {
         limit: 100,
         enabled: statuses.size > 0,
     })
-    const rows = useMemo(
-        () => query.data?.pages.flatMap((page) => page.items) ?? [],
-        [query.data],
-    )
-    const total = query.data?.pages[0]?.total ?? 0
+    const rows = query.items
+    const total = query.total
 
     useEffect(() => {
         const element = sentinelRef.current
@@ -179,7 +176,7 @@ export default function TasksPage() {
 
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries.some((entry) => entry.isIntersecting) && !query.isFetchingNextPage) {
+                if (entries.some((entry) => entry.isIntersecting) && !query.isFetching) {
                     void query.fetchNextPage()
                 }
             },
@@ -187,7 +184,7 @@ export default function TasksPage() {
         )
         observer.observe(element)
         return () => observer.disconnect()
-    }, [query.fetchNextPage, query.hasNextPage, query.isFetchingNextPage])
+    }, [query.fetchNextPage, query.hasNextPage, query.isFetching])
 
     const toggleStatus = (value: string) => {
         setStatuses((current) => {

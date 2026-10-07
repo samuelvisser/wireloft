@@ -89,3 +89,16 @@ export type MediaDownloadViewRead = MediaDownloadDomainViewRead & {
     finishedAt: Date | null
     isRedownloadAttempt: boolean | null
 }
+
+
+export const MediaDownloadPageReadSchema = z.looseObject({
+    items: z.array(MediaDownloadViewReadSchema),
+    total: z.int(),
+    offset: z.int(),
+    limit: z.int(),
+    hasMore: z.boolean(),
+    revision: z.string(),
+    facets: z.record(z.string(), z.int()).default({}),
+    actions: z.record(z.string(), z.int()).default({}),
+})
+export type MediaDownloadPageRead = z.infer<typeof MediaDownloadPageReadSchema>;
