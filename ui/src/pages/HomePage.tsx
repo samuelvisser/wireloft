@@ -78,17 +78,12 @@ export default function HomePage() {
     const problems = problemsQuery.data
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0
-    const downloadsLoading = (
-        downloadsQuery.isPending
-        || problemsQuery.isPending
-        || recentDownloadsQuery.isPending
-    )
     const downloadError = (
         downloadsQuery.error
         ?? problemsQuery.error
         ?? recentDownloadsQuery.error
     )
-    const activeSectionIsEmpty = !downloadsLoading && active.length === 0
+    const activeSectionIsEmpty = active.length === 0
     const attentionSectionIsEmpty = !problemsQuery.isPending
         && movies !== undefined
         && profiles !== undefined
@@ -161,7 +156,7 @@ export default function HomePage() {
                     aria-labelledby="active-downloads-title"
                 >
                     <div className="operation-section-header"><h2 id="active-downloads-title">Downloading now</h2><button type="button" onClick={() => navigate('/downloads')}>All downloads</button></div>
-                    {downloadsLoading && active.length === 0 ? <p>Loading downloads…</p> : active.length ? active.map((download) => (
+                    {active.length ? active.map((download) => (
                         <button className="operation-download" type="button" key={download.id} onClick={() => openDownload(download)}>
                             <span className="operation-icon"><FontAwesomeIcon icon={faIcon('fas', download.movieSlug ? 'clapperboard' : 'podcast')}/></span>
                             <span className="operation-download-copy"><strong>{mediaTitle(download)}</strong><small>{mediaContext(download)} • {download.localMediaProfileName}</small><DownloadProgressStatus download={download} compact details={false}/></span>
