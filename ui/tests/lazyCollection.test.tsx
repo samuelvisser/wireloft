@@ -18,18 +18,18 @@ import type {
     MediaDownloadViewRead,
 } from '../src/types/schemas/media_download'
 
-test('a larger consumer fills only the missing prefix from a shared lazy collection', () => {
+test('Downloads fills only the missing prefix after Home cached three workflow rows', () => {
     const firstPage: LazyCollectionPage<{id: number}> = {
-        items: Array.from({length: 9}, (_, index) => ({id: index + 1})),
+        items: Array.from({length: 3}, (_, index) => ({id: index + 1})),
         total: 100,
         offset: 0,
-        limit: 9,
+        limit: 3,
         hasMore: true,
     }
 
     assert.deepEqual(
         nextLazyCollectionPageRequest(firstPage, [firstPage], 50, 50),
-        {offset: 9, limit: 41},
+        {offset: 3, limit: 47},
     )
 })
 

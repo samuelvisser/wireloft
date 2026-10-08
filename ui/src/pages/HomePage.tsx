@@ -23,6 +23,7 @@ const IN_PROGRESS = ['preparing', 'waiting', 'canceling', 'downloading', 'local_
 const QUEUED = ['pending'] as const
 const PROBLEMS = ['error', 'missing', 'corrupted'] as const
 const COMPLETE = ['downloaded', 'redownloaded'] as const
+const HOME_SECTION_LIMIT = 3
 const RECENT_ACTIVITY_LIMIT = 9
 
 type RecentActivityItem =
@@ -52,14 +53,14 @@ export default function HomePage() {
     const downloadsQuery = useMediaDownloadsCollection({
         statuses: defaultDownloadStatuses,
         order: 'workflow',
-        initialCount: RECENT_ACTIVITY_LIMIT,
+        initialCount: HOME_SECTION_LIMIT,
         batchSize: 50,
     })
     const problemsQuery = useMediaDownloadsCollection({
         statuses: PROBLEMS,
         order: 'workflow',
-        initialCount: 3,
-        batchSize: 3,
+        initialCount: HOME_SECTION_LIMIT,
+        batchSize: HOME_SECTION_LIMIT,
     })
     const recentDownloadsQuery = useMediaDownloadsCollection({
         statuses: COMPLETE,
@@ -73,7 +74,7 @@ export default function HomePage() {
             IN_PROGRESS.includes(download.downloadStatus as typeof IN_PROGRESS[number])
             || QUEUED.includes(download.downloadStatus as typeof QUEUED[number])
         ))
-        .slice(0, 3)
+        .slice(0, HOME_SECTION_LIMIT)
     const problems = problemsQuery.data
     const metadataProblems = movies?.filter((movie) => movie.releaseDateLookupStatus === 'error') || []
     const hasAttention = problemsQuery.total > 0 || metadataProblems.length > 0 || profiles?.length === 0
@@ -178,12 +179,12 @@ export default function HomePage() {
                             <FontAwesomeIcon icon={faIcon('fas', 'folder-plus')}/><span><strong>No Local Media Profile</strong><small>Create one before downloading episodes or movies.</small></span><span>Fix</span>
                         </button>
                     )}
-                    {metadataProblems.slice(0, 3).map((movie) => (
+                    {metadataProblems.slice(0, HOME_SECTION_LIMIT).map((movie) => (
                         <button className="operation-alert" type="button" key={`movie-metadata-${movie.id}`} onClick={() => navigate(`/movie/${movie.slug}`)}>
                             <FontAwesomeIcon icon={faIcon('fas', 'triangle-exclamation')}/><span><strong>{movie.title} metadata</strong><small>{movie.releaseDateLookupError || 'TMDB release-date lookup failed. Open the movie to retry.'}</small></span><span>View</span>
                         </button>
                     ))}
-                    {problems.slice(0, 3).map((download) => (
+                    {problems.slice(0, HOME_SECTION_LIMIT).map((download) => (
                         <button className="operation-alert" type="button" key={download.id} onClick={() => openDownload(download)}>
                             <FontAwesomeIcon icon={faIcon('fas', 'triangle-exclamation')}/><span><strong>{mediaTitle(download)}</strong><small>{download.errorMessage || `Download is ${download.downloadStatus}`}</small></span><span>View</span>
                         </button>
