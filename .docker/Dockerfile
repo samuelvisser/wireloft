@@ -73,7 +73,8 @@ COPY server ./server
 
 # Preserve uv's download/build cache independently of Docker's normal layer cache
 RUN --mount=type=cache,id=wireloft-uv,target=/root/.cache/uv,sharing=locked \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev \
+    && uv pip install "apprise==2.0.1"
 
 # Default config seed, copied into the /config volume on first run if missing.
 COPY config/config.yml.default ./config/config.yml.default

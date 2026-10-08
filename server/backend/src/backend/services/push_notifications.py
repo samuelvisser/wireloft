@@ -6,19 +6,16 @@ import base64
 import hashlib
 import json
 import logging
-import os
 import threading
-import time
 from datetime import datetime, timedelta, timezone
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
-from cryptography.hazmat.primitives import hashes, serialization
+from apprise.plugins.vapid import NotifyVapid
+from urllib.parse import urlsplit
+
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from sqlalchemy import select
 
 from backend.db.core import begin_write_transaction, get_session
@@ -237,81 +234,54 @@ def notification_payload(operation: TaskOperation) -> dict:
     }
 
 
-def _vapid_token(key: ec.EllipticCurvePrivateKey, endpoint: str) -> str:
-    url = urlsplit(endpoint)
-    audience = f"{url.scheme}://{url.hostname}"
-    header = _b64url(b'{"typ":"JWT","alg":"ES256"}')
-    claims = _b64url(json.dumps({
-        "aud": audience,
-        "exp": int(time.time()) + 12 * 3600,
-        "sub": "https://github.com/samuelvisser/wireloft",
-    }, separators=(",", ":")).encode("utf-8"))
-    signing_input = (header + "." + claims).encode("ascii")
-    der = key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
-    r, s = decode_dss_signature(der)
-    signature = _b64url(r.to_bytes(32, "big") + s.to_bytes(32, "big"))
-    return f"{header}.{claims}.{signature}"
+def _send_push(key: ec.EllipticCurvePrivateKey, subscription: dict, payload: dict) -> str:
+    """Hand Web Push delivery to Apprise, retaining WireLoft's JSON payload.
 
+    Apprise's VAPID service currently accepts a PEM key and subscription JSON.
+    Both are staged in a short-lived private directory, never persisted as
+    plaintext in the installation's config or database. The subscription
+    remains encrypted at rest in WireLoft's own database.
+    """
+    validate_endpoint(subscription["endpoint"])
+    subscriber = "notifications@wireloft.local"
+    with TemporaryDirectory(prefix="wireloft-apprise-") as directory:
+        path = Path(directory)
+        keyfile = path / "vapid.pem"
+        subfile = path / "subscriptions.json"
+        keyfile.write_bytes(key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        ))
+        subfile.write_text(json.dumps({subscriber: subscription}), encoding="utf-8")
+        keyfile.chmod(0o600)
+        subfile.chmod(0o600)
 
-def _encrypt_web_push(plaintext: bytes, subscription: dict) -> bytes:
-    """RFC 8291 Web Push message encryption, using RFC 8188 aes128gcm framing."""
-    client_key_bytes = _unb64url(subscription["keys"]["p256dh"])
-    client_key = ec.EllipticCurvePublicKey.from_encoded_point(
-        ec.SECP256R1(), client_key_bytes
-    )
-    auth = _unb64url(subscription["keys"]["auth"])
-    ephemeral = ec.generate_private_key(ec.SECP256R1())
-    server_key_bytes = _public_bytes(ephemeral)
-    shared = ephemeral.exchange(ec.ECDH(), client_key)
+        notifier = NotifyVapid(
+            subscriber=subscriber,
+            targets=[subscriber],
+            keyfile=str(keyfile),
+            subfile=str(subfile),
+            include_image=False,
+            ttl=60,
+            request_timeout=8,
+            redirects=False,
+        )
+        if not notifier.subscriptions.load():
+            raise RuntimeError("Apprise could not load the Web Push subscription")
 
-    ikm = HKDF(
-        algorithm=hashes.SHA256(), length=32, salt=auth,
-        info=b"WebPush: info\x00" + client_key_bytes + server_key_bytes,
-    ).derive(shared)
-    salt = os.urandom(16)
-    cek = HKDF(
-        algorithm=hashes.SHA256(), length=16, salt=salt,
-        info=b"Content-Encoding: aes128gcm\x00",
-    ).derive(ikm)
-    nonce = HKDF(
-        algorithm=hashes.SHA256(), length=12, salt=salt,
-        info=b"Content-Encoding: nonce\x00",
-    ).derive(ikm)
-    # 4096 is the maximum record size. A final record ends with the 0x02 delimiter.
-    if len(plaintext) > 3993:
-        raise ValueError("Web Push payload exceeds the record size")
-    ciphertext = AESGCM(cek).encrypt(nonce, plaintext + b"\x02", None)
-    return salt + (4096).to_bytes(4, "big") + bytes((len(server_key_bytes),)) + server_key_bytes + ciphertext
-
-
-class _NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, request, fp, code, msg, headers, newurl):
-        return None
-
-
-def _send_push(key: ec.EllipticCurvePrivateKey, subscription: dict, payload: dict) -> int:
-    endpoint = subscription["endpoint"]
-    validate_endpoint(endpoint)
-    body = _encrypt_web_push(
-        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
-        subscription,
-    )
-    request = Request(endpoint, data=body, method="POST", headers={
-        "Authorization": f"vapid t={_vapid_token(key, endpoint)}, k={_b64url(_public_bytes(key))}",
-        "Content-Encoding": "aes128gcm",
-        "Content-Type": "application/octet-stream",
-        "TTL": "3600",
-        "Urgency": "normal",
-    })
-    # Redirects are forbidden; do not forward encrypted payloads or VAPID
-    # credentials to a different host if a push provider returns 3xx.
-    opener = build_opener(ProxyHandler({}), _NoRedirect())
-    try:
-        with opener.open(request, timeout=8) as response:
-            return response.status
-    except HTTPError as exc:
-        exc.close()
-        return exc.code
+        # Web Push is JSON, not the formatted text Apprise normally sends to
+        # email/chat providers. Calling send() preserves the exact event schema.
+        accepted = notifier.send(
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+        )
+        if accepted:
+            return "SENT"
+        # The plugin removes 404/410 endpoints from its subscription manager.
+        # Distinguish permanent expiry from a temporary failed attempt.
+        if subscriber not in notifier.subscriptions:
+            return "EXPIRED"
+        return "RETRY"
 
 
 def _enqueue_pending(session, now: datetime) -> None:
@@ -431,15 +401,9 @@ def deliver_pending_notifications() -> None:
 
         try:
             status = _send_push(key, subscription, payload)
-        except (URLError, OSError, TimeoutError) as exc:
-            logger.warning(
-                "Web Push delivery temporarily failed for device %s: %s",
-                device_id, type(exc).__name__,
-            )
-            status = 503
         except Exception:
-            logger.exception("Unexpected Web Push failure for device %s", device_id)
-            status = 500
+            logger.exception("Apprise Web Push delivery failed for device %s", device_id)
+            status = "RETRY"
 
         with get_session() as session:
             begin_write_transaction(session)
@@ -450,15 +414,15 @@ def deliver_pending_notifications() -> None:
             device = session.get(PushSubscription, delivery.subscription_id)
             operation = session.get(TaskOperation, delivery.operation_id)
             delivery.attempts += 1
-            if status in (200, 201, 202):
+            if status == "SENT":
                 delivery.status = "SENT"
                 delivery.sent_at = datetime.now(timezone.utc)
                 if operation is not None and operation.push_notified_at is None:
                     operation.push_notified_at = delivery.sent_at
-            elif status in (404, 410) and device is not None:
+            elif status == "EXPIRED" and device is not None:
                 # The browser revoked or rotated this subscription.
                 session.delete(device)
-            elif status in (408, 429, 500, 502, 503, 504) and delivery.attempts < MAX_ATTEMPTS:
+            elif status == "RETRY" and delivery.attempts < MAX_ATTEMPTS:
                 delivery.next_attempt_at = datetime.now(timezone.utc) + timedelta(
                     seconds=min(600, 15 * 2 ** (delivery.attempts - 1))
                 )

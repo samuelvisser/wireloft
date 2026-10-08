@@ -121,8 +121,8 @@ still accessible.
 
 iOS/iPadOS requires installing WireLoft to the Home Screen and using HTTPS.
 On other platforms use a supported browser and HTTPS (or `localhost` for
-development). The backend needs outbound HTTPS access to the browser vendor's
-push service. No third-party account or paid notification service is required.
+development). Web Push delivery uses Apprise's VAPID plugin. The backend needs outbound HTTPS
+access to the browser vendor's push service. No third-party account or paid notification service is required.
 Push delivery is best-effort; blocked permissions or unreachable push services
 can prevent OS-level delivery.
 

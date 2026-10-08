@@ -6,11 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from sqlalchemy import select
 
 from backend.services import push_notifications as push
@@ -93,46 +90,50 @@ def test_rejects_unsafe_push_endpoints(url):
         push.validate_endpoint(url)
 
 
-def test_web_push_payload_roundtrips_with_receiver_private_key():
-    receiver_private, receiver_public, auth = _device_keys()
-    payload = b"WireLoft operation completed"
-    encrypted = push._encrypt_web_push(payload, {
-        "keys": {"p256dh": _encoded(receiver_public), "auth": _encoded(auth)}
-    })
-    salt = encrypted[:16]
-    assert int.from_bytes(encrypted[16:20], "big") == 4096
-    server_public = encrypted[21:86]
-    shared = receiver_private.exchange(
-        ec.ECDH(), ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), server_public)
-    )
-    ikm = HKDF(
-        algorithm=hashes.SHA256(), length=32, salt=auth,
-        info=b"WebPush: info\x00" + receiver_public + server_public,
-    ).derive(shared)
-    cek = HKDF(
-        algorithm=hashes.SHA256(), length=16, salt=salt,
-        info=b"Content-Encoding: aes128gcm\x00",
-    ).derive(ikm)
-    nonce = HKDF(
-        algorithm=hashes.SHA256(), length=12, salt=salt,
-        info=b"Content-Encoding: nonce\x00",
-    ).derive(ikm)
-    assert AESGCM(cek).decrypt(nonce, encrypted[86:], None) == payload + b"\x02"
+def test_apprise_transport_uses_json_payload_and_temporary_keyfiles(monkeypatch):
+    from pathlib import Path
+    from apprise.plugins.vapid import NotifyVapid
+
+    private, public, auth = _device_keys()
+    subscription = {
+        "endpoint": "https://fcm.googleapis.com/fcm/send/test-device",
+        "keys": {"p256dh": _encoded(public), "auth": _encoded(auth)},
+    }
+    received = []
+
+    def mock_send(self, body, **kwargs):
+        received.append((body, self.keyfile, self.subfile, self.ttl))
+        assert Path(self.keyfile).exists()
+        assert Path(self.subfile).exists()
+        assert json.loads(Path(self.subfile).read_text())["notifications@wireloft.local"] == subscription
+        return True
+
+    monkeypatch.setattr(NotifyVapid, "send", mock_send)
+    payload = {"title": "WireLoft", "operationId": "123", "url": "/downloads"}
+    assert push._send_push(private, subscription, payload) == "SENT"
+    assert json.loads(received[0][0]) == payload
+    assert received[0][3] == 60
+    assert not Path(received[0][1]).exists()
+    assert not Path(received[0][2]).exists()
 
 
-def test_vapid_signature_and_claims():
-    private = ec.generate_private_key(ec.SECP256R1())
-    token = push._vapid_token(private, "https://fcm.googleapis.com/fcm/send/test")
-    header, claims, signature = token.split(".")
-    raw = push._unb64url(signature)
-    assert len(raw) == 64
-    der = encode_dss_signature(int.from_bytes(raw[:32], "big"), int.from_bytes(raw[32:], "big"))
-    private.public_key().verify(
-        der, f"{header}.{claims}".encode(), ec.ECDSA(hashes.SHA256())
-    )
-    values = json.loads(push._unb64url(claims))
-    assert values["aud"] == "https://fcm.googleapis.com"
-    assert 0 < values["exp"] - int(datetime.now(timezone.utc).timestamp()) <= 12 * 3600
+def test_apprise_expired_and_failed_subscriptions_are_distinguished(monkeypatch):
+    from apprise.plugins.vapid import NotifyVapid
+    private, public, auth = _device_keys()
+    subscription = {
+        "endpoint": "https://fcm.googleapis.com/fcm/send/test",
+        "keys": {"p256dh": _encoded(public), "auth": _encoded(auth)},
+    }
+
+    def expired(self, body, **kwargs):
+        self.subscriptions.remove("notifications@wireloft.local")
+        return False
+
+    monkeypatch.setattr(NotifyVapid, "send", expired)
+    assert push._send_push(private, subscription, {}) == "EXPIRED"
+
+    monkeypatch.setattr(NotifyVapid, "send", lambda self, body, **kwargs: False)
+    assert push._send_push(private, subscription, {}) == "RETRY"
 
 
 def test_vapid_key_is_persisted_encrypted_and_reused(push_db):
@@ -172,7 +173,7 @@ def test_only_unseen_background_operations_are_pushed_once(push_db, monkeypatch)
 
     sent = []
     monkeypatch.setattr(push, "foreground_recent", lambda: False)
-    monkeypatch.setattr(push, "_send_push", lambda *_args: sent.append(_args[-1]) or 201)
+    monkeypatch.setattr(push, "_send_push", lambda *_args: sent.append(_args[-1]) or "SENT")
 
     push.deliver_pending_notifications()
     push.deliver_pending_notifications()
@@ -225,7 +226,7 @@ def test_restart_produces_a_new_delivery_once(push_db, monkeypatch):
 
     sent = []
     monkeypatch.setattr(push, "foreground_recent", lambda: False)
-    monkeypatch.setattr(push, "_send_push", lambda *_args: sent.append(1) or 201)
+    monkeypatch.setattr(push, "_send_push", lambda *_args: sent.append(1) or "SENT")
     push.deliver_pending_notifications()
 
     with push_db() as session:
