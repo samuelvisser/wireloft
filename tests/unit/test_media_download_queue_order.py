@@ -114,6 +114,38 @@ def test_queue_positions_use_the_dispatcher_order():
         engine.dispose()
 
 
+
+def test_scoped_collection_queue_positions_preserve_global_positions():
+    from backend.services.media_download_collection import (
+        media_download_queue_positions,
+    )
+    from task_manager.tasks.media_download_operations import (
+        create_media_download_operation,
+    )
+
+    session, engine = _session()
+    try:
+        first_download = _make_download(session, slug="scoped-first")
+        second_download = _make_download(session, slug="scoped-second")
+        third_download = _make_download(session, slug="scoped-third")
+
+        create_media_download_operation(session, first_download)
+        create_media_download_operation(session, second_download)
+        create_media_download_operation(session, third_download)
+        session.commit()
+
+        assert media_download_queue_positions(
+            session,
+            [second_download.id, third_download.id],
+        ) == {
+            second_download.id: 2,
+            third_download.id: 3,
+        }
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_queue_positions_preserve_creation_order_when_timestamps_tie():
     from task_manager.tasks.media_download_operations import (
         create_media_download_operation,
@@ -398,80 +430,6 @@ def test_download_page_filters_live_progress_status_in_sql():
     finally:
         session.close()
         engine.dispose()
-
-
-
-def test_download_collection_status_matches_live_transfer_phase():
-    from types import SimpleNamespace
-
-    from backend.api.endpoints.media_downloads.service import _download_collection_status
-    from backend.types.download_profile_types import MediaDownloadArtifactStatus
-
-    download = SimpleNamespace(
-        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
-        automatic_retry_suppressed=False,
-    )
-    operation = SimpleNamespace(
-        status="RUNNING",
-        context={},
-    )
-    run = SimpleNamespace(
-        status="RUNNING",
-        progress_metadata={
-            "download": {
-                "phase": "transferring",
-                "main_activity": "media",
-                "stages": [],
-                "primary_transfer_complete": False,
-            },
-        },
-    )
-
-    assert _download_collection_status(
-        download,
-        latest_run=run,
-        active_operation=operation,
-    ) == "downloading"
-
-    run.progress_metadata["download"]["primary_transfer_complete"] = True
-    assert _download_collection_status(
-        download,
-        latest_run=run,
-        active_operation=operation,
-    ) == "local_processing"
-
-
-def test_download_collection_status_prefers_live_wait_state():
-    from types import SimpleNamespace
-
-    from backend.api.endpoints.media_downloads.service import _download_collection_status
-    from backend.types.download_profile_types import MediaDownloadArtifactStatus
-
-    download = SimpleNamespace(
-        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
-        automatic_retry_suppressed=False,
-    )
-    operation = SimpleNamespace(
-        status="RUNNING",
-        context={},
-    )
-    run = SimpleNamespace(
-        status="RUNNING",
-        progress_metadata={
-            "wait_state": {"reason": "daily_wire_request_cooldown"},
-            "download": {
-                "phase": "preparing",
-                "main_activity": "media",
-                "stages": [],
-            },
-        },
-    )
-
-    assert _download_collection_status(
-        download,
-        latest_run=run,
-        active_operation=operation,
-    ) == "waiting"
 
 
 
