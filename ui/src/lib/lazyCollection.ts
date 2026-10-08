@@ -17,7 +17,7 @@ export type LazyCollectionPage<T> = {
     actions?: Record<string, number>
 }
 
-type PageRequest = {
+export type LazyCollectionPageRequest = {
     offset: number
     limit: number
 }
@@ -28,7 +28,7 @@ export function nextLazyCollectionPageRequest<T>(
     pages: readonly LazyCollectionPage<T>[],
     initialCount: number,
     batchSize: number,
-): PageRequest | undefined {
+): LazyCollectionPageRequest | undefined {
     if (!lastPage.hasMore) return undefined
     const loaded = pages.reduce((total, page) => total + page.items.length, 0)
     const missingInitial = Math.max(0, initialCount - loaded)
@@ -46,11 +46,19 @@ type LazyCollectionOptions<T extends {id: number}> = {
     enabled?: boolean
     pollIntervalMs?: number
     pollWhilePageCountAtMost?: number
-    fetchPage: (request: PageRequest, signal?: AbortSignal) => Promise<LazyCollectionPage<T>>
+    /**
+     * Derive observer-only initial rows from compatible cached collections.
+     * React Query still treats the target collection as unfetched and runs its
+     * own query immediately; the authoritative response replaces this data.
+     */
+    derivePlaceholderData?: (
+        queryClient: QueryClient,
+    ) => InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest> | undefined
+    fetchPage: (request: LazyCollectionPageRequest, signal?: AbortSignal) => Promise<LazyCollectionPage<T>>
 }
 
 function replaceEntitiesInCollection<T extends {id: number}>(
-    data: InfiniteData<LazyCollectionPage<T>, PageRequest> | undefined,
+    data: InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest> | undefined,
     replacements: Map<number, T>,
 ) {
     if (!data || replacements.size === 0) return data
@@ -79,7 +87,7 @@ export function syncLazyCollectionEntities<T extends {id: number}>(
     for (const item of items) {
         queryClient.setQueryData([...collectionPrefix, 'entity', item.id], item)
     }
-    queryClient.setQueriesData<InfiniteData<LazyCollectionPage<T>, PageRequest>>(
+    queryClient.setQueriesData<InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>>(
         {queryKey: [...collectionPrefix, 'list']},
         (data) => replaceEntitiesInCollection(data, replacements),
     )
@@ -90,7 +98,7 @@ export function updateLazyCollectionEntities<T extends {id: number}>(
     collectionPrefix: readonly unknown[],
     update: (item: T) => T,
 ) {
-    queryClient.setQueriesData<InfiniteData<LazyCollectionPage<T>, PageRequest>>(
+    queryClient.setQueriesData<InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>>(
         {queryKey: [...collectionPrefix, 'list']},
         (data) => {
             if (!data) return data
@@ -120,6 +128,7 @@ export function useLazyCollection<T extends {id: number}>({
     enabled = true,
     pollIntervalMs,
     pollWhilePageCountAtMost,
+    derivePlaceholderData,
     fetchPage,
 }: LazyCollectionOptions<T>) {
     const queryClient = useQueryClient()
@@ -135,13 +144,16 @@ export function useLazyCollection<T extends {id: number}>({
     const query = useInfiniteQuery<
         LazyCollectionPage<T>,
         Error,
-        InfiniteData<LazyCollectionPage<T>, PageRequest>,
+        InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>,
         readonly unknown[],
-        PageRequest
+        LazyCollectionPageRequest
     >({
         queryKey: fullQueryKey,
         enabled,
         initialPageParam: {offset: 0, limit: initialCount},
+        placeholderData: derivePlaceholderData
+            ? () => derivePlaceholderData(queryClient)
+            : undefined,
         queryFn: async ({pageParam, signal}) => {
             const page = await fetchPage(pageParam, signal)
             syncLazyCollectionEntities(queryClient, collectionPrefix, page.items)
@@ -157,7 +169,7 @@ export function useLazyCollection<T extends {id: number}>({
             ? false
             : (currentQuery) => {
                 const currentData = currentQuery.state.data as
-                    | InfiniteData<LazyCollectionPage<T>, PageRequest>
+                    | InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>
                     | undefined
                 const pageCount = currentData?.pages.length ?? 0
                 if (

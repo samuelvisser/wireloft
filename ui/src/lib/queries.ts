@@ -1,8 +1,20 @@
 import {presentDownloadProgress} from './downloadProgress'
-import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
+import {
+    type InfiniteData,
+    keepPreviousData,
+    QueryClient,
+    useInfiniteQuery,
+    useQuery,
+    useQueryClient,
+} from '@tanstack/react-query'
 import {useEffect, useMemo} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
-import {updateLazyCollectionEntities, useLazyCollection} from './lazyCollection'
+import {
+    type LazyCollectionPage,
+    type LazyCollectionPageRequest,
+    updateLazyCollectionEntities,
+    useLazyCollection,
+} from './lazyCollection'
 import {useFrontendPuller} from './puller'
 import {
     episodeQueryKeys,
@@ -715,6 +727,169 @@ function mediaDownloadRecentOrder(left: MediaDownloadViewRead, right: MediaDownl
     return byTime || right.id - left.id
 }
 
+function mediaDownloadStatusFilterContains(
+    source: unknown,
+    target: readonly string[],
+): boolean {
+    if (source === null) return true
+    if (!Array.isArray(source)) return false
+    const sourceStatuses = new Set(
+        source.filter((value): value is string => typeof value === 'string'),
+    )
+    return target.every((status) => sourceStatuses.has(status))
+}
+
+function contiguousLazyCollectionItems<T>(
+    pages: readonly LazyCollectionPage<T>[],
+): {items: T[]; complete: boolean} | null {
+    if (pages.length === 0) return null
+
+    const items: T[] = []
+    let expectedOffset = 0
+    let complete = false
+    for (const page of pages) {
+        if (page.offset !== expectedOffset) break
+        items.push(...page.items)
+        expectedOffset += page.items.length
+        complete = !page.hasMore
+        if (complete) break
+    }
+
+    if (expectedOffset === 0 && pages[0].items.length > 0) return null
+    return {items, complete}
+}
+
+export function deriveMediaDownloadCollectionPlaceholder(
+    queryClient: QueryClient,
+    *,
+    statuses: readonly string[] | undefined,
+    order: MediaDownloadCollectionOrder,
+    initialCount: number,
+    operations: TaskOperationRead[] = [],
+): InfiniteData<
+    LazyCollectionPage<MediaDownloadDomainViewRead>,
+    LazyCollectionPageRequest
+> | undefined {
+    if (statuses === undefined) return undefined
+
+    const targetStatuses = [...new Set(statuses)].sort()
+    const targetStatusSet = new Set(targetStatuses)
+    const candidates = queryClient.getQueryCache().findAll({
+        queryKey: [...MEDIA_DOWNLOAD_COLLECTION_PREFIX, 'list'],
+    })
+
+    let best: {
+        data: InfiniteData<
+            LazyCollectionPage<MediaDownloadDomainViewRead>,
+            LazyCollectionPageRequest
+        >
+        matchCount: number
+        updatedAt: number
+    } | undefined
+
+    for (const query of candidates) {
+        const key = query.queryKey
+        if (
+            key[0] !== MEDIA_DOWNLOAD_COLLECTION_PREFIX[0]
+            || key[1] !== 'list'
+            || key[3] !== order
+            || !mediaDownloadStatusFilterContains(key[2], targetStatuses)
+        ) {
+            continue
+        }
+
+        const sourceStatuses = key[2]
+        if (
+            Array.isArray(sourceStatuses)
+            && sourceStatuses.length === targetStatuses.length
+            && targetStatuses.every((status, index) => sourceStatuses[index] === status)
+        ) {
+            continue
+        }
+
+        const source = query.state.data as InfiniteData<
+            LazyCollectionPage<MediaDownloadDomainViewRead>,
+            LazyCollectionPageRequest
+        > | undefined
+        if (!source?.pages.length) continue
+
+        const contiguous = contiguousLazyCollectionItems(source.pages)
+        if (!contiguous) continue
+
+        const firstPage = source.pages[0]
+        const facets = firstPage.facets
+        const targetTotal = facets
+            ? targetStatuses.reduce((total, status) => total + (facets[status] ?? 0), 0)
+            : contiguous.complete
+                ? undefined
+                : null
+        if (targetTotal === null) continue
+
+        const byId = new Map<number, MediaDownloadDomainViewRead>()
+        for (const download of contiguous.items) byId.set(download.id, download)
+        for (const operation of operations) {
+            if (operation.resourceId == null || byId.has(operation.resourceId)) continue
+            const synthetic = syntheticDownload(operation)
+            if (synthetic) byId.set(synthetic.id, synthetic)
+        }
+
+        const matching = [...byId.values()]
+            .map((download) => ({
+                download,
+                presented: presentDownload(
+                    download,
+                    operationForDownload(operations, download.id),
+                ),
+            }))
+            .filter(({presented}) => targetStatusSet.has(String(presented.downloadStatus)))
+            .sort((left, right) => (
+                order === 'recent'
+                    ? mediaDownloadRecentOrder(left.presented, right.presented)
+                    : compareMediaDownloadWorkflowOrder(left.presented, right.presented)
+            ))
+
+        const total = targetTotal ?? matching.length
+        const items = matching.slice(0, Math.min(initialCount, total))
+            .map(({download}) => download)
+
+        if (items.length === 0 && total > 0) continue
+
+        const placeholder: InfiniteData<
+            LazyCollectionPage<MediaDownloadDomainViewRead>,
+            LazyCollectionPageRequest
+        > = {
+            pages: [{
+                items,
+                total,
+                offset: 0,
+                limit: initialCount,
+                hasMore: items.length < total,
+                revision: firstPage.revision,
+                facets: firstPage.facets,
+                // Bulk-action counts depend on the exact filtered collection and
+                // are intentionally left for the authoritative backend response.
+                actions: {},
+            }],
+            pageParams: [{offset: 0, limit: initialCount}],
+        }
+
+        const score = items.length
+        if (
+            best === undefined
+            || score > best.matchCount
+            || (score === best.matchCount && query.state.dataUpdatedAt > best.updatedAt)
+        ) {
+            best = {
+                data: placeholder,
+                matchCount: score,
+                updatedAt: query.state.dataUpdatedAt,
+            }
+        }
+    }
+
+    return best?.data
+}
+
 export function useMediaDownloadsCollection({
     statuses,
     order = 'workflow',
@@ -726,12 +901,25 @@ export function useMediaDownloadsCollection({
         () => statuses === undefined ? undefined : [...new Set(statuses)].sort(),
         [statuses],
     )
+    const {data: pullData} = useFrontendPuller()
+    const operations = (pullData?.operations ?? []).filter(
+        (operation) => operation.kind === 'media.download',
+    )
     const collection = useLazyCollection({
         collectionPrefix: MEDIA_DOWNLOAD_COLLECTION_PREFIX,
         queryKey: [normalizedStatuses ?? null, order] as const,
         initialCount,
         batchSize,
         enabled,
+        derivePlaceholderData: (queryClient) => deriveMediaDownloadCollectionPlaceholder(
+            queryClient,
+            {
+                statuses: normalizedStatuses,
+                order,
+                initialCount,
+                operations,
+            },
+        ),
         fetchPage: async ({offset, limit}, signal) => {
             const params = new URLSearchParams({
                 order,
@@ -745,11 +933,6 @@ export function useMediaDownloadsCollection({
             ))
         },
     })
-
-    const {data: pullData} = useFrontendPuller()
-    const operations = (pullData?.operations ?? []).filter(
-        (operation) => operation.kind === 'media.download',
-    )
 
     const data = useMemo(() => {
         const downloads = new Map<number, MediaDownloadDomainViewRead>()
