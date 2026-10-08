@@ -3,7 +3,9 @@ import test from 'node:test'
 import {QueryClient, type InfiniteData} from '@tanstack/react-query'
 
 import {
+    deriveSameLazyCollectionPlaceholder,
     type LazyCollectionPage,
+    lazyCollectionQueryKey,
     nextLazyCollectionPageRequest,
 } from '../src/lib/lazyCollection'
 import {
@@ -18,8 +20,22 @@ import type {
     MediaDownloadViewRead,
 } from '../src/types/schemas/media_download'
 
-test('Downloads fills only the missing prefix after Home cached three workflow rows', () => {
-    const firstPage: LazyCollectionPage<{id: number}> = {
+test('Home cache can seed Downloads display without satisfying its 50-row refresh', () => {
+    const queryClient = new QueryClient()
+    const semanticKey = ['mediaDownloads', 'list', ['pending'], 'workflow'] as const
+    const homeKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [['pending'], 'workflow'],
+        3,
+        50,
+    )
+    const downloadsKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [['pending'], 'workflow'],
+        50,
+        50,
+    )
+    const homePage: LazyCollectionPage<{id: number}> = {
         items: Array.from({length: 3}, (_, index) => ({id: index + 1})),
         total: 100,
         offset: 0,
@@ -27,10 +43,68 @@ test('Downloads fills only the missing prefix after Home cached three workflow r
         hasMore: true,
     }
 
-    assert.deepEqual(
-        nextLazyCollectionPageRequest(firstPage, [firstPage], 50, 50),
-        {offset: 3, limit: 47},
+    queryClient.setQueryData<InfiniteData<
+        LazyCollectionPage<{id: number}>,
+        {offset: number; limit: number}
+    >>(homeKey, {
+        pages: [homePage],
+        pageParams: [{offset: 0, limit: 3}],
+    })
+
+    const placeholder = deriveSameLazyCollectionPlaceholder<{id: number}>(
+        queryClient,
+        semanticKey,
+        50,
     )
+
+    assert.ok(placeholder)
+    assert.deepEqual(placeholder.pages[0].items.map((item) => item.id), [1, 2, 3])
+    assert.equal(placeholder.pages[0].limit, 50)
+    assert.equal(queryClient.getQueryData(downloadsKey), undefined)
+    assert.notDeepEqual(homeKey, downloadsKey)
+})
+
+test('Downloads cache can seed Home display without satisfying its three-row refresh', () => {
+    const queryClient = new QueryClient()
+    const semanticKey = ['mediaDownloads', 'list', ['pending'], 'workflow'] as const
+    const downloadsKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [['pending'], 'workflow'],
+        50,
+        50,
+    )
+    const homeKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [['pending'], 'workflow'],
+        3,
+        50,
+    )
+    const downloadsPage: LazyCollectionPage<{id: number}> = {
+        items: Array.from({length: 50}, (_, index) => ({id: index + 1})),
+        total: 100,
+        offset: 0,
+        limit: 50,
+        hasMore: true,
+    }
+
+    queryClient.setQueryData<InfiniteData<
+        LazyCollectionPage<{id: number}>,
+        {offset: number; limit: number}
+    >>(downloadsKey, {
+        pages: [downloadsPage],
+        pageParams: [{offset: 0, limit: 50}],
+    })
+
+    const placeholder = deriveSameLazyCollectionPlaceholder<{id: number}>(
+        queryClient,
+        semanticKey,
+        3,
+    )
+
+    assert.ok(placeholder)
+    assert.deepEqual(placeholder.pages[0].items.map((item) => item.id), [1, 2, 3])
+    assert.equal(placeholder.pages[0].limit, 3)
+    assert.equal(queryClient.getQueryData(homeKey), undefined)
 })
 
 test('normal lazy collection scrolling uses the configured batch size', () => {
@@ -64,7 +138,12 @@ test('queue-position updates reorder cached queued downloads immediately', () =>
         limit: 50,
         hasMore: false,
     }
-    const queryKey = ['mediaDownloads', 'list', ['pending'], 'workflow'] as const
+    const queryKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [['pending'], 'workflow'],
+        50,
+        50,
+    )
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<MediaDownloadDomainViewRead>,
@@ -138,8 +217,18 @@ function domainDownload(
 
 test('a narrower download filter renders from a broader cache without populating its cache key', () => {
     const queryClient = new QueryClient()
-    const broadKey = ['mediaDownloads', 'list', null, 'workflow'] as const
-    const narrowKey = ['mediaDownloads', 'list', ['downloaded'], 'workflow'] as const
+    const broadKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [null, 'workflow'],
+        50,
+        50,
+    )
+    const narrowKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [['downloaded'], 'workflow'],
+        50,
+        50,
+    )
     const broadPage: LazyCollectionPage<MediaDownloadDomainViewRead> = {
         items: [
             domainDownload(3, 'available'),
@@ -181,7 +270,12 @@ test('a narrower download filter renders from a broader cache without populating
 
 test('a partial broader download prefix can seed the known filtered prefix when facets prove more exist', () => {
     const queryClient = new QueryClient()
-    const broadKey = ['mediaDownloads', 'list', null, 'workflow'] as const
+    const broadKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [null, 'workflow'],
+        3,
+        50,
+    )
     const broadPage: LazyCollectionPage<MediaDownloadDomainViewRead> = {
         items: [
             domainDownload(5, 'missing'),
@@ -219,7 +313,12 @@ test('a partial broader download prefix can seed the known filtered prefix when 
 
 test('filtered placeholder reuse never crosses collection ordering', () => {
     const queryClient = new QueryClient()
-    const broadKey = ['mediaDownloads', 'list', null, 'recent'] as const
+    const broadKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [null, 'recent'],
+        9,
+        9,
+    )
     const broadPage: LazyCollectionPage<MediaDownloadDomainViewRead> = {
         items: [domainDownload(1, 'available')],
         total: 1,
@@ -252,12 +351,12 @@ test('filtered placeholder reuse never crosses collection ordering', () => {
 
 test('a narrower download filter can reuse a filtered superset with the same ordering', () => {
     const queryClient = new QueryClient()
-    const broadKey = [
-        'mediaDownloads',
-        'list',
-        ['corrupted', 'error', 'missing'],
-        'workflow',
-    ] as const
+    const broadKey = lazyCollectionQueryKey(
+        ['mediaDownloads'],
+        [['corrupted', 'error', 'missing'], 'workflow'],
+        50,
+        50,
+    )
     const broadPage: LazyCollectionPage<MediaDownloadDomainViewRead> = {
         items: [
             domainDownload(3, 'corrupted'),
@@ -325,28 +424,18 @@ function taskLedgerEntry(
 
 test('cron task ledger can render immediately from the broader Tasks cache without populating its own key', () => {
     const queryClient = new QueryClient()
-    const tasksKey = [
-        'taskLedger',
-        'list',
-        null,
-        null,
-        null,
-        null,
-        null,
-        'created_at',
-        'desc',
-    ] as const
-    const cronKey = [
-        'taskLedger',
-        'list',
-        'fetch_new_episodes',
-        'show',
-        [0],
-        null,
-        null,
-        'created_at',
-        'desc',
-    ] as const
+    const tasksKey = lazyCollectionQueryKey(
+        ['taskLedger'],
+        [null, null, null, null, null, 'created_at', 'desc'],
+        100,
+        100,
+    )
+    const cronKey = lazyCollectionQueryKey(
+        ['taskLedger'],
+        ['fetch_new_episodes', 'show', [0], null, null, 'created_at', 'desc'],
+        10,
+        10,
+    )
     const broadPage: LazyCollectionPage<TaskLedgerEntryRead> = {
         items: [
             taskLedgerEntry(3, {definitionKey: 'file_watcher'}),
@@ -389,17 +478,12 @@ test('cron task ledger can render immediately from the broader Tasks cache witho
 
 test('task ledger placeholder reuse respects status and started-after filters', () => {
     const queryClient = new QueryClient()
-    const tasksKey = [
-        'taskLedger',
-        'list',
-        null,
-        null,
-        null,
-        null,
-        null,
-        'created_at',
-        'desc',
-    ] as const
+    const tasksKey = lazyCollectionQueryKey(
+        ['taskLedger'],
+        [null, null, null, null, null, 'created_at', 'desc'],
+        100,
+        100,
+    )
     const broadPage: LazyCollectionPage<TaskLedgerEntryRead> = {
         items: [
             taskLedgerEntry(3, {status: 'FAILED', startedAt: '2026-10-08T03:00:00Z'}),
@@ -437,17 +521,12 @@ test('task ledger placeholder reuse respects status and started-after filters', 
 
 test('task ledger placeholder reuse never crosses ordering', () => {
     const queryClient = new QueryClient()
-    const tasksKey = [
-        'taskLedger',
-        'list',
-        null,
-        null,
-        null,
-        null,
-        null,
-        'started_at',
-        'desc',
-    ] as const
+    const tasksKey = lazyCollectionQueryKey(
+        ['taskLedger'],
+        [null, null, null, null, null, 'started_at', 'desc'],
+        100,
+        100,
+    )
     const broadPage: LazyCollectionPage<TaskLedgerEntryRead> = {
         items: [taskLedgerEntry(1)],
         total: 1,
@@ -480,32 +559,39 @@ test('task ledger placeholder reuse never crosses ordering', () => {
 })
 
 
-test('a 10-row ledger modal reuses a 100-row Tasks page before requesting the next backend page', () => {
-    const cachedTasksPage: LazyCollectionPage<{id: number}> = {
-        items: Array.from({length: 100}, (_, index) => ({id: index + 1})),
-        total: 150,
-        offset: 0,
-        limit: 100,
-        hasMore: true,
-    }
-
-    assert.deepEqual(
-        nextLazyCollectionPageRequest(cachedTasksPage, [cachedTasksPage], 10, 10),
-        {offset: 100, limit: 10},
+test('Tasks and 10-row ledger modals use separate refresh executions over the same semantic cache', () => {
+    const tasksKey = lazyCollectionQueryKey(
+        ['taskLedger'],
+        [null, null, null, null, null, 'created_at', 'desc'],
+        100,
+        100,
     )
+    const modalKey = lazyCollectionQueryKey(
+        ['taskLedger'],
+        [null, null, null, null, null, 'created_at', 'desc'],
+        10,
+        10,
+    )
+
+    assert.notDeepEqual(tasksKey, modalKey)
 })
 
-test('Tasks expands a 10-row ledger cache by requesting only the missing 90 rows', () => {
-    const cachedLedgerPage: LazyCollectionPage<{id: number}> = {
-        items: Array.from({length: 10}, (_, index) => ({id: index + 1})),
-        total: 150,
+test('pagination continues only after an authoritative initial prefix', () => {
+    const authoritativeFirstPage: LazyCollectionPage<{id: number}> = {
+        items: Array.from({length: 50}, (_, index) => ({id: index + 1})),
+        total: 120,
         offset: 0,
-        limit: 10,
+        limit: 50,
         hasMore: true,
     }
 
     assert.deepEqual(
-        nextLazyCollectionPageRequest(cachedLedgerPage, [cachedLedgerPage], 100, 100),
-        {offset: 10, limit: 90},
+        nextLazyCollectionPageRequest(
+            authoritativeFirstPage,
+            [authoritativeFirstPage],
+            50,
+            50,
+        ),
+        {offset: 50, limit: 50},
     )
 })

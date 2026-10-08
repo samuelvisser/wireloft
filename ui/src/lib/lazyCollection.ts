@@ -23,6 +23,82 @@ export type LazyCollectionPageRequest = {
 }
 
 
+export function lazyCollectionQueryKey(
+    collectionPrefix: readonly unknown[],
+    queryKey: readonly unknown[],
+    initialCount: number,
+    batchSize: number,
+) {
+    return [
+        ...collectionPrefix,
+        'list',
+        ...queryKey,
+        'request',
+        initialCount,
+        batchSize,
+    ] as const
+}
+
+export function deriveSameLazyCollectionPlaceholder<T extends {id: number}>(
+    queryClient: QueryClient,
+    semanticQueryKey: readonly unknown[],
+    initialCount: number,
+): InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest> | undefined {
+    const candidates = queryClient.getQueryCache().findAll({queryKey: semanticQueryKey})
+
+    let best: {
+        data: InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>
+        itemCount: number
+        updatedAt: number
+    } | undefined
+
+    for (const query of candidates) {
+        const source = query.state.data as InfiniteData<
+            LazyCollectionPage<T>,
+            LazyCollectionPageRequest
+        > | undefined
+        if (!source?.pages.length) continue
+
+        const contiguous = contiguousLazyCollectionItems(source.pages)
+        if (!contiguous) continue
+
+        const firstPage = source.pages[0]
+        const items = contiguous.items.slice(0, initialCount)
+        const total = firstPage.total
+        const placeholder: InfiniteData<
+            LazyCollectionPage<T>,
+            LazyCollectionPageRequest
+        > = {
+            pages: [{
+                ...firstPage,
+                items,
+                offset: 0,
+                limit: initialCount,
+                hasMore: items.length < total,
+            }],
+            pageParams: [{offset: 0, limit: initialCount}],
+        }
+
+        if (
+            best === undefined
+            || items.length > best.itemCount
+            || (
+                items.length === best.itemCount
+                && query.state.dataUpdatedAt > best.updatedAt
+            )
+        ) {
+            best = {
+                data: placeholder,
+                itemCount: items.length,
+                updatedAt: query.state.dataUpdatedAt,
+            }
+        }
+    }
+
+    return best?.data
+}
+
+
 export function nextLazyCollectionPageRequest<T>(
     lastPage: LazyCollectionPage<T>,
     pages: readonly LazyCollectionPage<T>[],
@@ -153,13 +229,35 @@ export function useLazyCollection<T extends {id: number}>({
     fetchPage,
 }: LazyCollectionOptions<T>) {
     const queryClient = useQueryClient()
-    const queryKeySignature = JSON.stringify([...collectionPrefix, 'list', ...queryKey])
-    const fullQueryKey = useMemo(
+    const semanticQueryKeySignature = JSON.stringify([
+        ...collectionPrefix,
+        'list',
+        ...queryKey,
+    ])
+    const semanticQueryKey = useMemo(
         () => [...collectionPrefix, 'list', ...queryKey] as const,
         // Collection descriptors are normalized JSON-compatible values. Keep the
         // query-key reference stable when only the caller's array identity changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [queryKeySignature],
+        [semanticQueryKeySignature],
+    )
+    const fullQueryKeySignature = JSON.stringify([
+        ...semanticQueryKey,
+        'request',
+        initialCount,
+        batchSize,
+    ])
+    const fullQueryKey = useMemo(
+        () => lazyCollectionQueryKey(
+            collectionPrefix,
+            queryKey,
+            initialCount,
+            batchSize,
+        ),
+        // Execution identity also includes the requested initial prefix and page
+        // size so another consumer's cache can never reduce this request.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [fullQueryKeySignature],
     )
 
     const query = useInfiniteQuery<
@@ -172,9 +270,14 @@ export function useLazyCollection<T extends {id: number}>({
         queryKey: fullQueryKey,
         enabled,
         initialPageParam: {offset: 0, limit: initialCount},
-        placeholderData: derivePlaceholderData
-            ? () => derivePlaceholderData(queryClient)
-            : undefined,
+        placeholderData: () => (
+            deriveSameLazyCollectionPlaceholder<T>(
+                queryClient,
+                semanticQueryKey,
+                initialCount,
+            )
+            ?? derivePlaceholderData?.(queryClient)
+        ),
         queryFn: async ({pageParam, signal}) => {
             const page = await fetchPage(pageParam, signal)
             syncLazyCollectionEntities(queryClient, collectionPrefix, page.items)
