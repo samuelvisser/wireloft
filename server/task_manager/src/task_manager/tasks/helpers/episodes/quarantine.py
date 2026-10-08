@@ -30,12 +30,15 @@ def _rollback_date_head(s: Session, episode: Episode, previous_identifier: str) 
     if int(show.get_meta("ep_id.latest_ep_date") or 0) != timestamp:
         return
     latest_remaining = s.scalar(
-        select(func.max(Episode.published_date)).where(
+        select(Episode.published_date)
+        .where(
             Episode.show_id == episode.show_id,
             Episode.id != episode.id,
             Episode.episode_identifier.startswith("ep."),
             Episode.published_date.is_not(None),
         )
+        .order_by(Episode.published_date.desc())
+        .limit(1)
     )
     new_head = (
         _utc_timestamp(latest_remaining)
