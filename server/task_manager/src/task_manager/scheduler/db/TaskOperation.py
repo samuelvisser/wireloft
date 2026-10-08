@@ -41,6 +41,7 @@ class TaskOperation(Base):
     context: Mapped[Optional[dict]] = mapped_column(JSON)
     error: Mapped[Optional[str]] = mapped_column(Text)
 
+    push_notified_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())
     notification_seen_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), index=True)
     prioritized_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime(), index=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(UTCDateTime())

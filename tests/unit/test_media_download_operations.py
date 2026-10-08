@@ -597,6 +597,7 @@ def test_operation_restart_bypasses_publication_wait(monkeypatch):
             progress_meta=None,
             error=None,
             notification_seen_at=None,
+            push_notified_at=None,
             started_at=None,
             finished_at=None,
             created_at=None,

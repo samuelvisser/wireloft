@@ -123,7 +123,7 @@ export default function OperationNotifier({
       }
 
       handledRef.current.add(operation.id)
-      if (operation.source === 'UI' && !operation.notificationSeenAt) {
+      if (operation.source === 'UI' && !operation.notificationSeenAt && !operation.pushNotifiedAt) {
         const message = terminalMessage(operation, definitions)
         if (operation.status === 'SUCCEEDED') {
           toast.success(message, {duration: 5000})

@@ -86,6 +86,7 @@ class TaskOperationRead(ResponseBase):
     progress_meta: Optional[dict[str, Any]] = None
     error: Optional[str]
     notification_seen_at: Optional[datetime]
+    push_notified_at: Optional[datetime] = None
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
     created_at: Optional[datetime]

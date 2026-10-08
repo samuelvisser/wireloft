@@ -183,6 +183,7 @@ class OperationSnapshot:
     progress_meta: dict[str, Any] | None
     error: str | None
     notification_seen_at: datetime | None
+    push_notified_at: datetime | None
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime | None
@@ -1094,6 +1095,7 @@ def _operation_snapshot(operation: TaskOperation) -> OperationSnapshot:
         progress_meta=_operation_progress_meta(operation, effective_runs),
         error=operation.error,
         notification_seen_at=operation.notification_seen_at,
+        push_notified_at=operation.push_notified_at,
         started_at=operation.started_at,
         finished_at=operation.finished_at,
         created_at=operation.created_at,

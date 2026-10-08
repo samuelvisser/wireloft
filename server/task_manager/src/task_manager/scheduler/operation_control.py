@@ -424,6 +424,7 @@ def restart_operation(operation_id: str) -> OperationSnapshot | None:
         operation.result = None
         operation.error = None
         operation.notification_seen_at = None
+        operation.push_notified_at = None
         operation.finished_at = None
         session.flush()
 

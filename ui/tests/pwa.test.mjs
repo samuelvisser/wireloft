@@ -157,3 +157,78 @@ test('activation deletes obsolete WireLoft caches without touching unrelated cac
   await worker.dispatch('activate')
   assert.deepEqual(await worker.caches.keys(), ['other-site-cache', 'wireloft-offline-v1'])
 })
+
+
+test('push notification displays an OS alert with a stable operation tag', async () => {
+  const events = new Map()
+  const notifications = []
+  const context = {
+    self: {
+      location: {origin: 'https://wireloft.example'},
+      addEventListener(name, callback) { events.set(name, callback) },
+      registration: {
+        async showNotification(title, options) { notifications.push({title, options}) },
+      },
+    },
+    URL,
+  }
+  runInNewContext(readFileSync(publicFile('sw.js'), 'utf8'), context)
+  let finished
+  events.get('push')({
+    data: {json: () => ({
+      operationId: '123', title: 'Download complete',
+      body: 'One episode downloaded', url: '/downloads',
+    })},
+    waitUntil(promise) { finished = promise },
+  })
+  await finished
+  assert.equal(notifications.length, 1)
+  assert.equal(notifications[0].title, 'Download complete')
+  assert.equal(notifications[0].options.tag, 'wireloft-operation-123')
+  assert.equal(notifications[0].options.data.url, '/downloads')
+})
+
+test('notification clicks open safe WireLoft paths and reject external URLs', async () => {
+  const events = new Map()
+  const opened = []
+  const context = {
+    self: {
+      location: {origin: 'https://wireloft.example'},
+      addEventListener(name, callback) { events.set(name, callback) },
+      clients: {
+        async matchAll() { return [] },
+        async openWindow(url) { opened.push(url) },
+      },
+    },
+    URL,
+  }
+  runInNewContext(readFileSync(publicFile('sw.js'), 'utf8'), context)
+  for (const route of ['/tasks', 'https://evil.example/steal']) {
+    let finished
+    events.get('notificationclick')({
+      notification: {data: {url: route}, close() {}},
+      waitUntil(promise) { finished = promise },
+    })
+    await finished
+  }
+  assert.deepEqual(opened, [
+    'https://wireloft.example/tasks',
+    'https://wireloft.example/',
+  ])
+})
+
+test('missing push payload shows a generic user-visible notification', async () => {
+  const events = new Map()
+  const shown = []
+  const self = {
+    location: {origin: 'https://wireloft.example'},
+    addEventListener(name, callback) {events.set(name, callback)},
+    registration: {async showNotification(title, options) {shown.push({title, options})}},
+  }
+  runInNewContext(readFileSync(publicFile('sw.js'), 'utf8'), {self, URL})
+  let done
+  events.get('push')({data: {json: () => null}, waitUntil(promise) {done = promise}})
+  await done
+  assert.equal(shown.length, 1)
+  assert.equal(shown[0].title, 'WireLoft notification')
+})

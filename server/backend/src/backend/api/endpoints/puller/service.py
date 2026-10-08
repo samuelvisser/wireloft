@@ -17,6 +17,11 @@ _ACTIVE_OPERATION_STATUSES = {
 def get_frontend_pull() -> FrontendPullAPIRead:
     """Return the frontend's generic changing-execution snapshot."""
     operations = list_operations(relevant=True, limit=500)
+
+    # The frontend only calls /pull while its document is visible and focused.
+    # Give it an opportunity to show a toast before sending a background push.
+    from backend.services.push_notifications import record_foreground_poll
+    record_foreground_poll()
     has_active_operation = any(
         operation.status in _ACTIVE_OPERATION_STATUSES
         for operation in operations

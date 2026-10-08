@@ -68,3 +68,60 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(cacheStaticAsset(request))
   }
 })
+
+
+// A push event wakes this worker even with every WireLoft window closed.
+// Links are intentionally restricted to routes owned by the React app.
+function notificationRoute(raw) {
+  return raw === '/downloads' || raw === '/tasks' ? raw : '/'
+}
+
+self.addEventListener('push', (event) => {
+  event.waitUntil((async () => {
+    let payload = {}
+    if (event.data) {
+      try {
+        payload = event.data.json()
+      } catch {
+        // Invalid payloads still produce a generic user-visible notification.
+      }
+    }
+    if (!payload || typeof payload !== 'object') payload = {}
+    const operationId = typeof payload.operationId === 'string' ? payload.operationId : ''
+    const title = typeof payload.title === 'string' ? payload.title : 'WireLoft notification'
+    const body = typeof payload.body === 'string' ? payload.body : 'An operation has finished.'
+    await self.registration.showNotification(title, {
+      body,
+      icon: '/pwa-icon-192.png',
+      badge: '/pwa-icon-192.png',
+      tag: operationId ? 'wireloft-operation-' + operationId : undefined,
+      data: {url: notificationRoute(payload.url)},
+    })
+  })())
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil((async () => {
+    const route = notificationRoute(event.notification.data?.url)
+    const target = new URL(route, self.location.origin).href
+    const windows = await self.clients.matchAll({type: 'window', includeUncontrolled: true})
+    for (const windowClient of windows) {
+      if (new URL(windowClient.url).origin !== self.location.origin) continue
+      if ('navigate' in windowClient) {
+        try {
+          const navigated = await windowClient.navigate(target)
+          if (navigated && 'focus' in navigated) {
+            await navigated.focus()
+            return
+          }
+        } catch {
+          // Fall back to a new app window when navigation is rejected.
+        }
+      }
+    }
+    if (self.clients.openWindow) {
+      await self.clients.openWindow(target)
+    }
+  })())
+})

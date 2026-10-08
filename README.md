@@ -105,6 +105,27 @@ and media downloads are **never** cached by the service worker. Offline, the
 installed app displays a reconnect screen; media management requires a
 connection to your WireLoft server.
 
+### Push notifications
+
+In **Settings → General → Push notifications**, choose **Enable push notifications**
+and grant the browser permission. Select which events should generate OS alerts:
+finished downloads, failures, scheduled tasks, and other operations. These
+preferences and permissions are configured **separately for each device**.
+
+When the WireLoft tab is visible and focused, its existing operation toasts
+are shown instead. If no foreground tab acknowledges an operation, the backend
+delivers an OS-level notification after a short grace period, even when the
+installed PWA is closed. Clicking a notification opens the relevant WireLoft
+page. Settings also contains a recent-operation history so missed results are
+still accessible.
+
+iOS/iPadOS requires installing WireLoft to the Home Screen and using HTTPS.
+On other platforms use a supported browser and HTTPS (or `localhost` for
+development). The backend needs outbound HTTPS access to the browser vendor's
+push service. No third-party account or paid notification service is required.
+Push delivery is best-effort; blocked permissions or unreachable push services
+can prevent OS-level delivery.
+
 ## Running with Docker
 
 The best way to run WireLoft is using its Docker container. Everything is managed for you automatically within the container.
