@@ -43,13 +43,13 @@ def _device_keys():
     return private, public, auth
 
 
-def _register(push_db, *, categories=None):
+def _register(push_db, *, events=None):
     private, public, auth = _device_keys()
     settings = push.upsert_subscription(
         endpoint="https://fcm.googleapis.com/fcm/send/test-device",
         p256dh=_encoded(public),
         auth=_encoded(auth),
-        categories=set(push.CATEGORIES if categories is None else categories),
+        events=set(push.EVENTS if events is None else events),
     )
     assert settings["enabled"]
     return private, {"endpoint": "https://fcm.googleapis.com/fcm/send/test-device",
@@ -146,19 +146,19 @@ def test_vapid_key_is_persisted_encrypted_and_reused(push_db):
         assert first not in stored.encrypted_private_key
 
 
-def test_subscriptions_are_encrypted_and_preferences_are_not_backfilled(push_db):
-    _private, device = _register(push_db, categories={"failures"})
+def test_subscriptions_are_encrypted_and_event_changes_are_not_backfilled(push_db):
+    _private, device = _register(push_db, events={"download_failed"})
     with push_db() as session:
         stored = session.scalar(select(PushSubscription))
         assert device["endpoint"] not in stored.encrypted_subscription
         first_enabled = stored.enabled_at
     push.upsert_subscription(
         endpoint=device["endpoint"], p256dh=device["keys"]["p256dh"],
-        auth=device["keys"]["auth"], categories={"failures", "downloads"},
+        auth=device["keys"]["auth"], events={"download_failed", "download_completed"},
     )
     with push_db() as session:
         stored = session.scalar(select(PushSubscription))
-        assert stored.categories == ["downloads", "failures"]
+        assert stored.events == ["download_completed", "download_failed"]
         assert stored.enabled_at >= first_enabled
 
 

@@ -10,6 +10,7 @@ import AutomationSettingsTab from '../components/Settings/AutomationSettingsTab'
 import DailyWireSettingsTab from '../components/Settings/DailyWireSettingsTab'
 import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
+import NotificationsSettingsTab from '../components/Notifications/NotificationsSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
 import {
@@ -26,7 +27,7 @@ import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
 
-type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'advanced'
+type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'notifications' | 'advanced'
 
 type SettingsTabDefinition = {
     id: SettingsTab
@@ -39,6 +40,7 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
     {id: 'dailywire', label: 'DailyWire', description: 'Account and integration details'},
+    {id: 'notifications', label: 'Notifications', description: 'Channels, routing and delivery history'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
 
@@ -280,6 +282,7 @@ export default function SettingsPage() {
                     {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
                     {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
                     {activeTab === 'dailywire' ? <DailyWireSettingsTab {...tabProps} /> : null}
+                    {activeTab === 'notifications' ? <NotificationsSettingsTab /> : null}
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
                 </div>
 

@@ -26,7 +26,7 @@ class PushSubscription(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     endpoint_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     encrypted_subscription: Mapped[str] = mapped_column(Text, nullable=False)
-    categories: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    events: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     enabled: Mapped[bool] = mapped_column(default=True, nullable=False)
     enabled_at: Mapped[datetime] = mapped_column(UTCDateTime(), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())

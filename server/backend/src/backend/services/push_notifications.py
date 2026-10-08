@@ -6,7 +6,6 @@ import base64
 import hashlib
 import json
 import logging
-import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,16 +21,16 @@ from sqlalchemy import select
 from backend.db.core import begin_write_transaction, get_session
 from backend.db.models.PushNotification import PushDelivery, PushSubscription, PushVapidKey
 from backend.security.crypto import decrypt_text, encrypt_text
+from backend.services.notification_events import (
+    MAX_ALERT_AGE, TERMINAL_STATUSES, NotificationEvent, notification_message, operation_event,
+)
 from task_manager.scheduler.db import TaskOperation
 
 logger = logging.getLogger(__name__)
 
-CATEGORIES = frozenset({"downloads", "failures", "tasks", "operations"})
-DEFAULT_CATEGORIES = frozenset(CATEGORIES)
-TERMINAL_STATUSES = frozenset({"SUCCEEDED", "PARTIAL", "FAILED", "CANCELED"})
+EVENTS = frozenset(event.value for event in NotificationEvent)
 GRACE_SECONDS = 12
 PRESENCE_SECONDS = 12
-MAX_ALERT_AGE = timedelta(hours=24)
 MAX_ATTEMPTS = 5
 
 # Restrict outbound traffic to known browser push providers. Subscriptions are
@@ -134,11 +133,11 @@ def _endpoint_hash(endpoint: str) -> str:
     return hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
 
 
-def upsert_subscription(*, endpoint: str, p256dh: str, auth: str, categories: set[str]) -> dict:
+def upsert_subscription(*, endpoint: str, p256dh: str, auth: str, events: set[str]) -> dict:
     validate_endpoint(endpoint)
     validate_client_keys(p256dh, auth)
-    if not categories.issubset(CATEGORIES):
-        raise ValueError("Unknown notification category")
+    if not events.issubset(EVENTS):
+        raise ValueError("Unknown notification event")
     now = datetime.now(timezone.utc)
     data = json.dumps({"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}})
     encrypted = encrypt_text(data)
@@ -155,20 +154,20 @@ def upsert_subscription(*, endpoint: str, p256dh: str, auth: str, categories: se
                 endpoint_hash=_endpoint_hash(endpoint),
                 encrypted_subscription=encrypted.decode("ascii"),
                 enabled_at=now,
-                categories=sorted(categories),
+                events=sorted(events),
                 enabled=True,
             )
             session.add(stored)
         else:
-            if not stored.enabled or set(stored.categories) != set(categories):
-                # Changing categories must not retroactively notify a device
-                # about operations completed while that category was disabled.
+            if not stored.enabled or set(stored.events) != set(events):
+                # Changing events must not retroactively notify a device
+                # about operations completed while that event was disabled.
                 stored.enabled_at = now
             stored.encrypted_subscription = encrypted.decode("ascii")
-            stored.categories = sorted(categories)
+            stored.events = sorted(events)
             stored.enabled = True
         session.commit()
-    return {"enabled": True, "categories": sorted(categories)}
+    return {"enabled": True, "events": sorted(events)}
 
 
 def subscription_settings(endpoint: str) -> dict:
@@ -179,7 +178,7 @@ def subscription_settings(endpoint: str) -> dict:
         ))
         return {
             "enabled": stored is not None,
-            "categories": stored.categories if stored is not None else sorted(DEFAULT_CATEGORIES),
+            "events": stored.events if stored is not None else sorted(EVENTS),
         }
 
 
@@ -194,44 +193,14 @@ def remove_subscription(endpoint: str) -> None:
         session.commit()
 
 
-def operation_category(operation: TaskOperation) -> str:
-    if operation.status in ("FAILED", "PARTIAL"):
-        return "failures"
-    if operation.kind.startswith("media.download") or operation.resource_type == "media_download":
-        return "downloads"
-    if operation.source != "UI" or "cron" in operation.kind or "task" in operation.kind:
-        return "tasks"
-    return "operations"
-
-
-def operation_url(category: str, operation: TaskOperation) -> str:
-    if category == "downloads" or operation.kind.startswith("media.download") or operation.resource_type == "media_download":
-        return "/downloads"
-    if category == "tasks":
-        return "/tasks"
-    if category == "failures":
-        return "/tasks"
-    return "/"
-
-
 def notification_payload(operation: TaskOperation) -> dict:
-    category = operation_category(operation)
-    labels = {
-        "SUCCEEDED": "completed",
-        "PARTIAL": "partially completed",
-        "FAILED": "failed",
-        "CANCELED": "canceled",
-    }
-    summary = (operation.result or {}).get("summary")
-    body = summary if isinstance(summary, str) and summary.strip() else operation.message
-    if not body:
-        body = operation.error or operation.title
+    message = notification_message(operation)
     return {
-        "title": f"WireLoft: {operation.title} {labels.get(operation.status, 'finished')}",
-        "body": str(body)[:350],
-        "operationId": operation.id,
-        "url": operation_url(category, operation),
-        "category": category,
+        "title": message.title,
+        "body": message.body,
+        "operationId": message.operation_id,
+        "url": message.url,
+        "event": message.event.value,
     }
 
 
@@ -307,11 +276,11 @@ def _enqueue_pending(session, now: datetime) -> None:
         PushDelivery.operation_id.in_([o.id for o in operations]),
     )).all())
     for op in operations:
-        category = operation_category(op)
+        event = operation_event(op).value
         for device in devices:
             if (
                 device.enabled_at > op.finished_at
-                or category not in device.categories
+                or event not in device.events
                 or (op.id, device.id, op.finished_at) in existing
             ):
                 continue
@@ -380,7 +349,7 @@ def deliver_pending_notifications() -> None:
             if (
                 not device.enabled or operation.notification_seen_at is not None
                 or operation.status not in TERMINAL_STATUSES
-                or operation_category(operation) not in device.categories
+                or operation_event(operation).value not in device.events
                 or operation.finished_at is None
                 or operation.finished_at != delivery.operation_finished_at
                 or operation.finished_at < now - MAX_ALERT_AGE
@@ -434,18 +403,3 @@ def deliver_pending_notifications() -> None:
                     device_id, status,
                 )
             session.commit()
-
-
-def start_push_worker() -> tuple[threading.Event, threading.Thread]:
-    stop = threading.Event()
-
-    def run() -> None:
-        while not stop.wait(5):
-            try:
-                deliver_pending_notifications()
-            except Exception:
-                logger.exception("Web Push delivery pass failed")
-
-    thread = threading.Thread(target=run, name="wireloft-web-push", daemon=True)
-    thread.start()
-    return stop, thread

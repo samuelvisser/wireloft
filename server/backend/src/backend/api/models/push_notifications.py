@@ -7,7 +7,7 @@ from datetime import datetime
 from pydantic import Field, model_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
-from backend.services.push_notifications import CATEGORIES
+from backend.services.notification_events import NotificationEvent
 
 
 class PushKeysInput(RequestBase):
@@ -18,15 +18,13 @@ class PushKeysInput(RequestBase):
 class PushSubscriptionInput(RequestBase):
     endpoint: str = Field(min_length=10, max_length=2048)
     keys: PushKeysInput
-    categories: set[str] = Field(default_factory=lambda: set(CATEGORIES))
+    events: set[NotificationEvent] = Field(default_factory=lambda: set(NotificationEvent))
 
     @model_validator(mode="after")
     def validate_push(self):
         from backend.services.push_notifications import validate_client_keys, validate_endpoint
         validate_endpoint(self.endpoint)
         validate_client_keys(self.keys.p256dh, self.keys.auth)
-        if not self.categories.issubset(CATEGORIES):
-            raise ValueError("Unknown notification category")
         return self
 
 
@@ -36,7 +34,7 @@ class PushSubscriptionLookup(RequestBase):
 
 class PushDeviceSettings(ResponseBase):
     enabled: bool
-    categories: list[str]
+    events: list[str]
 
 
 class PushPublicKey(ResponseBase):

@@ -116,8 +116,8 @@ async def application_lifespan(app: FastAPI):
         recovery_thread.start()
         recovery_started = True
 
-        from backend.services.push_notifications import start_push_worker
-        push_worker = start_push_worker()
+        from backend.services.notification_worker import start_notification_worker
+        push_worker = start_notification_worker()
         yield
     finally:
         if push_worker is not None:
@@ -237,7 +237,8 @@ def create_app() -> FastAPI:
         movie_local_media_profile_router,
         meta_router,
         config_router,
-        push_notifications_router,
+        notification_channels_router,
+    push_notifications_router,
         rss_stream_profile_router,
         stream_profile_router,
         task_router,
@@ -273,6 +274,7 @@ def create_app() -> FastAPI:
     app.include_router(custom_metadata_router, prefix="/api")
     app.include_router(meta_router, prefix="/api")
     app.include_router(config_router, prefix="/api")
+    app.include_router(notification_channels_router, prefix="/api")
     app.include_router(push_notifications_router, prefix="/api")
     app.include_router(rss_stream_profile_router, prefix="/api")
     app.include_router(stream_profile_router, prefix="/api")

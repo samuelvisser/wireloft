@@ -15,6 +15,7 @@ from .puller import puller_router
 from .settings import setting_router
 from .shows import show_router
 from .config import config_router
+from .notification_channels import notification_channels_router
 from .push_notifications import push_notifications_router
 from .tasks import task_router
 from .rss_stream_profiles import rss_stream_profile_router

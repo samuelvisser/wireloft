@@ -1,5 +1,3 @@
-import PushNotificationsSettings from './PushNotificationsSettings'
-import './PushNotificationsSettings.css'
 import type {SettingsValues} from '../../types/schemas/settings'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import type {SettingsTabProps} from './SettingsTabTypes'
@@ -64,7 +62,6 @@ export default function GeneralSettingsTab({draft, updateDraft, environmentVaria
                     })}
                 />
             </SettingsSection>
-            <PushNotificationsSettings />
         </>
     )
 }

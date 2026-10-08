@@ -1,35 +1,12 @@
 import {z} from 'zod'
 
-export const PUSH_CATEGORIES = [
-  {key: 'downloads', label: 'Completed downloads', description: 'Finished media downloads'},
-  {key: 'failures', label: 'Failures', description: 'Failed or partially completed operations'},
-  {key: 'tasks', label: 'Scheduled tasks', description: 'Automatic jobs and background work'},
-  {key: 'operations', label: 'Other operations', description: 'Other manual actions and their results'},
-] as const
-
-export type PushCategory = typeof PUSH_CATEGORIES[number]['key']
-
 const PushDeviceSettingsSchema = z.object({
   enabled: z.boolean(),
-  categories: z.array(z.enum(['downloads', 'failures', 'tasks', 'operations'])),
+  events: z.array(z.string()),
 })
 const PushPublicKeySchema = z.object({publicKey: z.string()})
-const PushHistoryEntrySchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  kind: z.string(),
-  source: z.string(),
-  status: z.string(),
-  resourceType: z.string(),
-  message: z.string().nullable(),
-  notificationSeenAt: z.string().nullable(),
-  pushNotifiedAt: z.string().nullable(),
-  finishedAt: z.string().nullable(),
-})
-const PushHistorySchema = z.array(PushHistoryEntrySchema)
-export type PushHistoryEntry = z.infer<typeof PushHistoryEntrySchema>
 
-export const DEFAULT_PUSH_CATEGORIES: PushCategory[] = PUSH_CATEGORIES.map(({key}) => key)
+export const DEFAULT_PUSH_EVENTS = ['download_failed', 'task_failed']
 
 function apiBase(): string {
   return (window as any).appConfig?.API_URL || '/api'
@@ -69,7 +46,7 @@ function applicationServerKey(base64url: string): ArrayBuffer {
   return bytes.buffer as ArrayBuffer
 }
 
-function subscriptionPayload(subscription: PushSubscription, categories: PushCategory[]) {
+function subscriptionPayload(subscription: PushSubscription, events: string[]) {
   const json = subscription.toJSON()
   if (!json.endpoint || !json.keys?.p256dh || !json.keys.auth) {
     throw new Error('The browser did not provide valid subscription keys')
@@ -77,20 +54,20 @@ function subscriptionPayload(subscription: PushSubscription, categories: PushCat
   return {
     endpoint: json.endpoint,
     keys: {p256dh: json.keys.p256dh, auth: json.keys.auth},
-    categories,
+    events,
   }
 }
 
 export async function pushDeviceSettings(subscription: PushSubscription): Promise<{
   enabled: boolean
-  categories: PushCategory[]
+  events: string[]
 }> {
   return PushDeviceSettingsSchema.parse(await pushFetch(
     '/subscription-settings', 'POST', {endpoint: subscription.endpoint},
   ))
 }
 
-export async function enablePush(categories: PushCategory[]): Promise<PushSubscription> {
+export async function enablePush(events: string[]): Promise<PushSubscription> {
   if (!supportsPush()) throw new Error('Push is not available in this browser')
   // Request permission directly from the user's click, before asynchronous IO.
   const permission = await Notification.requestPermission()
@@ -112,7 +89,7 @@ export async function enablePush(categories: PushCategory[]): Promise<PushSubscr
 
   try {
     PushDeviceSettingsSchema.parse(await pushFetch(
-      '/subscriptions', 'POST', subscriptionPayload(subscription, categories),
+      '/subscriptions', 'POST', subscriptionPayload(subscription, events),
     ))
   } catch (error) {
     if (created) await subscription.unsubscribe()
@@ -121,17 +98,13 @@ export async function enablePush(categories: PushCategory[]): Promise<PushSubscr
   return subscription
 }
 
-export async function savePushCategories(subscription: PushSubscription, categories: PushCategory[]): Promise<void> {
+export async function savePushEvents(subscription: PushSubscription, events: string[]): Promise<void> {
   PushDeviceSettingsSchema.parse(await pushFetch(
-    '/subscriptions', 'POST', subscriptionPayload(subscription, categories),
+    '/subscriptions', 'POST', subscriptionPayload(subscription, events),
   ))
 }
 
 export async function disablePush(subscription: PushSubscription): Promise<void> {
   await pushFetch('/subscriptions', 'DELETE', {endpoint: subscription.endpoint})
   await subscription.unsubscribe()
-}
-
-export async function fetchPushHistory(): Promise<PushHistoryEntry[]> {
-  return PushHistorySchema.parse(await pushFetch('/history?limit=75'))
 }

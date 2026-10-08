@@ -9,7 +9,9 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "e35bd80af19c"
+HEAD_REVISION = "b7d3f1a9c4e2"
+PUSH_NOTIFICATIONS_REVISION = "e35bd80af19c"
+REDOWNLOAD_DELAY_REVISION = "a4e7c19b2d53"
 COUNTDOWN_REDOWNLOAD_REVISION = "6d3a9f1c2b7e"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
@@ -245,7 +247,9 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == COUNTDOWN_REDOWNLOAD_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == PUSH_NOTIFICATIONS_REVISION
+    assert script.get_revision(PUSH_NOTIFICATIONS_REVISION).down_revision == REDOWNLOAD_DELAY_REVISION
+    assert script.get_revision(REDOWNLOAD_DELAY_REVISION).down_revision == COUNTDOWN_REDOWNLOAD_REVISION
     assert script.get_revision(COUNTDOWN_REDOWNLOAD_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
     assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
@@ -877,3 +881,52 @@ def test_wireloft_1_1_downgrades_to_1_0_schema(migration_database):
         assert connection.execute(text(
             "SELECT alembic_version_num FROM settings"
         )).scalar_one() == WIRELOFT_1_0_REVISION
+
+
+def test_notification_channels_migration_rewrites_push_categories_to_events(migration_database):
+    import json
+
+    from backend.db.migrations import get_alembic_config
+
+    _database_path, engine = migration_database
+    config = get_alembic_config(allow_version_storage_migration=True)
+    command.upgrade(config, PUSH_NOTIFICATIONS_REVISION)
+
+    legacy = {1: ["downloads", "failures"], 2: ["tasks", "operations"], 3: []}
+    with engine.begin() as connection:
+        for subscription_id, categories in legacy.items():
+            connection.execute(
+                text(
+                    "INSERT INTO push_subscriptions "
+                    "(id, endpoint_hash, encrypted_subscription, categories, enabled, enabled_at) "
+                    "VALUES (:id, :hash, 'x', :categories, 1, CURRENT_TIMESTAMP)"
+                ),
+                {"id": subscription_id, "hash": f"hash-{subscription_id}", "categories": json.dumps(categories)},
+            )
+
+    command.upgrade(config, HEAD_REVISION)
+
+    inspector = inspect(engine)
+    assert {"notification_channels", "notification_routes", "notification_deliveries"} <= set(
+        inspector.get_table_names()
+    )
+    columns = {column["name"] for column in inspector.get_columns("push_subscriptions")}
+    assert "events" in columns and "categories" not in columns
+    with engine.connect() as connection:
+        stored = {
+            row[0]: json.loads(row[1]) if isinstance(row[1], str) else row[1]
+            for row in connection.execute(text("SELECT id, events FROM push_subscriptions"))
+        }
+    assert stored == {
+        1: ["download_completed", "download_failed", "task_failed"],
+        2: ["new_episodes", "operations", "task_completed"],
+        3: [],
+    }
+
+    command.downgrade(config, PUSH_NOTIFICATIONS_REVISION)
+    with engine.connect() as connection:
+        restored = {
+            row[0]: sorted(json.loads(row[1]) if isinstance(row[1], str) else row[1])
+            for row in connection.execute(text("SELECT id, categories FROM push_subscriptions"))
+        }
+    assert restored == {1: ["downloads", "failures"], 2: ["operations", "tasks"], 3: []}

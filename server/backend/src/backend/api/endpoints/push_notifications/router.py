@@ -30,7 +30,7 @@ def save_push_subscription(body: PushSubscriptionInput):
         endpoint=body.endpoint,
         p256dh=body.keys.p256dh,
         auth=body.keys.auth,
-        categories=body.categories,
+        events=set(body.events),
     )
 
 
