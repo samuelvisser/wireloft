@@ -40,6 +40,7 @@
     "@awesome.me/kit-83fa1ac5a9": "^1.0.10"
   },
   "devDependencies": {
+    "@types/node": "^22.15.30",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.3",
     "@vitejs/plugin-react-swc": "^3.7.0",
