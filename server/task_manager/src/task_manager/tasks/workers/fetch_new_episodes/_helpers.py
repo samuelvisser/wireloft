@@ -6,7 +6,7 @@ from backend.db.models import Show, Season, Episode
 
 
 def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
-    """Resolve an explicit Show scope without falling back to a global scan."""
+    """Resolve an explicit Show scope, selecting only what we need"""
     if show_slug:
         show = s.scalar(select(Show).where(Show.slug == show_slug))
         return [show] if show is not None else []

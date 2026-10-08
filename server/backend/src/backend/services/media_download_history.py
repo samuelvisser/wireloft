@@ -100,8 +100,7 @@ def record_media_download_operation_history_once(
             .where(
                 MediaDownloadHistory.media_download_id == media_download_id,
                 MediaDownloadHistory.action == action_value,
-                MediaDownloadHistory.event_metadata["task_run_id"].as_integer()
-                == task_run_id,
+                MediaDownloadHistory.event_metadata["task_run_id"].as_integer() == task_run_id,
             )
             .order_by(MediaDownloadHistory.id.desc())
             .limit(1)

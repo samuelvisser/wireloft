@@ -52,20 +52,20 @@ class CustomIndexReconciliationResult:
 
 
 def profile_applies_to_show(profile: ShowLocalMediaProfile, show: Show) -> bool:
-    return profile.show_scope == ShowLocalMediaProfileScope.BOTH.value or profile.show_scope == show.type
+    return profile.show_scope == ShowLocalMediaProfileScope.BOTH or profile.show_scope == show.type
 
 
 def profile_show_scope_filter_for_show_type(show_type: str):
     """SQL predicate for Show Local Media Profiles that apply to one show type."""
     return or_(
-        ShowLocalMediaProfile.show_scope == ShowLocalMediaProfileScope.BOTH.value,
+        ShowLocalMediaProfile.show_scope == ShowLocalMediaProfileScope.BOTH,
         ShowLocalMediaProfile.show_scope == show_type,
     )
 
 
 def profile_show_scope_filter(profile: ShowLocalMediaProfile):
     """SQL predicate for Shows that are in one Local Media Profile's scope."""
-    if profile.show_scope == ShowLocalMediaProfileScope.BOTH.value:
+    if profile.show_scope == ShowLocalMediaProfileScope.BOTH:
         return true()
     return Show.type == profile.show_scope
 
@@ -153,8 +153,8 @@ def dispatch_custom_index_reconciliation(
         TaskOperationTarget.resource_type == "show",
         TaskOperationTarget.resource_id == show_id,
         TaskOperation.status.in_((
-            OperationStatus.QUEUED.value, OperationStatus.RUNNING.value,
-            OperationStatus.WAITING.value,
+            OperationStatus.QUEUED, OperationStatus.RUNNING,
+            OperationStatus.WAITING,
         )),
     ).limit(1))
     if active is not None:
@@ -166,7 +166,7 @@ def dispatch_custom_index_reconciliation(
     )
     operation = create_operation(
             session, kind="local_media_profile.manage_custom_indexes",
-            source=OperationSource.SYSTEM.value,
+            source=OperationSource.SYSTEM,
             resource_type="local_media_profile", resource_id=local_media_profile_id,
             title="Manage custom indexes", targets=[target],
     )
@@ -258,8 +258,8 @@ def _synced_downloads_before_reindex(
         EpisodeMediaDownload.media_item_id.in_(episode_by_id),
         EpisodeMediaDownload.local_media_profile_id == profile.id,
         EpisodeMediaDownload.artifact_status.in_((
-            MediaDownloadArtifactStatus.AVAILABLE.value,
-            MediaDownloadArtifactStatus.CORRUPTED.value,
+            MediaDownloadArtifactStatus.AVAILABLE,
+            MediaDownloadArtifactStatus.CORRUPTED,
         )),
     ))
     synced: dict[int, str] = {}

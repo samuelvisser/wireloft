@@ -306,8 +306,7 @@ def _build_media_download_views(
     queue_positions = (
         queue_positions
         if queue_positions is not None
-        else media_download_queue_positions(
-            s,
+        else media_download_queue_positions(s,
             [download.id for download in downloads],
         )
     )
@@ -527,7 +526,7 @@ def get_media_download_bulk_action_ids(
         statuses: Optional[list[str]],
         action: str,
 ) -> list[int]:
-    """Return exact bulk-action IDs using the same SQL status projection as paging."""
+    """Return every row in the filtered collection that supports one bulk action"""
     requested_statuses = sorted(set(statuses or []))
     collection = MediaDownloadCollectionQuery.build()
     return [

@@ -72,8 +72,7 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
                     MediaDownloadBase.media_item_id.in_(movie_extra_ids),
                 ),
             ),
-            MediaDownloadBase.artifact_status
-            != MediaDownloadArtifactStatus.ABSENT.value,
+            MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
         )
         .order_by(MediaDownloadBase.id.asc())
         .all()

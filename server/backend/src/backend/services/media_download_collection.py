@@ -26,9 +26,9 @@ from task_manager.tasks.media_download_operations import (
 _MEDIA_DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
 
 _ACTIVE_DOWNLOAD_STATUSES = (
-    OperationStatus.QUEUED.value,
-    OperationStatus.RUNNING.value,
-    OperationStatus.WAITING.value,
+    OperationStatus.QUEUED,
+    OperationStatus.RUNNING,
+    OperationStatus.WAITING,
 )
 _ACTIVE_WORKFLOW_STATUSES = (
     "downloading",
