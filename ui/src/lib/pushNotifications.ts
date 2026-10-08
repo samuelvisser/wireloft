@@ -14,7 +14,7 @@ const PushDeviceSettingsSchema = z.object({
   categories: z.array(z.enum(['downloads', 'failures', 'tasks', 'operations'])),
 })
 const PushPublicKeySchema = z.object({publicKey: z.string()})
-const PushHistorySchema = z.array(z.object({
+const PushHistoryEntrySchema = z.object({
   id: z.string(),
   title: z.string(),
   kind: z.string(),
@@ -25,8 +25,9 @@ const PushHistorySchema = z.array(z.object({
   notificationSeenAt: z.string().nullable(),
   pushNotifiedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
-}))
-export type PushHistoryEntry = z.infer<typeof PushHistorySchema>
+})
+const PushHistorySchema = z.array(PushHistoryEntrySchema)
+export type PushHistoryEntry = z.infer<typeof PushHistoryEntrySchema>
 
 export const DEFAULT_PUSH_CATEGORIES: PushCategory[] = PUSH_CATEGORIES.map(({key}) => key)
 
