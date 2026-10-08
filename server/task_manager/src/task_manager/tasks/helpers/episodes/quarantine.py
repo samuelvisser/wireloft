@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import Session, joinedload, selectinload
+from sqlalchemy.orm import Session, joinedload
 
 from backend.db.models import Episode
 from backend.db.models.Metadata import Metadata
@@ -107,10 +107,7 @@ def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]
             Episode.show_id == show_id,
             Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA,
         )
-        .options(
-            joinedload(Episode.show),
-            selectinload(Episode.meta_items),
-        )
+        .options(joinedload(Episode.show))
     ))
     if not episodes:
         return set()
