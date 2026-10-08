@@ -38,6 +38,27 @@ export function nextLazyCollectionPageRequest<T>(
     }
 }
 
+
+export function contiguousLazyCollectionItems<T>(
+    pages: readonly LazyCollectionPage<T>[],
+): {items: T[]; complete: boolean} | null {
+    if (pages.length === 0) return null
+
+    const items: T[] = []
+    let expectedOffset = 0
+    let complete = false
+    for (const page of pages) {
+        if (page.offset !== expectedOffset) break
+        items.push(...page.items)
+        expectedOffset += page.items.length
+        complete = !page.hasMore
+        if (complete) break
+    }
+
+    if (expectedOffset === 0 && pages[0].items.length > 0) return null
+    return {items, complete}
+}
+
 type LazyCollectionOptions<T extends {id: number}> = {
     queryKey: readonly unknown[]
     collectionPrefix: readonly unknown[]

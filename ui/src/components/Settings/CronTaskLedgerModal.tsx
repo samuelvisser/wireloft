@@ -4,7 +4,7 @@ import {faIcon} from '../../icons/faIcon'
 
 import ProgressButton from '../common/ProgressButton'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
-import {useTaskLedgerPage, type TaskLedgerPageQuery} from '../../lib/taskLedger'
+import {useTaskLedgerInfinite, type TaskLedgerCollectionQuery} from '../../lib/taskLedger'
 import type {TaskLedgerEntryRead} from '../../types/schemas/task'
 import './CronTaskLedgerModal.css'
 
@@ -12,7 +12,7 @@ type Props = {
     open: boolean
     title: string
     definition: FrontendOperationDefinition
-    query: Omit<TaskLedgerPageQuery, 'offset' | 'limit' | 'enabled'>
+    query: Omit<TaskLedgerCollectionQuery, 'limit' | 'enabled'>
     starting: boolean
     canceling: boolean
     onClose: () => void
@@ -96,20 +96,39 @@ export default function CronTaskLedgerModal({
         if (open) setPage(1)
     }, [open, query.definitionKey])
 
-    const ledger = useTaskLedgerPage({
+    const ledger = useTaskLedgerInfinite({
         ...query,
-        offset: (page - 1) * PAGE_SIZE,
+        orderBy: query.orderBy ?? 'created_at',
+        order: query.order ?? 'desc',
         limit: PAGE_SIZE,
         enabled: open,
     })
 
-    const total = ledger.data?.total ?? 0
+    const total = ledger.total
     const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-    const entries = ledger.data?.items ?? []
+    const totalIsProvisional = (
+        ledger.isPlaceholderData
+        && ledger.hasNextPage
+        && total === ledger.items.length
+    )
+    const pageStart = (page - 1) * PAGE_SIZE
+    const entries = ledger.items.slice(pageStart, pageStart + PAGE_SIZE)
 
     useEffect(() => {
         if (page > totalPages) setPage(totalPages)
     }, [page, totalPages])
+
+    const showNextPage = async () => {
+        if (page >= totalPages || ledger.isFetching) return
+
+        const nextPage = page + 1
+        const requiredRows = nextPage * PAGE_SIZE
+        if (ledger.items.length < requiredRows && ledger.hasNextPage) {
+            const result = await ledger.fetchNextPage()
+            if (result.isError) return
+        }
+        setPage(nextPage)
+    }
 
     if (!open) return null
 
@@ -181,13 +200,13 @@ export default function CronTaskLedgerModal({
                             Previous
                         </button>
                         <span className="cron-task-ledger-page-label" aria-live="polite">
-                            Page {page} of {totalPages}
+                            {totalIsProvisional ? `Page ${page}` : `Page ${page} of ${totalPages}`}
                         </span>
                         <button
                             type="button"
                             className="btn"
                             disabled={page >= totalPages || ledger.isFetching}
-                            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                            onClick={() => void showNextPage()}
                         >
                             Next
                         </button>

@@ -12,6 +12,7 @@ import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} 
 import {
     type LazyCollectionPage,
     type LazyCollectionPageRequest,
+    contiguousLazyCollectionItems,
     updateLazyCollectionEntities,
     useLazyCollection,
 } from './lazyCollection'
@@ -52,7 +53,6 @@ import {
     MediaDownloadViewReadSchema,
 } from "../types/schemas/media_download";
 import {TaskOperationRead} from "../types/schemas/operation";
-import {TaskLedgerPageReadSchema} from "../types/schemas/task";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {
     DailywireCatalogRead,
@@ -739,26 +739,6 @@ function mediaDownloadStatusFilterContains(
     return target.every((status) => sourceStatuses.has(status))
 }
 
-function contiguousLazyCollectionItems<T>(
-    pages: readonly LazyCollectionPage<T>[],
-): {items: T[]; complete: boolean} | null {
-    if (pages.length === 0) return null
-
-    const items: T[] = []
-    let expectedOffset = 0
-    let complete = false
-    for (const page of pages) {
-        if (page.offset !== expectedOffset) break
-        items.push(...page.items)
-        expectedOffset += page.items.length
-        complete = !page.hasMore
-        if (complete) break
-    }
-
-    if (expectedOffset === 0 && pages[0].items.length > 0) return null
-    return {items, complete}
-}
-
 export function deriveMediaDownloadCollectionPlaceholder(
     queryClient: QueryClient,
     *,
@@ -977,52 +957,6 @@ export function applyMediaDownloadQueuePositions(
             return {...download, queuePosition}
         },
     )
-}
-
-type TaskLedgerQuery = {
-    definitionKey: string
-    resourceType?: string
-    resourceId?: number
-    orderBy?: 'started_at' | 'finished_at' | 'created_at'
-    order?: 'asc' | 'desc'
-    limit?: number
-    enabled?: boolean
-}
-
-export function useTaskLedger({
-    definitionKey,
-    resourceType,
-    resourceId,
-    orderBy = 'started_at',
-    order = 'desc',
-    limit = 50,
-    enabled = true,
-}: TaskLedgerQuery) {
-    return useInfiniteQuery({
-        queryKey: ['taskLedger', definitionKey, resourceType, resourceId, orderBy, order, limit] as const,
-        enabled: enabled && definitionKey.length > 0,
-        initialPageParam: 0,
-        queryFn: async ({pageParam, signal}) => {
-            const params = new URLSearchParams({
-                definition_key: definitionKey,
-                order_by: orderBy,
-                order,
-                offset: String(pageParam),
-                limit: String(limit),
-            })
-            if (resourceType) params.set('resource_type', resourceType)
-            if (resourceId !== undefined) params.set('resource_id', String(resourceId))
-            const value = await fetchJSON<unknown>(
-                `${(window as any).appConfig.API_URL}/tasks/ledger?${params}`,
-                signal,
-            )
-            return TaskLedgerPageReadSchema.parse(value)
-        },
-        getNextPageParam: (lastPage) => lastPage.hasMore
-            ? lastPage.offset + lastPage.items.length
-            : undefined,
-        refetchOnMount: 'always',
-    })
 }
 
 // Prefetch core data to warm the cache on app start

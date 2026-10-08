@@ -11,6 +11,8 @@ import {
     compareMediaDownloadWorkflowOrder,
     deriveMediaDownloadCollectionPlaceholder,
 } from '../src/lib/queries'
+import {deriveTaskLedgerCollectionPlaceholder} from '../src/lib/taskLedger'
+import type {TaskLedgerEntryRead} from '../src/types/schemas/task'
 import type {
     MediaDownloadDomainViewRead,
     MediaDownloadViewRead,
@@ -288,4 +290,222 @@ test('a narrower download filter can reuse a filtered superset with the same ord
     assert.ok(placeholder)
     assert.deepEqual(placeholder.pages[0].items.map((item) => item.id), [2, 1])
     assert.equal(placeholder.pages[0].total, 2)
+})
+
+
+function taskLedgerEntry(
+    id: number,
+    {
+        definitionKey = 'fetch_new_episodes',
+        resourceType = 'show',
+        resourceId = 0,
+        status = 'SUCCEEDED',
+        startedAt = `2026-10-08T0${id}:00:00Z`,
+    }: Partial<Pick<
+        TaskLedgerEntryRead,
+        'definitionKey' | 'resourceType' | 'resourceId' | 'status' | 'startedAt'
+    >> = {},
+): TaskLedgerEntryRead {
+    return {
+        id,
+        definitionKey,
+        definitionTitle: definitionKey,
+        resourceType,
+        resourceId,
+        status,
+        inputs: {},
+        result: null,
+        attemptCount: 1,
+        maxRetries: 0,
+        createdAt: startedAt ?? `2026-10-08T0${id}:00:00Z`,
+        updatedAt: startedAt ?? `2026-10-08T0${id}:00:00Z`,
+        startedAt,
+    } as TaskLedgerEntryRead
+}
+
+test('cron task ledger can render immediately from the broader Tasks cache without populating its own key', () => {
+    const queryClient = new QueryClient()
+    const tasksKey = [
+        'taskLedger',
+        'list',
+        null,
+        null,
+        null,
+        null,
+        null,
+        'created_at',
+        'desc',
+    ] as const
+    const cronKey = [
+        'taskLedger',
+        'list',
+        'fetch_new_episodes',
+        'show',
+        [0],
+        null,
+        null,
+        'created_at',
+        'desc',
+    ] as const
+    const broadPage: LazyCollectionPage<TaskLedgerEntryRead> = {
+        items: [
+            taskLedgerEntry(3, {definitionKey: 'file_watcher'}),
+            taskLedgerEntry(2),
+            taskLedgerEntry(1, {resourceId: 9}),
+        ],
+        total: 3,
+        offset: 0,
+        limit: 100,
+        hasMore: false,
+    }
+
+    queryClient.setQueryData<InfiniteData<
+        LazyCollectionPage<TaskLedgerEntryRead>,
+        {offset: number; limit: number}
+    >>(tasksKey, {
+        pages: [broadPage],
+        pageParams: [{offset: 0, limit: 100}],
+    })
+
+    const placeholder = deriveTaskLedgerCollectionPlaceholder(queryClient, {
+        definitionKey: 'fetch_new_episodes',
+        resourceType: 'show',
+        resourceIds: [0],
+        statuses: undefined,
+        startedAfter: undefined,
+        orderBy: 'created_at',
+        order: 'desc',
+        initialCount: 10,
+    })
+
+    assert.ok(placeholder)
+    assert.deepEqual(placeholder.pages[0].items.map((item) => item.id), [2])
+    assert.equal(placeholder.pages[0].total, 1)
+
+    // As with downloads, this is observer-only placeholder data. Opening the
+    // cron ledger still performs its own filtered /tasks/ledger request.
+    assert.equal(queryClient.getQueryData(cronKey), undefined)
+})
+
+test('task ledger placeholder reuse respects status and started-after filters', () => {
+    const queryClient = new QueryClient()
+    const tasksKey = [
+        'taskLedger',
+        'list',
+        null,
+        null,
+        null,
+        null,
+        null,
+        'created_at',
+        'desc',
+    ] as const
+    const broadPage: LazyCollectionPage<TaskLedgerEntryRead> = {
+        items: [
+            taskLedgerEntry(3, {status: 'FAILED', startedAt: '2026-10-08T03:00:00Z'}),
+            taskLedgerEntry(2, {status: 'SUCCEEDED', startedAt: '2026-10-08T02:00:00Z'}),
+            taskLedgerEntry(1, {status: 'FAILED', startedAt: '2026-10-08T01:00:00Z'}),
+        ],
+        total: 3,
+        offset: 0,
+        limit: 100,
+        hasMore: false,
+    }
+
+    queryClient.setQueryData<InfiniteData<
+        LazyCollectionPage<TaskLedgerEntryRead>,
+        {offset: number; limit: number}
+    >>(tasksKey, {
+        pages: [broadPage],
+        pageParams: [{offset: 0, limit: 100}],
+    })
+
+    const placeholder = deriveTaskLedgerCollectionPlaceholder(queryClient, {
+        definitionKey: 'fetch_new_episodes',
+        resourceType: 'show',
+        resourceIds: [0],
+        statuses: ['FAILED'],
+        startedAfter: '2026-10-08T02:00:00Z',
+        orderBy: 'created_at',
+        order: 'desc',
+        initialCount: 10,
+    })
+
+    assert.ok(placeholder)
+    assert.deepEqual(placeholder.pages[0].items.map((item) => item.id), [3])
+})
+
+test('task ledger placeholder reuse never crosses ordering', () => {
+    const queryClient = new QueryClient()
+    const tasksKey = [
+        'taskLedger',
+        'list',
+        null,
+        null,
+        null,
+        null,
+        null,
+        'started_at',
+        'desc',
+    ] as const
+    const broadPage: LazyCollectionPage<TaskLedgerEntryRead> = {
+        items: [taskLedgerEntry(1)],
+        total: 1,
+        offset: 0,
+        limit: 100,
+        hasMore: false,
+    }
+
+    queryClient.setQueryData<InfiniteData<
+        LazyCollectionPage<TaskLedgerEntryRead>,
+        {offset: number; limit: number}
+    >>(tasksKey, {
+        pages: [broadPage],
+        pageParams: [{offset: 0, limit: 100}],
+    })
+
+    assert.equal(
+        deriveTaskLedgerCollectionPlaceholder(queryClient, {
+            definitionKey: 'fetch_new_episodes',
+            resourceType: 'show',
+            resourceIds: [0],
+            statuses: undefined,
+            startedAfter: undefined,
+            orderBy: 'created_at',
+            order: 'desc',
+            initialCount: 10,
+        }),
+        undefined,
+    )
+})
+
+
+test('a 10-row ledger modal reuses a 100-row Tasks page before requesting the next backend page', () => {
+    const cachedTasksPage: LazyCollectionPage<{id: number}> = {
+        items: Array.from({length: 100}, (_, index) => ({id: index + 1})),
+        total: 150,
+        offset: 0,
+        limit: 100,
+        hasMore: true,
+    }
+
+    assert.deepEqual(
+        nextLazyCollectionPageRequest(cachedTasksPage, [cachedTasksPage], 10, 10),
+        {offset: 100, limit: 10},
+    )
+})
+
+test('Tasks expands a 10-row ledger cache by requesting only the missing 90 rows', () => {
+    const cachedLedgerPage: LazyCollectionPage<{id: number}> = {
+        items: Array.from({length: 10}, (_, index) => ({id: index + 1})),
+        total: 150,
+        offset: 0,
+        limit: 10,
+        hasMore: true,
+    }
+
+    assert.deepEqual(
+        nextLazyCollectionPageRequest(cachedLedgerPage, [cachedLedgerPage], 100, 100),
+        {offset: 10, limit: 90},
+    )
 })

@@ -169,6 +169,11 @@ export default function TasksPage() {
     })
     const rows = query.items
     const total = query.total
+    const totalIsProvisional = (
+        query.isPlaceholderData
+        && query.hasNextPage
+        && total === rows.length
+    )
 
     useEffect(() => {
         const element = sentinelRef.current
@@ -322,7 +327,9 @@ export default function TasksPage() {
                         </button>
                     )}
                 </div>
-                <strong className="task-view-count">{total.toLocaleString()} {total === 1 ? 'task' : 'tasks'}</strong>
+                <strong className="task-view-count">
+                    {total.toLocaleString()}{totalIsProvisional ? '+' : ''} {total === 1 && !totalIsProvisional ? 'task' : 'tasks'}
+                </strong>
             </div>
 
             <div className="form-row">
