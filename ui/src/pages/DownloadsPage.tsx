@@ -22,6 +22,7 @@ import {
     DownloadStatusFilterOption,
     downloadStatusFilterFromSearchParams,
     downloadStatusFiltersToSearchParams,
+    downloadStatusesForApi,
 } from '../lib/downloadStatusFilters'
 import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
@@ -109,7 +110,10 @@ export default function DownloadsPage() {
     )
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
     const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
-    const selectedStatuses = useMemo(() => [...statusFilter].sort(), [statusFilter])
+    const selectedStatuses = useMemo(
+        () => downloadStatusesForApi(statusFilter),
+        [statusFilter],
+    )
     const downloadsQuery = useMediaDownloadsCollection({
         statuses: selectedStatuses,
         order: 'workflow',
@@ -302,7 +306,7 @@ export default function DownloadsPage() {
         try {
             const base = (window as any).appConfig?.API_URL || '/api'
             const params = new URLSearchParams({action})
-            for (const status of selectedStatuses) params.append('status', status)
+            for (const status of selectedStatuses ?? []) params.append('status', status)
             const idsResponse = await fetch(
                 `${base}/media-downloads/as-view/action-ids?${params}`,
                 {credentials: 'include'},

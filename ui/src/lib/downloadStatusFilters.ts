@@ -29,12 +29,32 @@ export const DOWNLOAD_STATUS_FILTER_OPTIONS: readonly DownloadStatusFilterOption
     {value: 'corrupted', label: 'Corrupted', statuses: ['corrupted']},
 ]
 
+// All API presentation statuses represented by the download filter chips.
+export const ALL_DOWNLOAD_STATUSES = new Set(
+    DOWNLOAD_STATUS_FILTER_OPTIONS.flatMap((option) => option.statuses),
+)
+
 // Show everything by default except completed downloads.
 export const DEFAULT_DOWNLOAD_STATUS_FILTER = new Set(
     DOWNLOAD_STATUS_FILTER_OPTIONS
         .filter((option) => option.value !== 'downloaded')
         .flatMap((option) => option.statuses),
 )
+
+export function downloadStatusesForApi(
+    statuses: readonly string[] | ReadonlySet<string> | undefined,
+): string[] | undefined {
+    if (statuses === undefined) return undefined
+
+    const unique = new Set(statuses)
+    if (
+        unique.size === ALL_DOWNLOAD_STATUSES.size
+        && [...ALL_DOWNLOAD_STATUSES].every((status) => unique.has(status))
+    ) {
+        return undefined
+    }
+    return [...unique].sort()
+}
 
 const DOWNLOAD_STATUS_FILTER_OPTIONS_BY_VALUE = new Map(
     DOWNLOAD_STATUS_FILTER_OPTIONS.map((option) => [option.value, option]),

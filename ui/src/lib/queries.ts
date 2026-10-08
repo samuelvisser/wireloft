@@ -17,6 +17,7 @@ import {
     useLazyCollection,
 } from './lazyCollection'
 import {useFrontendPuller} from './puller'
+import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
     fetchEpisodePage,
@@ -880,7 +881,7 @@ export function useMediaDownloadsCollection({
     enabled = true,
 }: MediaDownloadCollectionQuery = {}) {
     const normalizedStatuses = useMemo(
-        () => statuses === undefined ? undefined : [...new Set(statuses)].sort(),
+        () => downloadStatusesForApi(statuses),
         [statuses],
     )
     const {data: pullData} = useFrontendPuller()
