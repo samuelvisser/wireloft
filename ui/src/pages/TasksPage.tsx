@@ -169,11 +169,7 @@ export default function TasksPage() {
     })
     const rows = query.items
     const total = query.total
-    const totalIsProvisional = (
-        query.isPlaceholderData
-        && query.hasNextPage
-        && total === rows.length
-    )
+    const totalIsProvisional = query.isTotalProvisional
 
     useEffect(() => {
         const element = sentinelRef.current

@@ -1,5 +1,7 @@
 import {useState} from 'react'
-import {useInfiniteQuery, useQuery} from '@tanstack/react-query'
+import {useQuery} from '@tanstack/react-query'
+
+import {useLazyCollection} from './lazyCollection'
 
 import type {ShowLocalMediaProfileScope} from '../types/local_media_profile'
 
@@ -19,9 +21,12 @@ export type LocalMediaProfileTemplateSource = {
 
 export type LocalMediaProfileTemplateSourcePage = {
     items: LocalMediaProfileTemplateSource[]
-    offset: number
     limit: number
+    nextCursor?: string | null
+    previousCursor?: string | null
     hasMore: boolean
+    hasPrevious?: boolean
+    revision: string
 }
 
 type LocalMediaProfileTemplateSourceOptions = {
@@ -73,26 +78,27 @@ export function useLocalMediaProfileTemplateSources(
     const effectiveAnchorSourceId = mode === 'show' && !search.trim()
         ? anchorSourceId
         : undefined
-    return useInfiniteQuery<LocalMediaProfileTemplateSourcePage>({
+
+    return useLazyCollection<LocalMediaProfileTemplateSource>({
+        collectionPrefix: ['localMediaProfileTemplateSources'] as const,
         queryKey: [
-            'localMediaProfileTemplateSources',
             mode,
             showScope,
-            search,
-            pageSize,
-            effectiveAnchorSourceId,
-        ],
+            search.trim(),
+            effectiveAnchorSourceId ?? null,
+        ] as const,
+        initialCount: pageSize,
+        batchSize: pageSize,
         enabled,
-        initialPageParam: effectiveAnchorSourceId ? 'anchor' : 0,
-        queryFn: async ({pageParam, signal}) => {
+        fetchPage: async ({cursor, limit}, signal) => {
             const params = new URLSearchParams({
                 type: mode,
-                limit: String(pageSize),
+                limit: String(limit),
             })
-            if (pageParam === 'anchor' && effectiveAnchorSourceId) {
+            if (cursor) {
+                params.set('cursor', cursor)
+            } else if (effectiveAnchorSourceId) {
                 params.set('anchor_source_id', effectiveAnchorSourceId)
-            } else {
-                params.set('offset', String(pageParam))
             }
             if (mode === 'show') params.set('show_scope', showScope)
             if (search.trim()) params.set('search', search.trim())
@@ -101,15 +107,9 @@ export function useLocalMediaProfileTemplateSources(
                 signal,
             )
         },
-        getNextPageParam: (lastPage) => lastPage.hasMore
-            ? lastPage.offset + lastPage.items.length
-            : undefined,
-        getPreviousPageParam: (firstPage) => firstPage.offset > 0
-            ? Math.max(0, firstPage.offset - firstPage.limit)
-            : undefined,
-        staleTime: 30_000,
     })
 }
+
 
 
 export function useRandomShowTemplateSource(

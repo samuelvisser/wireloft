@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
@@ -149,6 +150,8 @@ def test_queue_positions_preserve_creation_order_when_timestamps_tie():
 
 
 def test_download_page_uses_dispatcher_queue_order_and_paginates():
+    from fastapi import HTTPException
+
     from backend.api.endpoints.media_downloads.service import get_media_downloads_page
     from task_manager.tasks.media_download_operations import create_media_download_operation
 
@@ -171,7 +174,7 @@ def test_download_page_uses_dispatcher_queue_order_and_paginates():
             session,
             statuses=["pending"],
             order="workflow",
-            offset=0,
+            cursor=None,
             limit=2,
         )
         assert first_page.total == 3
@@ -180,6 +183,15 @@ def test_download_page_uses_dispatcher_queue_order_and_paginates():
         assert first_page.actions["retry"] == 0
         assert first_page.actions["delete-unavailable"] == 3
         assert first_page.has_more is True
+        assert first_page.next_cursor is not None
+        with pytest.raises(HTTPException, match="Cursor does not match this download collection"):
+            get_media_downloads_page(
+                session,
+                statuses=["downloaded"],
+                order="workflow",
+                cursor=first_page.next_cursor,
+                limit=2,
+            )
         assert [item.id for item in first_page.items] == [
             first_download.id,
             second_download.id,
@@ -190,7 +202,7 @@ def test_download_page_uses_dispatcher_queue_order_and_paginates():
             session,
             statuses=["pending"],
             order="workflow",
-            offset=2,
+            cursor=first_page.next_cursor,
             limit=2,
         )
         assert second_page.total == 3
@@ -218,7 +230,7 @@ def test_download_page_filters_status_before_applying_limit():
             session,
             statuses=["downloaded"],
             order="recent",
-            offset=0,
+            cursor=None,
             limit=1,
         )
 
@@ -341,6 +353,59 @@ def test_filtered_bulk_action_ids_do_not_depend_on_loaded_pages():
             statuses=["downloaded"],
             action="retry",
         ) == [downloaded.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
+
+def test_download_cursor_restarts_when_workflow_revision_changes():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        oldest = _make_download(session, slug="cursor-oldest")
+        boundary = _make_download(session, slug="cursor-boundary")
+        newest = _make_download(session, slug="cursor-newest")
+        for download, when in (
+            (oldest, datetime(2026, 9, 10, 1, 0, tzinfo=timezone.utc)),
+            (boundary, datetime(2026, 9, 10, 2, 0, tzinfo=timezone.utc)),
+            (newest, datetime(2026, 9, 10, 3, 0, tzinfo=timezone.utc)),
+        ):
+            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            download.downloaded_at = when
+        session.commit()
+
+        first = get_media_downloads_page(
+            session,
+            statuses=["downloaded"],
+            order="recent",
+            cursor=None,
+            limit=2,
+        )
+        assert [item.id for item in first.items] == [newest.id, boundary.id]
+        assert first.next_cursor is not None
+
+        session.delete(newest)
+        inserted = _make_download(session, slug="cursor-inserted")
+        inserted.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        inserted.downloaded_at = datetime(2026, 9, 10, 4, 0, tzinfo=timezone.utc)
+        session.commit()
+
+        changed = get_media_downloads_page(
+            session,
+            statuses=["downloaded"],
+            order="recent",
+            cursor=first.next_cursor,
+            limit=2,
+        )
+
+        # Downloads has mutable workflow state, so any collection revision
+        # change deliberately restarts from the head. The frontend sees the
+        # revision mismatch and replaces the old page chain.
+        assert changed.revision != first.revision
+        assert [item.id for item in changed.items] == [inserted.id, boundary.id]
     finally:
         session.close()
         engine.dispose()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import AwareDatetime
 
 from task_manager.scheduler.types import ResourceType, TaskStatus
@@ -78,18 +78,21 @@ def ledger(
         started_after: AwareDatetime | None = None,
         order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
         order: Literal["asc", "desc"] = "desc",
-        offset: int = Query(default=0, ge=0),
+        cursor: str | None = Query(default=None, max_length=2048),
         limit: int = Query(default=50, ge=1, le=200),
 ):
     """Return paginated durable TaskRun history, optionally limited to one task type."""
-    return list_ledger(
-        definition_key=definition_key,
-        resource_type=resource_type.value if resource_type is not None else None,
-        resource_ids=resource_id,
-        statuses=[item.value for item in status] if status else None,
-        started_after=started_after,
-        order_by=order_by,
-        order=order,
-        offset=offset,
-        limit=limit,
-    )
+    try:
+        return list_ledger(
+            definition_key=definition_key,
+            resource_type=resource_type.value if resource_type is not None else None,
+            resource_ids=resource_id,
+            statuses=[item.value for item in status] if status else None,
+            started_after=started_after,
+            order_by=order_by,
+            order=order,
+            cursor=cursor,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc

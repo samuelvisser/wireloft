@@ -81,11 +81,7 @@ export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, on
 
   const total = ledger.total
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const totalIsProvisional = (
-    ledger.isPlaceholderData
-    && ledger.hasNextPage
-    && total === ledger.items.length
-  )
+  const totalIsProvisional = ledger.isTotalProvisional
   const pageStart = (page - 1) * PAGE_SIZE
   const entries = ledger.items.slice(pageStart, pageStart + PAGE_SIZE)
 

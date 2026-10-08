@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -97,7 +97,7 @@ def test_episode_view_page_is_bounded_and_season_filtered():
         newest = get_episode_views_by_show_page(
             session,
             show.slug,
-            offset=0,
+            cursor=None,
             limit=2,
         )
         assert [item.slug for item in newest.items] == [
@@ -107,11 +107,12 @@ def test_episode_view_page_is_bounded_and_season_filtered():
         assert newest.total == 3
         assert newest.show_total == 3
         assert newest.has_more is True
+        assert newest.next_cursor is not None
 
         second_season = get_episode_views_by_show_page(
             session,
             show.slug,
-            offset=0,
+            cursor=None,
             limit=1,
             season_id=season_two.id,
         )
@@ -123,7 +124,7 @@ def test_episode_view_page_is_bounded_and_season_filtered():
         second_page = get_episode_views_by_show_page(
             session,
             show.slug,
-            offset=1,
+            cursor=second_season.next_cursor,
             limit=1,
             season_id=season_two.id,
         )
@@ -202,6 +203,146 @@ def test_recently_indexed_episode_views_use_index_time_and_limit():
         assert [item.show_slug for item in recent] == [
             "recent-indexing-show",
             "recent-indexing-show",
+        ]
+
+    engine.dispose()
+
+
+
+def test_episode_cursor_survives_insert_and_delete_before_boundary():
+    import backend.db.models  # noqa: F401
+
+    from backend.api.endpoints.episodes.service import get_episode_views_by_show_page
+    from backend.db import Base
+    from backend.db.models import Season, Show
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        show = Show(
+            uuid="show-cursor-mutation",
+            slug="cursor-mutation-show",
+            title="Cursor Mutation Show",
+            description=None,
+            sharing_url="https://example.test/cursor-show",
+            membership_level="FREE",
+            type=ShowType.PODCAST.value,
+            episode_identifier=EpisodeIdentifier.NUMBERED.value,
+            author_name="Host",
+            author_slug="host",
+        )
+        session.add(show)
+        session.flush()
+        season = Season(show_id=show.id, index=1, slug="season-1", name="Season 1")
+        session.add(season)
+        session.flush()
+
+        newest = _episode(
+            show=show, season=season, index=3, slug="newest",
+            published=datetime(2026, 3, 3),
+        )
+        boundary = _episode(
+            show=show, season=season, index=2, slug="boundary",
+            published=datetime(2026, 3, 2),
+        )
+        oldest = _episode(
+            show=show, season=season, index=1, slug="oldest",
+            published=datetime(2026, 3, 1),
+        )
+        session.add_all([newest, boundary, oldest])
+        session.commit()
+
+        first = get_episode_views_by_show_page(
+            session, show.slug, cursor=None, limit=2,
+        )
+        assert [item.slug for item in first.items] == ["newest", "boundary"]
+        assert first.next_cursor is not None
+
+        # Both changes happen before the keyset boundary and therefore must not
+        # move the continuation point.
+        session.delete(newest)
+        session.add(_episode(
+            show=show, season=season, index=4, slug="inserted-newest",
+            published=datetime(2026, 3, 4),
+        ))
+        session.commit()
+
+        second = get_episode_views_by_show_page(
+            session, show.slug, cursor=first.next_cursor, limit=2,
+        )
+        assert [item.slug for item in second.items] == ["oldest"]
+        assert second.has_more is False
+
+    engine.dispose()
+
+
+
+def test_episode_cursor_restarts_when_existing_sort_key_changes():
+    import backend.db.models  # noqa: F401
+
+    from backend.api.endpoints.episodes.service import get_episode_views_by_show_page
+    from backend.db import Base
+    from backend.db.models import Season, Show
+    from backend.types.show_types import EpisodeIdentifier, ShowType
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        show = Show(
+            uuid="show-cursor-revision",
+            slug="cursor-revision-show",
+            title="Cursor Revision Show",
+            description=None,
+            sharing_url="https://example.test/cursor-revision-show",
+            membership_level="FREE",
+            type=ShowType.PODCAST.value,
+            episode_identifier=EpisodeIdentifier.NUMBERED.value,
+            author_name="Host",
+            author_slug="host",
+        )
+        session.add(show)
+        session.flush()
+        season = Season(show_id=show.id, index=1, slug="season-1", name="Season 1")
+        session.add(season)
+        session.flush()
+
+        first_episode = _episode(
+            show=show, season=season, index=3, slug="first",
+            published=datetime(2026, 5, 3),
+        )
+        boundary = _episode(
+            show=show, season=season, index=2, slug="boundary-revision",
+            published=datetime(2026, 5, 2),
+        )
+        last_episode = _episode(
+            show=show, season=season, index=1, slug="last",
+            published=datetime(2026, 5, 1),
+        )
+        session.add_all([first_episode, boundary, last_episode])
+        session.commit()
+
+        first = get_episode_views_by_show_page(
+            session, show.slug, cursor=None, limit=2,
+        )
+        assert first.next_cursor is not None
+
+        # Move the last episode ahead of the old cursor and explicitly advance
+        # updated_at to model a metadata correction to an existing row.
+        last_episode.published_date = datetime(2026, 5, 4)
+        last_episode.updated_at = last_episode.created_at + timedelta(minutes=1)
+        session.commit()
+
+        changed = get_episode_views_by_show_page(
+            session, show.slug, cursor=first.next_cursor, limit=2,
+        )
+
+        assert changed.revision != first.revision
+        assert [item.slug for item in changed.items] == [
+            "last",
+            "first",
         ]
 
     engine.dispose()

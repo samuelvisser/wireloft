@@ -14,6 +14,12 @@ from sqlalchemy.orm import (
     with_polymorphic,
 )
 
+from backend.api.pagination import (
+    InvalidCursorError,
+    cursor_key_values,
+    decode_cursor,
+    encode_cursor,
+)
 from backend.api.models.media_download import (
     EpisodeDownloadAPICreate,
     MediaDownloadAPIRead,
@@ -514,10 +520,10 @@ def get_media_downloads_page(
         *,
         statuses: Optional[list[str]] = None,
         order: str = "workflow",
-        offset: int = 0,
+        cursor: str | None = None,
         limit: int = 50,
 ) -> MediaDownloadPageRead:
-    """Return one stable page after applying UI status filters and workflow ordering."""
+    """Return one cursor page after applying UI status filters and workflow ordering."""
     downloads = list(s.scalars(
         select(MediaDownloadBase)
         .options(
@@ -539,6 +545,7 @@ def get_media_downloads_page(
     queue_positions = get_media_download_queue_positions(s)
 
     requested_statuses = set(statuses or [])
+    cursor_statuses = sorted(requested_statuses)
     status_counts: dict[str, int] = {}
     rows: list[tuple[MediaDownloadBase, str]] = []
     for download in downloads:
@@ -552,34 +559,34 @@ def get_media_downloads_page(
             continue
         rows.append((download, status))
 
-    if order == "recent":
-        def recent_key(item: tuple[MediaDownloadBase, str]):
-            download, status = item
-            run = latest_runs.get(download.id)
-            if status in {"downloaded", "redownloaded"}:
-                occurred_at = (
-                    (run.finished_at if run is not None else None)
-                    or download.downloaded_at
-                    or download.created_at
-                )
-            else:
-                occurred_at = (
-                    (run.finished_at if run is not None else None)
-                    or download.updated_at
-                    or download.created_at
-                )
-            return (occurred_at, download.id)
-        rows.sort(key=recent_key, reverse=True)
-    else:
-        def workflow_key(item: tuple[MediaDownloadBase, str]):
-            download, status = item
-            if status in {"downloading", "preparing", "waiting", "canceling", "local_processing"}:
-                return (0, 0, -download.id)
-            if status == "pending":
-                queue_position = queue_positions.get(download.id)
-                return (1, -1 if queue_position is None else queue_position, -download.id)
-            return (2, 0, -download.id)
-        rows.sort(key=workflow_key)
+    def recent_key(item: tuple[MediaDownloadBase, str]) -> tuple[float, int]:
+        download, status = item
+        run = latest_runs.get(download.id)
+        if status in {"downloaded", "redownloaded"}:
+            occurred_at = (
+                (run.finished_at if run is not None else None)
+                or download.downloaded_at
+                or download.created_at
+            )
+        else:
+            occurred_at = (
+                (run.finished_at if run is not None else None)
+                or download.updated_at
+                or download.created_at
+            )
+        return (-occurred_at.timestamp(), -download.id)
+
+    def workflow_key(item: tuple[MediaDownloadBase, str]) -> tuple[int, int, int]:
+        download, status = item
+        if status in {"downloading", "preparing", "waiting", "canceling", "local_processing"}:
+            return (0, 0, -download.id)
+        if status == "pending":
+            queue_position = queue_positions.get(download.id)
+            return (1, -1 if queue_position is None else queue_position, -download.id)
+        return (2, 0, -download.id)
+
+    sort_key = recent_key if order == "recent" else workflow_key
+    rows.sort(key=sort_key)
 
     action_counts = {
         action: sum(
@@ -590,8 +597,40 @@ def get_media_downloads_page(
     }
 
     total = len(rows)
-    selected = rows[offset:offset + limit]
-    selected_ids = [download.id for download, _ in selected]
+    revision = _download_collection_revision(s)
+    cursor_key: tuple[float | int, ...] | None = None
+    if cursor:
+        try:
+            values = decode_cursor(cursor)
+            if (
+                values.get("kind") != "media-download"
+                or values.get("order") != order
+                or values.get("statuses") != cursor_statuses
+            ):
+                raise InvalidCursorError("Cursor does not match this download collection")
+            key_values = cursor_key_values(
+                values,
+                length=2 if order == "recent" else 3,
+            )
+            if not all(isinstance(value, (int, float)) for value in key_values):
+                raise InvalidCursorError("Invalid download cursor key")
+            # Workflow ordering can move existing rows between buckets. If that
+            # happened, restart from the head; the frontend revision check will
+            # replace the old pages rather than continuing through a mixed order.
+            if values.get("revision") == revision:
+                cursor_key = tuple(key_values)
+        except InvalidCursorError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    candidates = (
+        rows
+        if cursor_key is None
+        else [item for item in rows if sort_key(item) > cursor_key]
+    )
+    selected_pairs = candidates[:limit]
+    has_more = len(candidates) > len(selected_pairs)
+
+    selected_ids = [download.id for download, _ in selected_pairs]
     if selected_ids:
         selected_downloads_by_id = {
             download.id: download
@@ -614,6 +653,16 @@ def get_media_downloads_page(
     else:
         selected_downloads = []
 
+    next_cursor = None
+    if has_more and selected_pairs:
+        next_cursor = encode_cursor({
+            "kind": "media-download",
+            "order": order,
+            "statuses": cursor_statuses,
+            "revision": revision,
+            "key": list(sort_key(selected_pairs[-1])),
+        })
+
     return MediaDownloadPageRead(
         items=_build_media_download_views(
             s,
@@ -622,10 +671,9 @@ def get_media_downloads_page(
             queue_positions=queue_positions,
         ),
         total=total,
-        offset=offset,
         limit=limit,
-        has_more=offset + len(selected_downloads) < total,
-        revision=_download_collection_revision(s),
+        next_cursor=next_cursor,
+        revision=revision,
         facets=status_counts,
         actions=action_counts,
     )

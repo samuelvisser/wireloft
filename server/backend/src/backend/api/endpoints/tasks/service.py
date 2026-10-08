@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from backend.api.models.tasks import (
     TaskDefinitionRead,
     TaskLedgerEntryRead,
@@ -127,6 +128,28 @@ def list_runs(
         s.close()
 
 
+def _task_ledger_cursor_filter(
+    order_column,
+    *,
+    value: datetime | None,
+    run_id: int,
+    descending: bool,
+):
+    if value is None:
+        return and_(
+            order_column.is_(None),
+            TaskRun.id < run_id if descending else TaskRun.id > run_id,
+        )
+
+    value_comparison = order_column < value if descending else order_column > value
+    id_comparison = TaskRun.id < run_id if descending else TaskRun.id > run_id
+    return or_(
+        value_comparison,
+        and_(order_column == value, id_comparison),
+        order_column.is_(None),
+    )
+
+
 def query_ledger(
     s: Session,
     *,
@@ -137,10 +160,10 @@ def query_ledger(
     started_after: datetime | None = None,
     order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
     order: Literal["asc", "desc"] = "desc",
-    offset: int = 0,
+    cursor: str | None = None,
     limit: int = 50,
 ) -> TaskLedgerPageRead:
-    """Query paginated TaskRun history using a caller-owned database session."""
+    """Query cursor-paginated TaskRun history using a caller-owned database session."""
     filters = []
     if definition_key is not None:
         filters.append(TaskDefinition.key == definition_key)
@@ -153,21 +176,79 @@ def query_ledger(
     if started_after is not None:
         filters.append(TaskRun.started_at >= started_after)
 
-    count_stmt = select(func.count(TaskRun.id))
+    cursor_scope = {
+        "definition_key": definition_key,
+        "resource_type": resource_type,
+        "resource_ids": sorted(resource_ids or []),
+        "statuses": sorted(statuses or []),
+        "started_after": started_after.isoformat() if started_after is not None else None,
+    }
+
+    aggregate_stmt = select(
+        func.count(TaskRun.id),
+        func.max(TaskRun.updated_at),
+    )
     if definition_key is not None:
-        count_stmt = count_stmt.join(
+        aggregate_stmt = aggregate_stmt.join(
             TaskDefinition,
             TaskDefinition.id == TaskRun.definition_id,
         )
-    total = int(s.execute(count_stmt.where(*filters)).scalar_one())
+    total_value, latest_update = s.execute(
+        aggregate_stmt.where(*filters)
+    ).one()
+    total = int(total_value or 0)
+    revision = "|".join([
+        str(total),
+        latest_update.isoformat() if latest_update is not None else "",
+    ])
 
     order_column = {
         "started_at": TaskRun.started_at,
         "finished_at": TaskRun.finished_at,
         "created_at": TaskRun.created_at,
     }[order_by]
-    ordering = order_column.asc() if order == "asc" else order_column.desc()
-    tie_breaker = TaskRun.id.asc() if order == "asc" else TaskRun.id.desc()
+    descending = order == "desc"
+    ordering = (
+        order_column.desc().nulls_last()
+        if descending
+        else order_column.asc().nulls_last()
+    )
+    tie_breaker = TaskRun.id.desc() if descending else TaskRun.id.asc()
+
+    if cursor:
+        try:
+            values = decode_cursor(cursor)
+            if (
+                values.get("kind") != "task-ledger"
+                or values.get("order_by") != order_by
+                or values.get("order") != order
+                or values.get("scope") != cursor_scope
+            ):
+                raise InvalidCursorError("Cursor does not match this task ledger")
+            cursor_id = values.get("id")
+            cursor_value_raw = values.get("value")
+            if not isinstance(cursor_id, int) or isinstance(cursor_id, bool):
+                raise InvalidCursorError("Invalid task ledger cursor id")
+            if cursor_value_raw is not None and not isinstance(cursor_value_raw, str):
+                raise InvalidCursorError("Invalid task ledger cursor value")
+            cursor_value = (
+                datetime.fromisoformat(cursor_value_raw)
+                if cursor_value_raw is not None
+                else None
+            )
+            # Running tasks can change status/finished_at and therefore move
+            # across an existing keyset boundary. If the filtered collection
+            # changed, restart from its head; the shared frontend revision
+            # handling replaces the old cursor chain atomically.
+            if values.get("revision") == revision:
+                filters.append(_task_ledger_cursor_filter(
+                    order_column,
+                    value=cursor_value,
+                    run_id=cursor_id,
+                    descending=descending,
+                ))
+        except (InvalidCursorError, ValueError) as exc:
+            raise ValueError(str(exc)) from exc
 
     run_stmt = (
         select(TaskRun)
@@ -180,20 +261,35 @@ def query_ledger(
             TaskDefinition.id == TaskRun.definition_id,
         )
 
-    runs = s.scalars(
+    runs = list(s.scalars(
         run_stmt
         .order_by(ordering, tie_breaker)
-        .offset(offset)
-        .limit(limit)
-    ).all()
+        .limit(limit + 1)
+    ).all())
+    has_more = len(runs) > limit
+    runs = runs[:limit]
+
+    next_cursor = None
+    if has_more and runs:
+        last = runs[-1]
+        value = getattr(last, order_by)
+        next_cursor = encode_cursor({
+            "kind": "task-ledger",
+            "order_by": order_by,
+            "order": order,
+            "scope": cursor_scope,
+            "revision": revision,
+            "value": value.isoformat() if value is not None else None,
+            "id": last.id,
+        })
 
     items = [TaskLedgerEntryRead.model_validate(run) for run in runs]
     return TaskLedgerPageRead(
         items=items,
         total=total,
-        offset=offset,
         limit=limit,
-        has_more=offset + len(items) < total,
+        next_cursor=next_cursor,
+        revision=revision,
     )
 
 
@@ -206,7 +302,7 @@ def list_ledger(
     started_after: datetime | None = None,
     order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
     order: Literal["asc", "desc"] = "desc",
-    offset: int = 0,
+    cursor: str | None = None,
     limit: int = 50,
 ) -> TaskLedgerPageRead:
     s = get_session()
@@ -220,7 +316,7 @@ def list_ledger(
             started_after=started_after,
             order_by=order_by,
             order=order,
-            offset=offset,
+            cursor=cursor,
             limit=limit,
         )
     finally:

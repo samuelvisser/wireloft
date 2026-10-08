@@ -3,10 +3,12 @@ import test from 'node:test'
 import {QueryClient, type InfiniteData} from '@tanstack/react-query'
 
 import {
+    contiguousLazyCollectionItems,
     deriveSameLazyCollectionPlaceholder,
     type LazyCollectionPage,
     lazyCollectionQueryKey,
     nextLazyCollectionPageRequest,
+    previousLazyCollectionPageRequest,
 } from '../src/lib/lazyCollection'
 import {
     applyMediaDownloadQueuePositions,
@@ -38,17 +40,16 @@ test('Home cache can seed Downloads display without satisfying its 50-row refres
     const homePage: LazyCollectionPage<{id: number}> = {
         items: Array.from({length: 3}, (_, index) => ({id: index + 1})),
         total: 100,
-        offset: 0,
         limit: 3,
-        hasMore: true,
+        nextCursor: 'next-page',
     }
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<{id: number}>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(homeKey, {
         pages: [homePage],
-        pageParams: [{offset: 0, limit: 3}],
+        pageParams: [{cursor: null, limit: 3}],
     })
 
     const placeholder = deriveSameLazyCollectionPlaceholder<{id: number}>(
@@ -82,17 +83,16 @@ test('Downloads cache can seed Home display without satisfying its three-row ref
     const downloadsPage: LazyCollectionPage<{id: number}> = {
         items: Array.from({length: 50}, (_, index) => ({id: index + 1})),
         total: 100,
-        offset: 0,
         limit: 50,
-        hasMore: true,
+        nextCursor: 'next-page',
     }
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<{id: number}>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(downloadsKey, {
         pages: [downloadsPage],
-        pageParams: [{offset: 0, limit: 50}],
+        pageParams: [{cursor: null, limit: 50}],
     })
 
     const placeholder = deriveSameLazyCollectionPlaceholder<{id: number}>(
@@ -111,14 +111,13 @@ test('normal lazy collection scrolling uses the configured batch size', () => {
     const firstPage: LazyCollectionPage<{id: number}> = {
         items: Array.from({length: 50}, (_, index) => ({id: index + 1})),
         total: 120,
-        offset: 0,
         limit: 50,
-        hasMore: true,
+        nextCursor: 'next-page',
     }
 
     assert.deepEqual(
-        nextLazyCollectionPageRequest(firstPage, [firstPage], 50, 50),
-        {offset: 50, limit: 50},
+        nextLazyCollectionPageRequest(firstPage, 50),
+        {cursor: 'next-page', limit: 50},
     )
 })
 
@@ -134,9 +133,8 @@ test('queue-position updates reorder cached queued downloads immediately', () =>
     const page: LazyCollectionPage<MediaDownloadDomainViewRead> = {
         items: [first, second],
         total: 2,
-        offset: 0,
         limit: 50,
-        hasMore: false,
+        nextCursor: null,
     }
     const queryKey = lazyCollectionQueryKey(
         ['mediaDownloads'],
@@ -147,17 +145,17 @@ test('queue-position updates reorder cached queued downloads immediately', () =>
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<MediaDownloadDomainViewRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(queryKey, {
         pages: [page],
-        pageParams: [{offset: 0, limit: 50}],
+        pageParams: [{cursor: null, limit: 50}],
     })
 
     applyMediaDownloadQueuePositions(queryClient, {1: 2, 2: 1})
 
     const updated = queryClient.getQueryData<InfiniteData<
         LazyCollectionPage<MediaDownloadDomainViewRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(queryKey)
     assert.ok(updated)
 
@@ -236,9 +234,8 @@ test('a narrower download filter renders from a broader cache without populating
             domainDownload(1, 'available'),
         ],
         total: 3,
-        offset: 0,
         limit: 50,
-        hasMore: false,
+        nextCursor: null,
         revision: 'revision-1',
         facets: {downloaded: 2, missing: 1},
         actions: {},
@@ -246,10 +243,10 @@ test('a narrower download filter renders from a broader cache without populating
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<MediaDownloadDomainViewRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(broadKey, {
         pages: [broadPage],
-        pageParams: [{offset: 0, limit: 50}],
+        pageParams: [{cursor: null, limit: 50}],
     })
 
     const placeholder = deriveMediaDownloadCollectionPlaceholder(queryClient, {
@@ -261,7 +258,7 @@ test('a narrower download filter renders from a broader cache without populating
     assert.ok(placeholder)
     assert.deepEqual(placeholder.pages[0].items.map((item) => item.id), [3, 1])
     assert.equal(placeholder.pages[0].total, 2)
-    assert.equal(placeholder.pages[0].hasMore, false)
+    assert.equal(placeholder.pages[0].nextCursor, null)
 
     // Derived data is only observer placeholder data. The narrower query remains
     // uncached, so mounting it still performs its own authoritative backend fetch.
@@ -283,9 +280,8 @@ test('a partial broader download prefix can seed the known filtered prefix when 
             domainDownload(3, 'missing'),
         ],
         total: 20,
-        offset: 0,
         limit: 3,
-        hasMore: true,
+        nextCursor: 'next-page',
         revision: 'revision-2',
         facets: {downloaded: 5, missing: 15},
         actions: {},
@@ -293,10 +289,10 @@ test('a partial broader download prefix can seed the known filtered prefix when 
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<MediaDownloadDomainViewRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(broadKey, {
         pages: [broadPage],
-        pageParams: [{offset: 0, limit: 3}],
+        pageParams: [{cursor: null, limit: 3}],
     })
 
     const placeholder = deriveMediaDownloadCollectionPlaceholder(queryClient, {
@@ -308,7 +304,7 @@ test('a partial broader download prefix can seed the known filtered prefix when 
     assert.ok(placeholder)
     assert.deepEqual(placeholder.pages[0].items.map((item) => item.id), [4])
     assert.equal(placeholder.pages[0].total, 5)
-    assert.equal(placeholder.pages[0].hasMore, true)
+    assert.equal(placeholder.pages[0].nextCursor, null)
 })
 
 test('filtered placeholder reuse never crosses collection ordering', () => {
@@ -322,9 +318,8 @@ test('filtered placeholder reuse never crosses collection ordering', () => {
     const broadPage: LazyCollectionPage<MediaDownloadDomainViewRead> = {
         items: [domainDownload(1, 'available')],
         total: 1,
-        offset: 0,
         limit: 9,
-        hasMore: false,
+        nextCursor: null,
         revision: 'revision-3',
         facets: {downloaded: 1},
         actions: {},
@@ -332,10 +327,10 @@ test('filtered placeholder reuse never crosses collection ordering', () => {
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<MediaDownloadDomainViewRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(broadKey, {
         pages: [broadPage],
-        pageParams: [{offset: 0, limit: 9}],
+        pageParams: [{cursor: null, limit: 9}],
     })
 
     assert.equal(
@@ -364,9 +359,8 @@ test('a narrower download filter can reuse a filtered superset with the same ord
             domainDownload(1, 'missing'),
         ],
         total: 3,
-        offset: 0,
         limit: 50,
-        hasMore: false,
+        nextCursor: null,
         revision: 'revision-4',
         facets: {corrupted: 1, error: 0, missing: 2},
         actions: {},
@@ -374,10 +368,10 @@ test('a narrower download filter can reuse a filtered superset with the same ord
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<MediaDownloadDomainViewRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(broadKey, {
         pages: [broadPage],
-        pageParams: [{offset: 0, limit: 50}],
+        pageParams: [{cursor: null, limit: 50}],
     })
 
     const placeholder = deriveMediaDownloadCollectionPlaceholder(queryClient, {
@@ -443,17 +437,16 @@ test('cron task ledger can render immediately from the broader Tasks cache witho
             taskLedgerEntry(1, {resourceId: 9}),
         ],
         total: 3,
-        offset: 0,
         limit: 100,
-        hasMore: false,
+        nextCursor: null,
     }
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<TaskLedgerEntryRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(tasksKey, {
         pages: [broadPage],
-        pageParams: [{offset: 0, limit: 100}],
+        pageParams: [{cursor: null, limit: 100}],
     })
 
     const placeholder = deriveTaskLedgerCollectionPlaceholder(queryClient, {
@@ -491,17 +484,16 @@ test('task ledger placeholder reuse respects status and started-after filters', 
             taskLedgerEntry(1, {status: 'FAILED', startedAt: '2026-10-08T01:00:00Z'}),
         ],
         total: 3,
-        offset: 0,
         limit: 100,
-        hasMore: false,
+        nextCursor: null,
     }
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<TaskLedgerEntryRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(tasksKey, {
         pages: [broadPage],
-        pageParams: [{offset: 0, limit: 100}],
+        pageParams: [{cursor: null, limit: 100}],
     })
 
     const placeholder = deriveTaskLedgerCollectionPlaceholder(queryClient, {
@@ -530,17 +522,16 @@ test('task ledger placeholder reuse never crosses ordering', () => {
     const broadPage: LazyCollectionPage<TaskLedgerEntryRead> = {
         items: [taskLedgerEntry(1)],
         total: 1,
-        offset: 0,
         limit: 100,
-        hasMore: false,
+        nextCursor: null,
     }
 
     queryClient.setQueryData<InfiniteData<
         LazyCollectionPage<TaskLedgerEntryRead>,
-        {offset: number; limit: number}
+        {cursor: string | null; limit: number}
     >>(tasksKey, {
         pages: [broadPage],
-        pageParams: [{offset: 0, limit: 100}],
+        pageParams: [{cursor: null, limit: 100}],
     })
 
     assert.equal(
@@ -580,18 +571,47 @@ test('pagination continues only after an authoritative initial prefix', () => {
     const authoritativeFirstPage: LazyCollectionPage<{id: number}> = {
         items: Array.from({length: 50}, (_, index) => ({id: index + 1})),
         total: 120,
-        offset: 0,
         limit: 50,
-        hasMore: true,
+        nextCursor: 'next-page',
     }
 
     assert.deepEqual(
-        nextLazyCollectionPageRequest(
-            authoritativeFirstPage,
-            [authoritativeFirstPage],
-            50,
-            50,
-        ),
-        {offset: 50, limit: 50},
+        nextLazyCollectionPageRequest(authoritativeFirstPage, 50),
+        {cursor: 'next-page', limit: 50},
     )
+})
+
+
+test('bidirectional lazy collections use the server previous cursor', () => {
+    const page: LazyCollectionPage<{id: string}> = {
+        items: [{id: 'middle'}],
+        limit: 30,
+        nextCursor: 'after-middle',
+        previousCursor: 'before-middle',
+    }
+
+    assert.deepEqual(
+        previousLazyCollectionPageRequest(page, 30),
+        {cursor: 'before-middle', limit: 30},
+    )
+})
+
+
+test('mixed cursor revisions are never reused as compatible placeholder cache', () => {
+    const pages: LazyCollectionPage<{id: number}>[] = [
+        {
+            items: [{id: 1}],
+            limit: 1,
+            nextCursor: 'old-next',
+            revision: 'old-revision',
+        },
+        {
+            items: [{id: 2}],
+            limit: 1,
+            nextCursor: 'new-next',
+            revision: 'new-revision',
+        },
+    ]
+
+    assert.equal(contiguousLazyCollectionItems(pages), null)
 })

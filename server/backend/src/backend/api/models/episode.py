@@ -7,6 +7,7 @@ from datetime import datetime
 from pydantic import AwareDatetime, computed_field, model_validator
 
 from backend.api.models.base import ResponseBase, RequestBase, response_model_config
+from backend.api.models.pagination import CursorPageRead
 from backend.types.episode_types import EpisodePublishStatus
 from backend.utils.episode import EpisodeIdentifierInfo
 
@@ -129,15 +130,12 @@ class EpisodeAPIReadView(_EpisodeIdentifierAPIOut):
     thumbnail_square_path: Optional[str]
 
 
-class EpisodeAPIReadViewPage(ResponseBase):
-    """One bounded page of compact episode rows for a show grid."""
+class EpisodeAPIReadViewPage(CursorPageRead[EpisodeAPIReadView]):
+    """One cursor page of compact episode rows for a show grid."""
 
-    items: list[EpisodeAPIReadView]
-    offset: int
-    limit: int
     total: int
     show_total: int
-    has_more: bool
+    revision: str
 
 
 class EpisodeIndexedActivityAPIRead(ResponseBase):

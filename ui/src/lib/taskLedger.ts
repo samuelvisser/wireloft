@@ -196,11 +196,12 @@ export function deriveTaskLedgerCollectionPlaceholder(
       pages: [{
         items,
         total,
-        offset: 0,
         limit: initialCount,
-        hasMore: !contiguous.complete || items.length < matching.length,
+        nextCursor: null,
+        previousCursor: null,
+        provisional: !contiguous.complete,
       }],
-      pageParams: [{offset: 0, limit: initialCount}],
+      pageParams: [{cursor: null, limit: initialCount}],
     }
 
     if (
@@ -267,13 +268,13 @@ export function useTaskLedgerInfinite({
         initialCount: limit,
       },
     ),
-    fetchPage: async ({offset, limit: pageLimit}, signal): Promise<TaskLedgerPageRead> => {
+    fetchPage: async ({cursor, limit: pageLimit}, signal): Promise<TaskLedgerPageRead> => {
       const params = new URLSearchParams({
         order_by: orderBy,
         order,
-        offset: String(offset),
         limit: String(pageLimit),
       })
+      if (cursor) params.set('cursor', cursor)
       if (definitionKey) params.set('definition_key', definitionKey)
       if (resourceType) params.set('resource_type', resourceType)
       for (const id of resourceIds ?? []) params.append('resource_id', String(id))

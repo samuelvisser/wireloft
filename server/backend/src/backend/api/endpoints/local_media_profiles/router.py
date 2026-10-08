@@ -75,7 +75,7 @@ def local_media_profile_template_sources(
     type: LocalMediaProfileType = Query(...),
     show_scope: ShowLocalMediaProfileScope = Query(ShowLocalMediaProfileScope.BOTH),
     search: str | None = Query(None, max_length=200),
-    offset: int = Query(0, ge=0),
+    cursor: str | None = Query(None, max_length=4096),
     limit: int = Query(30, ge=1, le=100),
     anchor_source_id: str | None = Query(None, max_length=100),
 ):
@@ -87,7 +87,7 @@ def local_media_profile_template_sources(
                 type,
                 show_scope,
                 search=search,
-                offset=offset,
+                cursor=cursor,
                 limit=limit,
                 anchor_source_id=anchor_source_id,
             )

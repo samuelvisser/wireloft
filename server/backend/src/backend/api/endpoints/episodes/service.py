@@ -4,12 +4,13 @@ from typing import Optional, Sequence
 
 from sqlalchemy.orm import Session
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, or_, select
 
 from fastapi import HTTPException
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.episode import *
+from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor, keyset_after, KeysetField
 from backend.db.models import Show
 from backend.db.models.media_item import Episode
 from backend.db.models.media_download import EpisodeMediaDownload
@@ -89,6 +90,7 @@ def _episode_view_stmt(show_slug: str, season_id: int | None = None):
             Episode.thumbnail_landscape_path.label("thumbnail_landscape_path"),
             Episode.thumbnail_portrait_path.label("thumbnail_portrait_path"),
             Episode.thumbnail_square_path.label("thumbnail_square_path"),
+            Episode.published_date.label("published_date"),
         )
         .join(Show, Episode.show_id == Show.id)
         .where(Show.slug == show_slug)
@@ -96,7 +98,7 @@ def _episode_view_stmt(show_slug: str, season_id: int | None = None):
     if season_id is not None:
         stmt = stmt.where(Episode.season_id == season_id)
         return stmt.order_by(Episode.index.asc(), Episode.id.asc())
-    return stmt.order_by(Episode.published_date.desc(), Episode.id.desc())
+    return stmt.order_by(Episode.published_date.desc().nulls_last(), Episode.id.desc())
 
 
 def get_episode_views_by_show_list(
@@ -119,39 +121,123 @@ def get_episode_views_by_show_page(
         s: Session,
         show_slug: str,
         *,
-        offset: int,
+        cursor: str | None,
         limit: int,
         season_id: int | None = None,
 ) -> EpisodeAPIReadViewPage:
-    """Return only the compact episode page the frontend currently needs."""
+    """Return one stable cursor page of compact episodes for a show."""
     show_count_stmt = (
         select(func.count(Episode.id))
         .join(Show, Episode.show_id == Show.id)
         .where(Show.slug == show_slug)
     )
     show_total = int(s.scalar(show_count_stmt) or 0)
+    total = (
+        show_total
+        if season_id is None
+        else int(s.scalar(show_count_stmt.where(Episode.season_id == season_id)) or 0)
+    )
+    revision_stmt = (
+        select(func.max(case(
+            (Episode.updated_at > Episode.created_at, Episode.updated_at),
+            else_=None,
+        )))
+        .join(Show, Episode.show_id == Show.id)
+        .where(Show.slug == show_slug)
+    )
+    if season_id is not None:
+        revision_stmt = revision_stmt.where(Episode.season_id == season_id)
+    latest_ordering_change = s.scalar(revision_stmt)
+    revision = (
+        latest_ordering_change.isoformat()
+        if latest_ordering_change is not None
+        else ""
+    )
 
-    if season_id is None:
-        total = show_total
-    else:
-        total = int(s.scalar(
-            show_count_stmt.where(Episode.season_id == season_id)
-        ) or 0)
+    stmt = _episode_view_stmt(show_slug, season_id)
+    if cursor:
+        try:
+            values = decode_cursor(cursor)
+            if (
+                values.get("kind") != "show-episodes"
+                or values.get("show_slug") != show_slug
+                or values.get("season_id") != season_id
+            ):
+                raise InvalidCursorError("Cursor does not match this episode collection")
+            cursor_id = values.get("id")
+            if not isinstance(cursor_id, int) or isinstance(cursor_id, bool):
+                raise InvalidCursorError("Invalid episode cursor id")
 
-    rows = s.execute(
-        _episode_view_stmt(show_slug, season_id)
-        .offset(offset)
-        .limit(limit)
-    ).mappings().all()
+            # Episode dates/indexes can be corrected by metadata refreshes. A
+            # changed revision means the old sort boundary is no longer safe;
+            # restart at the head and let the generic frontend replace the old
+            # page chain immediately.
+            if values.get("revision") == revision:
+                if season_id is not None:
+                    cursor_index = values.get("index")
+                    if not isinstance(cursor_index, int) or isinstance(cursor_index, bool):
+                        raise InvalidCursorError("Invalid episode cursor index")
+                    stmt = stmt.where(keyset_after([
+                        KeysetField(Episode.index, cursor_index),
+                        KeysetField(Episode.id, cursor_id),
+                    ]))
+                else:
+                    published_raw = values.get("published_at")
+                    if published_raw is not None and not isinstance(published_raw, str):
+                        raise InvalidCursorError("Invalid episode cursor date")
+                    published_at = (
+                        datetime.fromisoformat(published_raw)
+                        if published_raw is not None
+                        else None
+                    )
+                    if published_at is None:
+                        stmt = stmt.where(
+                            Episode.published_date.is_(None),
+                            Episode.id < cursor_id,
+                        )
+                    else:
+                        stmt = stmt.where(or_(
+                            Episode.published_date < published_at,
+                            and_(
+                                Episode.published_date == published_at,
+                                Episode.id < cursor_id,
+                            ),
+                            Episode.published_date.is_(None),
+                        ))
+        except (InvalidCursorError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    rows = s.execute(stmt.limit(limit + 1)).mappings().all()
+    has_more = len(rows) > limit
+    rows = rows[:limit]
     items = [EpisodeAPIReadView.model_validate(row) for row in rows]
+
+    next_cursor = None
+    if has_more and rows:
+        last = rows[-1]
+        values: dict[str, object] = {
+            "kind": "show-episodes",
+            "show_slug": show_slug,
+            "season_id": season_id,
+            "revision": revision,
+            "id": last["id"],
+        }
+        if season_id is not None:
+            values["index"] = last["index"]
+        else:
+            published_at = last["published_date"]
+            values["published_at"] = (
+                published_at.isoformat() if published_at is not None else None
+            )
+        next_cursor = encode_cursor(values)
 
     return EpisodeAPIReadViewPage(
         items=items,
-        offset=offset,
         limit=limit,
         total=total,
         show_total=show_total,
-        has_more=offset + len(items) < total,
+        next_cursor=next_cursor,
+        revision=revision,
     )
 
 

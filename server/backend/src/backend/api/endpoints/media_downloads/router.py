@@ -51,7 +51,7 @@ def media_download_bulk_action_ids(
 def media_downloads_page(
         status_filter: Optional[list[str]] = Query(default=None, alias="status"),
         order: str = Query(default="workflow", pattern="^(workflow|recent)$"),
-        offset: int = Query(default=0, ge=0),
+        cursor: str | None = Query(default=None, max_length=2048),
         limit: int = Query(default=50, ge=1, le=200),
 ):
     with db_session() as s:
@@ -59,7 +59,7 @@ def media_downloads_page(
             s,
             statuses=status_filter,
             order=order,
-            offset=offset,
+            cursor=cursor,
             limit=limit,
         )
 

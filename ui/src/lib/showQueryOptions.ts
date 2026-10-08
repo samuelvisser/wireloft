@@ -65,11 +65,6 @@ export const SHOW_EPISODE_PREVIEW_SIZE = 15
 export const episodeQueryKeys = {
   all: ['episodes'] as const,
   forShow: (showSlug: string | undefined) => ['episodes', showSlug] as const,
-  pages: (
-    showSlug: string | undefined,
-    seasonId: number | null,
-    pageSize: number,
-  ) => ['episodes', showSlug, 'pages', seasonId, pageSize] as const,
   preview: (
     showSlug: string | undefined,
     limit: number,
@@ -78,13 +73,13 @@ export const episodeQueryKeys = {
 
 export async function fetchEpisodePage(
   showSlug: string,
-  params: {offset: number; limit: number; seasonId?: number},
+  params: {cursor: string | null; limit: number; seasonId?: number},
   signal?: AbortSignal,
 ) {
   const query = new URLSearchParams({
-    offset: String(params.offset),
     limit: String(params.limit),
   })
+  if (params.cursor) query.set('cursor', params.cursor)
   if (params.seasonId !== undefined) {
     query.set('season_id', String(params.seasonId))
   }
@@ -100,7 +95,7 @@ export function episodePreviewQueryOptions(showSlug: string, limit: number) {
     queryKey: episodeQueryKeys.preview(showSlug, limit),
     queryFn: ({signal}) => fetchEpisodePage(
       showSlug,
-      {offset: 0, limit},
+      {cursor: null, limit},
       signal,
     ),
   })

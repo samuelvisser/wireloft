@@ -310,25 +310,21 @@ export function useEpisodePages(
 ) {
     const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
-    const result = useInfiniteQuery({
-        queryKey: episodeQueryKeys.pages(showSlug, seasonId ?? null, pageSize),
+    const result = useLazyCollection({
+        collectionPrefix: episodeQueryKeys.forShow(showSlug),
+        queryKey: ['pages', seasonId ?? null] as const,
+        initialCount: pageSize,
+        batchSize: pageSize,
         enabled: !!showSlug && seasonId !== null && (opts?.enabled ?? true),
-        initialPageParam: 0,
-        queryFn: ({pageParam, signal}) => fetchEpisodePage(
+        fetchPage: ({cursor, limit}, signal) => fetchEpisodePage(
             showSlug!,
             {
-                offset: pageParam,
-                limit: pageSize,
+                cursor,
+                limit,
                 seasonId: seasonId ?? undefined,
             },
             signal,
         ),
-        getNextPageParam: (lastPage) => (
-            lastPage.hasMore
-                ? lastPage.offset + lastPage.items.length
-                : undefined
-        ),
-        refetchOnMount: 'always',
     })
 
     const firstPage = result.data?.pages[0]
@@ -841,16 +837,16 @@ export function deriveMediaDownloadCollectionPlaceholder(
             pages: [{
                 items,
                 total,
-                offset: 0,
                 limit: initialCount,
-                hasMore: items.length < total,
+                nextCursor: null,
+                previousCursor: null,
                 revision: firstPage.revision,
                 facets: firstPage.facets,
                 // Bulk-action counts depend on the exact filtered collection and
                 // are intentionally left for the authoritative backend response.
                 actions: {},
             }],
-            pageParams: [{offset: 0, limit: initialCount}],
+            pageParams: [{cursor: null, limit: initialCount}],
         }
 
         const score = items.length
@@ -900,12 +896,12 @@ export function useMediaDownloadsCollection({
                 operations,
             },
         ),
-        fetchPage: async ({offset, limit}, signal) => {
+        fetchPage: async ({cursor, limit}, signal) => {
             const params = new URLSearchParams({
                 order,
-                offset: String(offset),
                 limit: String(limit),
             })
+            if (cursor) params.set('cursor', cursor)
             for (const status of normalizedStatuses ?? []) params.append('status', status)
             return MediaDownloadPageReadSchema.parse(await fetchJSON<unknown>(
                 `${(window as any).appConfig.API_URL}/media-downloads/as-view/page?${params}`,

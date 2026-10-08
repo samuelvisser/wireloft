@@ -103,14 +103,14 @@ def test_show_sources_page_through_every_episode_in_scope(db_session):
         db_session,
         LocalMediaProfileType.SHOW,
         ShowLocalMediaProfileScope.PODCAST,
-        offset=0,
+        cursor=None,
         limit=2,
     )
     second = get_output_template_source_page(
         db_session,
         LocalMediaProfileType.SHOW,
         ShowLocalMediaProfileScope.PODCAST,
-        offset=2,
+        cursor=first.next_cursor,
         limit=2,
     )
 
@@ -248,12 +248,13 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
     all_sources = get_output_template_source_page(
         db_session,
         LocalMediaProfileType.MOVIE,
+        cursor=None,
         limit=2,
     )
     last_source = get_output_template_source_page(
         db_session,
         LocalMediaProfileType.MOVIE,
-        offset=2,
+        cursor=all_sources.next_cursor,
         limit=2,
     )
     trailer_search = get_output_template_source_page(
@@ -444,7 +445,8 @@ def test_show_source_anchor_opens_at_selected_episode_in_natural_order(db_sessio
         anchor_source_id=f"episode:{selected.id}",
     )
 
-    assert page.offset == 22
+    assert page.previous_cursor is not None
+    assert page.next_cursor is not None
     assert [source.values["episode_number"] for source in page.items] == [
         "18", "19", "20", "21", "22",
     ]
@@ -470,5 +472,59 @@ def test_show_source_anchor_does_not_override_search_order(db_session):
         anchor_source_id=f"episode:{first.id}",
     )
 
-    assert page.offset == 0
+    assert page.previous_cursor is None
     assert [source.values["episode_title"] for source in page.items] == ["Ordinary episode"]
+
+
+
+def test_show_source_cursor_survives_changes_before_boundary(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        get_output_template_source_page,
+    )
+    from backend.types.local_media_profile_types import (
+        LocalMediaProfileType,
+        ShowLocalMediaProfileScope,
+    )
+    from backend.types.show_types import ShowType
+
+    show = _make_show(db_session, slug="cursor-show", show_type=ShowType.PODCAST.value)
+    episodes = [
+        _add_episode(db_session, show, index=index)
+        for index in range(1, 6)
+    ]
+    db_session.commit()
+
+    first = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        ShowLocalMediaProfileScope.PODCAST,
+        cursor=None,
+        limit=2,
+    )
+    assert [source.values["episode_number"] for source in first.items] == ["1", "2"]
+    assert first.next_cursor is not None
+
+    # Remove and insert rows before the saved boundary. A cursor based on the
+    # boundary's sort values must still resume at episode 3.
+    db_session.delete(episodes[0])
+    _add_episode(db_session, show, index=0, title="Inserted before cursor")
+    db_session.commit()
+
+    second = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        ShowLocalMediaProfileScope.PODCAST,
+        cursor=first.next_cursor,
+        limit=2,
+    )
+    assert [source.values["episode_number"] for source in second.items] == ["3", "4"]
+    assert second.previous_cursor is not None
+
+    previous = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        ShowLocalMediaProfileScope.PODCAST,
+        cursor=second.previous_cursor,
+        limit=2,
+    )
+    assert [source.values["episode_number"] for source in previous.items] == ["0", "2"]

@@ -82,11 +82,14 @@ export type EpisodeReadView = z.infer<typeof EpisodeReadViewSchema>
 
 export const EpisodeReadViewPageSchema = z.object({
     items: EpisodeReadViewSchema.array(),
-    offset: z.int().nonnegative(),
     limit: z.int().positive(),
     total: z.int().nonnegative(),
     showTotal: z.int().nonnegative(),
+    nextCursor: z.string().nullable().optional(),
+    previousCursor: z.string().nullable().optional(),
     hasMore: z.boolean(),
+    hasPrevious: z.boolean().optional(),
+    revision: z.string(),
 })
 export type EpisodeReadViewPage = z.infer<typeof EpisodeReadViewPageSchema>
 

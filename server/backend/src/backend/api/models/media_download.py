@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import AliasPath, Field
 
 from backend.api.models.base import RequestBase, ResponseBase, response_model_config
+from backend.api.models.pagination import CursorPageRead
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 
 
@@ -133,14 +134,10 @@ class MediaDownloadAPIReadView(MediaDownloadAPIRead):
         validation_alias=AliasPath("latest_run", "finished_at"),
     )
 
-class MediaDownloadPageRead(ResponseBase):
-    """One deterministic page of the shared media-download collection."""
+class MediaDownloadPageRead(CursorPageRead[MediaDownloadAPIReadView]):
+    """One deterministic cursor page of the shared media-download collection."""
 
-    items: list[MediaDownloadAPIReadView]
     total: int
-    offset: int
-    limit: int
-    has_more: bool
     revision: str
     facets: dict[str, int] = Field(default_factory=dict)
     actions: dict[str, int] = Field(default_factory=dict)

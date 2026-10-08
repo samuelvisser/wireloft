@@ -94,9 +94,11 @@ export type MediaDownloadViewRead = MediaDownloadDomainViewRead & {
 export const MediaDownloadPageReadSchema = z.looseObject({
     items: z.array(MediaDownloadViewReadSchema),
     total: z.int(),
-    offset: z.int(),
     limit: z.int(),
+    nextCursor: z.string().nullable().optional(),
+    previousCursor: z.string().nullable().optional(),
     hasMore: z.boolean(),
+    hasPrevious: z.boolean().optional(),
     revision: z.string(),
     facets: z.record(z.string(), z.int()).default({}),
     actions: z.record(z.string(), z.int()).default({}),
