@@ -49,9 +49,8 @@ def ensure_unique_profile_settings(
         body.output_template, body.type, body.preferred_format,
         environment=environment, namespace="candidate",
     )
-    # Jinja overlap analysis compares possible output domains and is not a row
-    # predicate the database can evaluate. Stream candidates instead of first
-    # materializing the complete profile table.
+
+    # Stream candidates to speed up the process; only ask more if we need it
     for existing in query.yield_per(50):
         previous = analyze_profile_outputs(
             existing.output_template, existing.type, existing.preferred_format,

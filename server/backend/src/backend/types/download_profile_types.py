@@ -9,7 +9,7 @@ class DownloadProfileType(Enum):
     BASE = "base"
 
 
-class MediaDownloadArtifactStatus(str, Enum):
+class MediaDownloadArtifactStatus(StrEnum):
     """Persistent state of the file represented by a MediaDownload.
 
     Execution state deliberately does not live here. Queued/running/failed/canceled

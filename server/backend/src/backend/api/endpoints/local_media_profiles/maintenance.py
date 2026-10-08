@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import select, update, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfileBase, LocalMediaProfileBase, MediaDownloadBase

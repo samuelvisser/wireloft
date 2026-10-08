@@ -739,8 +739,8 @@ def _download_bulk_action_predicate(source, action: str):
         ))
     if action == "delete-unavailable":
         return source.c.artifact_status.in_((
-            MediaDownloadArtifactStatus.ABSENT.value,
-            MediaDownloadArtifactStatus.MISSING.value,
+            MediaDownloadArtifactStatus.ABSENT,
+            MediaDownloadArtifactStatus.MISSING,
         ))
     raise ValueError(f"Unknown media download bulk action: {action}")
 
@@ -795,9 +795,7 @@ def get_media_downloads_page(
                 or values.get("order") != order
                 or values.get("statuses") != requested_statuses
             ):
-                raise InvalidCursorError(
-                    "Cursor does not match this download collection"
-                )
+                raise InvalidCursorError("Cursor does not match this download collection")
             if values.get("revision") == revision:
                 cursor_values = cursor_key_values(
                     values,

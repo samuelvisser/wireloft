@@ -323,8 +323,7 @@ def _has_hls_download_profile_for_episode(
     series_table = SeriesDownloadProfile.__table__
     selected_season = exists(
         select(series_season_association.c.season_id).where(
-            series_season_association.c.download_profiles_series_id
-            == DownloadProfileBase.id,
+            series_season_association.c.download_profiles_series_id == DownloadProfileBase.id,
             series_season_association.c.season_id == episode.season_id,
         )
     )
@@ -337,8 +336,7 @@ def _has_hls_download_profile_for_episode(
             )
         )
         .where(
-            series_season_association.c.download_profiles_series_id
-            == DownloadProfileBase.id
+            series_season_association.c.download_profiles_series_id == DownloadProfileBase.id
         )
         .scalar_subquery()
     )
@@ -362,8 +360,7 @@ def _has_hls_download_profile_for_episode(
         .select_from(DownloadProfileBase)
         .join(
             LocalMediaProfileBase,
-            LocalMediaProfileBase.id
-            == DownloadProfileBase.local_media_profile_id,
+            LocalMediaProfileBase.id == DownloadProfileBase.local_media_profile_id,
         )
         .join(profile_episode_type, true())
         .outerjoin(
@@ -373,8 +370,7 @@ def _has_hls_download_profile_for_episode(
         .where(
             DownloadProfileBase.show_id == episode.show_id,
             DownloadProfileBase.enable_profile.is_(True),
-            LocalMediaProfileBase.preferred_format
-            == PreferredFormat.FORMAT_HLS.value,
+            LocalMediaProfileBase.preferred_format == PreferredFormat.FORMAT_HLS,
             profile_episode_type.c.value == episode_type,
             series_allows_episode,
         )
