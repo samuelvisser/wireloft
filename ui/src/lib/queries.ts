@@ -741,11 +741,17 @@ function mediaDownloadStatusFilterContains(
 
 export function deriveMediaDownloadCollectionPlaceholder(
     queryClient: QueryClient,
-    *,
-    statuses: readonly string[] | undefined,
-    order: MediaDownloadCollectionOrder,
-    initialCount: number,
-    operations: TaskOperationRead[] = [],
+    {
+        statuses,
+        order,
+        initialCount,
+        operations = [],
+    }: {
+        statuses: readonly string[] | undefined
+        order: MediaDownloadCollectionOrder
+        initialCount: number
+        operations?: TaskOperationRead[]
+    },
 ): InfiniteData<
     LazyCollectionPage<MediaDownloadDomainViewRead>,
     LazyCollectionPageRequest
