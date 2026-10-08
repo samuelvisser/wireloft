@@ -69,12 +69,19 @@ function startedAfterFilterContains(source: unknown, target: string | undefined)
 
 function taskLedgerEntryMatches(
   entry: TaskLedgerEntryRead,
-  *,
-  definitionKey: string | undefined,
-  resourceType: string | undefined,
-  resourceIds: readonly number[] | undefined,
-  statuses: readonly string[] | undefined,
-  startedAfter: string | undefined,
+  {
+    definitionKey,
+    resourceType,
+    resourceIds,
+    statuses,
+    startedAfter,
+  }: {
+    definitionKey: string | undefined
+    resourceType: string | undefined
+    resourceIds: readonly number[] | undefined
+    statuses: readonly string[] | undefined
+    startedAfter: string | undefined
+  },
 ): boolean {
   if (definitionKey !== undefined && entry.definitionKey !== definitionKey) return false
   if (resourceType !== undefined && entry.resourceType !== resourceType) return false
