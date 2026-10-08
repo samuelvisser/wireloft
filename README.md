@@ -87,6 +87,24 @@ in control while not throwing you in the dark.
 - Configure automatic retention rules to remove older content from your server.
 
 
+## Install WireLoft as an app
+
+WireLoft is installable as a Progressive Web App (PWA). Open your WireLoft
+instance in a supported browser, then choose **Install app** (Chrome/Edge on
+desktop or Android), or **Share → Add to Home Screen** (Safari on iPhone/iPad).
+The installed app opens in its own window, using the WireLoft icon.
+
+For installation, use **HTTPS** (or `localhost` when developing). A plain
+`http://` connection to a remote server or LAN IP is not sufficient for
+service worker registration in most browsers. Reverse-proxy setups should
+preserve HTTPS when exposing WireLoft remotely.
+
+Only versioned frontend assets are cached. The app shell is fetched fresh on
+every online navigation, and API data, authentication, feeds, runtime config,
+and media downloads are **never** cached by the service worker. Offline, the
+installed app displays a reconnect screen; media management requires a
+connection to your WireLoft server.
+
 ## Running with Docker
 
 The best way to run WireLoft is using its Docker container. Everything is managed for you automatically within the container.

@@ -4,14 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:pro-icons": "vite --mode pro-icons",
+    "dev": "node scripts/generate-pwa-icons.mjs && vite",
+    "dev:pro-icons": "node scripts/generate-pwa-icons.mjs && vite --mode pro-icons",
     "build": "npm run build:free-icons",
-    "build:free-icons": "tsc --noEmit && vite build --mode free-icons",
-    "build:pro-icons": "tsc --noEmit && vite build --mode pro-icons",
+    "build:free-icons": "node scripts/generate-pwa-icons.mjs && tsc --noEmit && vite build --mode free-icons",
+    "build:pro-icons": "node scripts/generate-pwa-icons.mjs && tsc --noEmit && vite build --mode pro-icons",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "test:download-progress": "node scripts/test-download-progress.mjs"
+    "test:download-progress": "node scripts/test-download-progress.mjs",
+    "test:pwa": "node scripts/generate-pwa-icons.mjs && node --test tests/pwa.test.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
