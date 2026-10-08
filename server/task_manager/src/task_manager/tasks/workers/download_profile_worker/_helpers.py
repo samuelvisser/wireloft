@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Optional, Sequence
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import false, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, Season, SeriesDownloadProfile
@@ -15,6 +15,7 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
+from backend.utils.episode import episode_identifier_type_predicate
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
 from task_manager.tasks.media_download_operations import (
@@ -78,21 +79,6 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _episode_identifier_type_predicate(allowed_types: set[str]):
-    patterns = {
-        "ep": "ep.%",
-        "ep-extra": "ep-extra.%",
-        "trailer": "trailer.%",
-        "aux": "aux.%",
-    }
-    predicates = [
-        Episode.episode_identifier.like(patterns[episode_type])
-        for episode_type in allowed_types
-        if episode_type in patterns
-    ]
-    return or_(*predicates) if predicates else false()
-
-
 def get_download_profile_episodes(
         s: Session,
         profile: DownloadProfileBase,
@@ -123,7 +109,7 @@ def get_download_profile_episodes(
     stmt = select(Episode).where(
         Episode.show_id == profile.show_id,
         Episode.publish_status.in_(eligible_statuses),
-        _episode_identifier_type_predicate(allowed_types),
+        episode_identifier_type_predicate(Episode.episode_identifier, allowed_types),
     )
 
     if (
@@ -324,23 +310,21 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
             for episode in get_download_profile_episodes(
                 s,
                 profile,
-                apply_automatic_download_delay=False,
             )
         }
         stmt = select(EpisodeMediaDownload).where(
             EpisodeMediaDownload.download_profile_id == profile.id,
         )
         if kept_episode_ids:
-            stmt = stmt.where(EpisodeMediaDownload.media_item_id.notin_(kept_episode_ids))
-        candidates = list(s.execute(stmt).scalars())
-
-        if profile.delete_older_episodes:
-            rows = candidates
-        else:
-            rows = [
-                row for row in candidates
-                if row.artifact_status == MediaDownloadArtifactStatus.ABSENT.value
-            ]
+            stmt = stmt.where(
+                EpisodeMediaDownload.media_item_id.notin_(kept_episode_ids)
+            )
+        if not profile.delete_older_episodes:
+            stmt = stmt.where(
+                EpisodeMediaDownload.artifact_status
+                == MediaDownloadArtifactStatus.ABSENT.value
+            )
+        rows = list(s.scalars(stmt))
     elif profile.download_days_in_past > 0:
         if not profile.delete_older_episodes:
             return 0

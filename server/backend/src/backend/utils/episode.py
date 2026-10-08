@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+from sqlalchemy import false, or_
+
 from backend.types.download_profile_types import EpIdType
 from backend.types.episode_types import EpisodeExtraType
 
@@ -12,6 +14,22 @@ _SEASONAL_EPISODE_EXTRA = re.compile(
     r"^S(?P<season>\d+)E(?P<number>\d+)\.(?P<sub_number>\d+)$"
 )
 _NUMBER = re.compile(r"^\d+$")
+
+
+def episode_identifier_type_predicate(identifier_column, allowed_types: set[str]):
+    """SQL predicate matching WireLoft's canonical episode identifier type."""
+    patterns = {
+        str(EpIdType.EP): "ep.%",
+        str(EpIdType.EP_EXTRA): "ep-extra.%",
+        str(EpIdType.TRAILER): "trailer.%",
+        str(EpIdType.AUX): "aux.%",
+    }
+    predicates = [
+        identifier_column.like(patterns[episode_type])
+        for episode_type in allowed_types
+        if episode_type in patterns
+    ]
+    return or_(*predicates) if predicates else false()
 
 
 @dataclass(frozen=True)

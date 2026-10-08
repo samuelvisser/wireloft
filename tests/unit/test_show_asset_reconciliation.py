@@ -96,7 +96,7 @@ def writer(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(service, "_current", lambda *_: True)
     monkeypatch.setattr(service, "show_profile_roots", lambda *_: {})
-    monkeypatch.setattr(service, "managed_show_profile_pairs", lambda *_: {(1, 1), (1, 2)})
+    monkeypatch.setattr(service, "show_profile_is_managed", lambda *_: True)
     monkeypatch.setattr(service, "show_assets_enabled", lambda _: True)
     monkeypatch.setattr(service, "resolve_show_media_directory", lambda *_: SimpleNamespace(path=str(state.current_root)))
     monkeypatch.setattr(service, "download_show_asset", download)

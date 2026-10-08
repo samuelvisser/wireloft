@@ -36,7 +36,6 @@ def _seed_local_media_profiles(session: Session) -> None:
         ShowLocalMediaProfile,
     )
 
-    existing_slugs = set(session.scalars(select(LocalMediaProfileBase.slug)))
     profiles = (
         ShowLocalMediaProfile(
             slug="wireloft-shows-video",
@@ -57,7 +56,17 @@ def _seed_local_media_profiles(session: Session) -> None:
             preferred_format="format_1080p",
         ),
     )
-    session.add_all(profile for profile in profiles if profile.slug not in existing_slugs)
+    slugs = tuple(profile.slug for profile in profiles)
+    existing_slugs = set(session.scalars(
+        select(LocalMediaProfileBase.slug).where(
+            LocalMediaProfileBase.slug.in_(slugs)
+        )
+    ))
+    session.add_all(
+        profile
+        for profile in profiles
+        if profile.slug not in existing_slugs
+    )
 
 
 _INITIAL_SEED_STEPS: tuple[Callable[[Session], None], ...] = (

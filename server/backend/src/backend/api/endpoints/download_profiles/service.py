@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Sequence
 
+from sqlalchemy import func, select, true
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
@@ -54,19 +55,24 @@ def require_unique_download_profile_episode_types(
     if not requested_types:
         return
 
-    query = s.query(DownloadProfileBase).filter(
-        DownloadProfileBase.show_id == show_id,
-        DownloadProfileBase.local_media_profile_id == local_media_profile_id,
+    episode_type = func.json_each(
+        DownloadProfileBase.ep_id_type_list
+    ).table_valued("key", "value").alias("episode_type")
+    stmt = (
+        select(episode_type.c.value)
+        .select_from(DownloadProfileBase)
+        .join(episode_type, true())
+        .where(
+            DownloadProfileBase.show_id == show_id,
+            DownloadProfileBase.local_media_profile_id == local_media_profile_id,
+            episode_type.c.value.in_(requested_types),
+        )
+        .distinct()
     )
     if exclude_profile_id is not None:
-        query = query.filter(DownloadProfileBase.id != exclude_profile_id)
+        stmt = stmt.where(DownloadProfileBase.id != exclude_profile_id)
 
-    conflicts = sorted({
-        episode_type
-        for profile in query.all()
-        for episode_type in profile.ep_id_type_list
-        if episode_type in requested_types
-    })
+    conflicts = sorted(str(value) for value in s.scalars(stmt))
     if conflicts:
         raise HTTPException(
             status_code=409,

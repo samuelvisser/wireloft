@@ -25,7 +25,9 @@ def run_delete_show_downloads_worker(
         progress=None,
 ) -> dict[str, Any]:
     """Delete existing show artifacts after affected Download Profiles are disabled."""
-    scope = EpisodeDownloadScope.resolve(s, show_id=show_id).select(
+    scope = EpisodeDownloadScope.resolve(
+        s,
+        show_id=show_id,
         local_media_profile_id=local_media_profile_id,
     )
     base_result = scope.result_data()

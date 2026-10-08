@@ -7,20 +7,24 @@ from typing import Literal, Optional
 from xml.etree.ElementTree import Element, SubElement, tostring
 
 from fastapi import HTTPException, Request
-from sqlalchemy import func
+from sqlalchemy import and_, exists, false, func, or_, select, true
 from sqlalchemy.orm import Session, joinedload
 
 from backend.api.models.rss_stream_profile import RssStreamProfileAPIRead
 from backend.db.datetime_types import utc_datetime
+from backend.utils.episode import episode_identifier_type_predicate
 from backend.db.models import (
     DownloadProfileBase,
     Episode,
+    LocalMediaProfileBase,
     RssStreamProfile,
+    Season,
     SeriesDownloadProfile,
 )
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.db.models.download_profile.SeriesDownloadProfile import association_table as series_season_association
 from backend.types.dailywire_user_info import WlDwMembershipLevel
-from backend.types.download_profile_types import EpIdType, MediaDownloadArtifactStatus
+from backend.types.download_profile_types import DownloadProfileType, EpIdType, MediaDownloadArtifactStatus
 from backend.types.episode_types import EpisodeExtraType, EpisodePublishStatus
 from backend.types.local_media_profile_types import PreferredFormat
 from backend.types.show_types import EpisodeIdentifier, ShowType
@@ -65,10 +69,10 @@ def get_rss_stream_profile_by_token(s: Session, token: str) -> RssStreamProfile:
     item: Optional[RssStreamProfile] = (
         s.query(RssStreamProfile)
         .options(joinedload(RssStreamProfile.show))
-        .filter_by(token=token)
+        .filter_by(token=token, enable_profile=True)
         .one_or_none()
     )
-    if item is None or not item.enable_profile:
+    if item is None:
         raise HTTPException(status_code=404, detail="Feed not found")
     return item
 
@@ -310,42 +314,72 @@ def _has_hls_download_profile_for_episode(
         episode: Episode,
 ) -> bool:
     episode_type = _episode_type_prefix(episode)
-    profiles = (
-        s.query(DownloadProfileBase)
-        .options(joinedload(DownloadProfileBase.local_media_profile))
-        .filter(
+    if not episode_type:
+        return False
+
+    profile_episode_type = func.json_each(
+        DownloadProfileBase.ep_id_type_list
+    ).table_valued("key", "value").alias("profile_episode_type")
+    series_table = SeriesDownloadProfile.__table__
+    selected_season = exists(
+        select(series_season_association.c.season_id).where(
+            series_season_association.c.download_profiles_series_id
+            == DownloadProfileBase.id,
+            series_season_association.c.season_id == episode.season_id,
+        )
+    )
+    max_selected_season_index = (
+        select(func.max(Season.index))
+        .select_from(
+            series_season_association.join(
+                Season,
+                Season.id == series_season_association.c.season_id,
+            )
+        )
+        .where(
+            series_season_association.c.download_profiles_series_id
+            == DownloadProfileBase.id
+        )
+        .scalar_subquery()
+    )
+    episode_season_index = (
+        select(Season.index)
+        .where(Season.id == episode.season_id)
+        .scalar_subquery()
+    )
+    series_allows_episode = or_(
+        DownloadProfileBase.type != DownloadProfileType.SERIES.value,
+        selected_season,
+        and_(
+            series_table.c.include_upcoming_seasons.is_(True),
+            max_selected_season_index.is_not(None),
+            episode_season_index > max_selected_season_index,
+        ),
+    )
+
+    return s.scalar(
+        select(DownloadProfileBase.id)
+        .select_from(DownloadProfileBase)
+        .join(
+            LocalMediaProfileBase,
+            LocalMediaProfileBase.id
+            == DownloadProfileBase.local_media_profile_id,
+        )
+        .join(profile_episode_type, true())
+        .outerjoin(
+            series_table,
+            series_table.c.id == DownloadProfileBase.id,
+        )
+        .where(
             DownloadProfileBase.show_id == episode.show_id,
             DownloadProfileBase.enable_profile.is_(True),
+            LocalMediaProfileBase.preferred_format
+            == PreferredFormat.FORMAT_HLS.value,
+            profile_episode_type.c.value == episode_type,
+            series_allows_episode,
         )
-        .all()
-    )
-    for download_profile in profiles:
-        if episode_type not in set(download_profile.ep_id_type_list or []):
-            continue
-        if (
-            download_profile.local_media_profile.preferred_format
-            != PreferredFormat.FORMAT_HLS.value
-        ):
-            continue
-        if isinstance(download_profile, SeriesDownloadProfile):
-            selected_seasons = list(download_profile.seasons)
-            selected_season_ids = {season.id for season in selected_seasons}
-            if episode.season_id not in selected_season_ids:
-                max_selected_index = (
-                    max(season.index for season in selected_seasons)
-                    if selected_seasons
-                    else None
-                )
-                is_upcoming = (
-                    download_profile.include_upcoming_seasons
-                    and max_selected_index is not None
-                    and episode.season is not None
-                    and episode.season.index > max_selected_index
-                )
-                if not is_upcoming:
-                    continue
-        return True
-    return False
+        .limit(1)
+    ) is not None
 
 
 def _can_stream_live_episode(
@@ -420,9 +454,56 @@ def get_feed_items(
         Episode.went_live_date,
         Episode.created_at,
     )
+    allowed_types = set(profile.ep_id_type_list or [])
+    if not allowed_types:
+        return []
+
+    local_download_exists = exists(
+        select(EpisodeMediaDownload.id).where(
+            EpisodeMediaDownload.media_item_id == Episode.id,
+            EpisodeMediaDownload.artifact_status.in_(
+                _RECONCILABLE_ARTIFACT_STATUSES
+            ),
+        )
+    )
+    handoff_candidate = (
+        Episode.id.in_(previous_handoffs)
+        if previous_handoffs
+        else false()
+    )
+    non_live_delivery_candidate = (
+        true()
+        if profile.use_dw_stream
+        else local_download_exists
+        if profile.use_downloads
+        else false()
+    )
+    non_live_candidate = and_(
+        Episode.publish_status != EpisodePublishStatus.LIVE.value,
+        or_(
+            handoff_candidate,
+            and_(
+                Episode.publish_status.not_in(_UNAVAILABLE_PUBLISH_STATUSES),
+                non_live_delivery_candidate,
+            ),
+        ),
+    )
+    live_candidate = (
+        Episode.publish_status == EpisodePublishStatus.LIVE.value
+        if live_enabled and (profile.use_dw_stream or profile.use_downloads)
+        else false()
+    )
+
     episode_query = (
         s.query(Episode)
-        .filter(Episode.show_id == profile.show_id)
+        .filter(
+            Episode.show_id == profile.show_id,
+            episode_identifier_type_predicate(
+                Episode.episode_identifier,
+                allowed_types,
+            ),
+            or_(live_candidate, non_live_candidate),
+        )
         .order_by(order_date.desc(), Episode.id.asc())
     )
 
@@ -548,14 +629,23 @@ def get_episode_for_feed(
         profile: RssStreamProfile,
         episode_slug: str,
 ) -> Episode:
+    allowed_types = set(profile.ep_id_type_list or [])
+    if not allowed_types:
+        raise HTTPException(status_code=404, detail="Episode not included in this feed")
+
     episode: Optional[Episode] = (
         s.query(Episode)
-        .filter_by(slug=episode_slug, show_id=profile.show_id)
+        .filter(
+            Episode.slug == episode_slug,
+            Episode.show_id == profile.show_id,
+            episode_identifier_type_predicate(
+                Episode.episode_identifier,
+                allowed_types,
+            ),
+        )
         .one_or_none()
     )
     if episode is None:
-        raise HTTPException(status_code=404, detail="Episode not found")
-    if not _profile_allows_episode(profile, episode):
         raise HTTPException(status_code=404, detail="Episode not included in this feed")
 
     if episode.publish_status == EpisodePublishStatus.LIVE.value:

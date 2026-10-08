@@ -45,7 +45,9 @@ async def run_rename_file_worker(
     current data and its current Local Media Profile template.
     """
     try:
-        scope = EpisodeDownloadScope.resolve(s, episode_id=episode_id).select(
+        scope = EpisodeDownloadScope.resolve(
+            s,
+            episode_id=episode_id,
             local_media_profile_id=local_media_profile_id,
             artifact_statuses=_PHYSICAL_ARTIFACT_STATUSES,
         )

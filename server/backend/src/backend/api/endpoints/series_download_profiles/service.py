@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 from backend.api.endpoints.download_profiles.service import require_unique_download_profile_episode_types
@@ -58,16 +59,17 @@ def _resolve_or_create_seasons_for_show(s: Session, show_id: int, seasons_req: l
 
     result: list[Season] = []
     seen_ids: set[int] = set()
-    show_seasons = s.query(Season).filter(Season.show_id == show_id).all()
-    next_index = max((season.index for season in show_seasons), default=0)
-    next_regular_number = max(
-        (
-            season.season_number
-            for season in show_seasons
-            if season.season_type == SeasonType.NORMAL.value
-        ),
-        default=0,
-    )
+    next_index = int(s.scalar(
+        select(func.coalesce(func.max(Season.index), 0))
+        .where(Season.show_id == show_id)
+    ) or 0)
+    next_regular_number = int(s.scalar(
+        select(func.coalesce(func.max(Season.season_number), 0))
+        .where(
+            Season.show_id == show_id,
+            Season.season_type == SeasonType.NORMAL.value,
+        )
+    ) or 0)
 
     for season_in in seasons_req:
         match = by_slug.get(season_in.slug)

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-from random import choice
-
 from sqlalchemy import and_, case, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
@@ -435,28 +433,25 @@ def get_random_show_template_source(
     show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
 ) -> LocalMediaProfileTemplateSource | None:
     """Choose an example uniformly by Show, then uniformly within that Show."""
-    show_ids = list(session.scalars(
+    show_id = session.scalar(
         select(Episode.show_id)
         .join(Episode.show)
         .join(Episode.season)
         .where(Show.type.in_(_show_type_values(show_scope)))
-        .distinct()
-        .order_by(Episode.show_id)
-    ).all())
-    if not show_ids:
+        .group_by(Episode.show_id)
+        .order_by(func.random())
+        .limit(1)
+    )
+    if show_id is None:
         return None
 
-    show_id = choice(show_ids)
-    episode_ids = list(session.scalars(
-        select(Episode.id)
+    episode = session.scalar(
+        select(Episode)
         .join(Episode.season)
         .where(Episode.show_id == show_id)
-        .order_by(Episode.id)
-    ).all())
-    if not episode_ids:
-        return None
-
-    episode = session.get(Episode, choice(episode_ids))
+        .order_by(func.random())
+        .limit(1)
+    )
     return _show_template_source(episode) if episode is not None else None
 
 

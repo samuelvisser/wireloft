@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, true, update
 from sqlalchemy.orm import Session
 
 from backend.db.models import CustomIndexState, Episode, Metadata, Show, ShowLocalMediaProfile
@@ -53,6 +53,21 @@ class CustomIndexReconciliationResult:
 
 def profile_applies_to_show(profile: ShowLocalMediaProfile, show: Show) -> bool:
     return profile.show_scope == ShowLocalMediaProfileScope.BOTH.value or profile.show_scope == show.type
+
+
+def profile_show_scope_filter_for_show_type(show_type: str):
+    """SQL predicate for Show Local Media Profiles that apply to one show type."""
+    return or_(
+        ShowLocalMediaProfile.show_scope == ShowLocalMediaProfileScope.BOTH.value,
+        ShowLocalMediaProfile.show_scope == show_type,
+    )
+
+
+def profile_show_scope_filter(profile: ShowLocalMediaProfile):
+    """SQL predicate for Shows that are in one Local Media Profile's scope."""
+    if profile.show_scope == ShowLocalMediaProfileScope.BOTH.value:
+        return true()
+    return Show.type == profile.show_scope
 
 
 def profile_uses_custom_indexes(profile: ShowLocalMediaProfile) -> bool:
@@ -162,12 +177,22 @@ def request_show_custom_index_reconciliation(session: Session, show_id: int) -> 
     show = session.get(Show, show_id)
     if show is None:
         return
-    for profile in session.scalars(select(ShowLocalMediaProfile).order_by(ShowLocalMediaProfile.id)):
-        previous = session.scalar(select(CustomIndexState.id).where(
+
+    existing_profile_ids = set(session.scalars(
+        select(CustomIndexState.local_media_profile_id).where(
             CustomIndexState.show_id == show_id,
-            CustomIndexState.local_media_profile_id == profile.id,
+        )
+    ))
+    profile_stmt = (
+        select(ShowLocalMediaProfile)
+        .where(or_(
+            ShowLocalMediaProfile.id.in_(existing_profile_ids),
+            profile_show_scope_filter_for_show_type(show.type),
         ))
-        if previous is not None or (profile_applies_to_show(profile, show) and profile_uses_custom_indexes(profile)):
+        .order_by(ShowLocalMediaProfile.id)
+    )
+    for profile in session.scalars(profile_stmt):
+        if profile.id in existing_profile_ids or profile_uses_custom_indexes(profile):
             request_custom_index_reconciliation(
                 session, show_id=show_id, local_media_profile_id=profile.id,
             )

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import (
     Session,
     joinedload,
@@ -16,9 +17,11 @@ from sqlalchemy.orm import (
 
 from backend.api.pagination import (
     InvalidCursorError,
+    KeysetField,
     cursor_key_values,
     decode_cursor,
     encode_cursor,
+    keyset_after,
 )
 from backend.api.models.media_download import (
     EpisodeDownloadAPICreate,
@@ -58,6 +61,7 @@ from task_manager.scheduler.types import OperationStatus, ResourceType, TaskStat
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
     get_media_download_queue_positions,
+    media_download_queue_position_subquery,
     prepare_media_download_artifact,
 )
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
@@ -491,6 +495,256 @@ def _download_bulk_action_matches(
     raise ValueError(f"Unknown media download bulk action: {action}")
 
 
+def _latest_download_run_ids_subquery():
+    return (
+        select(
+            TaskRun.resource_id.label("media_download_id"),
+            func.max(TaskRun.id).label("run_id"),
+        )
+        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
+        .where(
+            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+            TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
+        )
+        .group_by(TaskRun.resource_id)
+        .subquery()
+    )
+
+
+def _latest_active_download_operation_subquery():
+    ranked = (
+        select(
+            TaskOperation.resource_id.label("media_download_id"),
+            TaskOperation.id.label("operation_id"),
+            TaskOperation.status.label("operation_status"),
+            TaskOperation.context.label("operation_context"),
+            func.row_number().over(
+                partition_by=TaskOperation.resource_id,
+                order_by=(
+                    TaskOperation.created_at.desc(),
+                    TaskOperation.id.desc(),
+                ),
+            ).label("operation_rank"),
+        )
+        .where(
+            TaskOperation.kind == "media.download",
+            TaskOperation.resource_type == ResourceType.MEDIA_DOWNLOAD.value,
+            TaskOperation.resource_id.is_not(None),
+            TaskOperation.status.in_((
+                OperationStatus.QUEUED.value,
+                OperationStatus.RUNNING.value,
+                OperationStatus.WAITING.value,
+            )),
+        )
+        .subquery()
+    )
+    return (
+        select(
+            ranked.c.media_download_id,
+            ranked.c.operation_id,
+            ranked.c.operation_status,
+            ranked.c.operation_context,
+        )
+        .where(ranked.c.operation_rank == 1)
+        .subquery()
+    )
+
+
+def _media_download_collection_source():
+    """Build the UI download status/order projection entirely in SQL."""
+    latest_run_ids = _latest_download_run_ids_subquery()
+    active_operation = _latest_active_download_operation_subquery()
+    queue = media_download_queue_position_subquery()
+
+    progress_meta = TaskRun.meta["_progress_meta"]
+    execution = progress_meta["download"]
+    stages = func.json_each(
+        TaskRun.meta,
+        '$."_progress_meta".download.stages',
+    ).table_valued("key", "value").alias("download_stage")
+    main_stage_wait = exists(
+        select(stages.c.key)
+        .where(
+            func.json_extract(stages.c.value, "$.id")
+            == execution["main_activity"].as_string(),
+            func.json_extract(stages.c.value, "$.wait.reason").is_not(None),
+        )
+    )
+    canceling = or_(
+        func.coalesce(
+            active_operation.c.operation_context["cancel_requested"].as_boolean(),
+            False,
+        ).is_(True),
+        func.coalesce(progress_meta["canceling"].as_boolean(), False).is_(True),
+        func.coalesce(execution["canceling"].as_boolean(), False).is_(True),
+    )
+    waiting = or_(
+        active_operation.c.operation_status == OperationStatus.WAITING.value,
+        main_stage_wait,
+        progress_meta["wait_state"]["reason"].as_string().is_not(None),
+    )
+    transferring = and_(
+        execution["phase"].as_string() == "transferring",
+        execution["main_activity"].as_string() == "media",
+    )
+    primary_transfer_complete = func.coalesce(
+        execution["primary_transfer_complete"].as_boolean(),
+        False,
+    ).is_(True)
+    is_redownload = func.coalesce(
+        TaskRun.meta["inputs"]["is_redownload"].as_boolean(),
+        TaskRun.result["data"]["is_redownload"].as_boolean(),
+        False,
+    )
+
+    active_status = case(
+        (canceling, "canceling"),
+        (
+            active_operation.c.operation_status == OperationStatus.QUEUED.value,
+            "pending",
+        ),
+        (waiting, "waiting"),
+        (transferring, "downloading"),
+        (primary_transfer_complete, "local_processing"),
+        else_="preparing",
+    )
+    persistent_status = case(
+        (
+            MediaDownloadBase.artifact_status
+            == MediaDownloadArtifactStatus.AVAILABLE.value,
+            case((is_redownload.is_(True), "redownloaded"), else_="downloaded"),
+        ),
+        (
+            MediaDownloadBase.artifact_status
+            == MediaDownloadArtifactStatus.MISSING.value,
+            "missing",
+        ),
+        (
+            MediaDownloadBase.artifact_status
+            == MediaDownloadArtifactStatus.CORRUPTED.value,
+            "corrupted",
+        ),
+        (TaskRun.status == TaskStatus.RUNNING, "preparing"),
+        (TaskRun.status == TaskStatus.FAILED, "error"),
+        (
+            or_(
+                MediaDownloadBase.automatic_retry_suppressed.is_(True),
+                TaskRun.status == TaskStatus.CANCELED,
+            ),
+            "cancelled",
+        ),
+        else_="not_downloaded",
+    )
+    status = case(
+        (active_operation.c.operation_id.is_not(None), active_status),
+        else_=persistent_status,
+    ).label("status")
+
+    status_source = (
+        select(
+            MediaDownloadBase.id.label("id"),
+            MediaDownloadBase.artifact_status.label("artifact_status"),
+            MediaDownloadBase.downloaded_at.label("downloaded_at"),
+            MediaDownloadBase.created_at.label("created_at"),
+            MediaDownloadBase.updated_at.label("updated_at"),
+            TaskRun.finished_at.label("run_finished_at"),
+            queue.c.queue_position.label("queue_position"),
+            status,
+        )
+        .outerjoin(
+            latest_run_ids,
+            latest_run_ids.c.media_download_id == MediaDownloadBase.id,
+        )
+        .outerjoin(TaskRun, TaskRun.id == latest_run_ids.c.run_id)
+        .outerjoin(
+            active_operation,
+            active_operation.c.media_download_id == MediaDownloadBase.id,
+        )
+        .outerjoin(
+            queue,
+            queue.c.media_download_id == MediaDownloadBase.id,
+        )
+        .subquery()
+    )
+
+    recent_at = case(
+        (
+            status_source.c.status.in_(("downloaded", "redownloaded")),
+            func.coalesce(
+                status_source.c.run_finished_at,
+                status_source.c.downloaded_at,
+                status_source.c.created_at,
+            ),
+        ),
+        else_=func.coalesce(
+            status_source.c.run_finished_at,
+            status_source.c.updated_at,
+            status_source.c.created_at,
+        ),
+    ).label("recent_at")
+    workflow_bucket = case(
+        (
+            status_source.c.status.in_((
+                "downloading",
+                "preparing",
+                "waiting",
+                "canceling",
+                "local_processing",
+            )),
+            0,
+        ),
+        (status_source.c.status == "pending", 1),
+        else_=2,
+    ).label("workflow_bucket")
+    workflow_queue = case(
+        (
+            status_source.c.status == "pending",
+            func.coalesce(status_source.c.queue_position, -1),
+        ),
+        else_=0,
+    ).label("workflow_queue")
+
+    return (
+        select(
+            status_source,
+            recent_at,
+            workflow_bucket,
+            workflow_queue,
+        )
+        .subquery()
+    )
+
+
+def _download_bulk_action_predicate(source, action: str):
+    if action == "retry":
+        return source.c.status.in_((
+            "preparing",
+            "waiting",
+            "downloading",
+            "local_processing",
+            "downloaded",
+            "redownloaded",
+            "error",
+            "missing",
+            "corrupted",
+            "cancelled",
+        ))
+    if action == "cancel":
+        return source.c.status.in_((
+            "pending",
+            "preparing",
+            "waiting",
+            "downloading",
+            "local_processing",
+        ))
+    if action == "delete-unavailable":
+        return source.c.artifact_status.in_((
+            MediaDownloadArtifactStatus.ABSENT.value,
+            MediaDownloadArtifactStatus.MISSING.value,
+        ))
+    raise ValueError(f"Unknown media download bulk action: {action}")
+
+
 def _download_collection_revision(s: Session) -> str:
     download_count, download_updated = s.execute(
         select(func.count(MediaDownloadBase.id), func.max(MediaDownloadBase.updated_at))
@@ -523,114 +777,156 @@ def get_media_downloads_page(
         cursor: str | None = None,
         limit: int = 50,
 ) -> MediaDownloadPageRead:
-    """Return one cursor page after applying UI status filters and workflow ordering."""
-    downloads = list(s.scalars(
-        select(MediaDownloadBase)
-        .options(
-            load_only(
-                MediaDownloadBase.id,
-                MediaDownloadBase.artifact_status,
-                MediaDownloadBase.automatic_retry_suppressed,
-                MediaDownloadBase.downloaded_at,
-                MediaDownloadBase.created_at,
-                MediaDownloadBase.updated_at,
-                raiseload=True,
-            ),
-            raiseload("*"),
-        )
-    ))
-    ids = [download.id for download in downloads]
-    latest_runs = _latest_download_runs(s, ids)
-    active_operations = _active_download_operations(s, ids)
-    queue_positions = get_media_download_queue_positions(s)
-
-    requested_statuses = set(statuses or [])
-    cursor_statuses = sorted(requested_statuses)
-    status_counts: dict[str, int] = {}
-    rows: list[tuple[MediaDownloadBase, str]] = []
-    for download in downloads:
-        status = _download_collection_status(
-            download,
-            latest_run=latest_runs.get(download.id),
-            active_operation=active_operations.get(download.id),
-        )
-        status_counts[status] = status_counts.get(status, 0) + 1
-        if requested_statuses and status not in requested_statuses:
-            continue
-        rows.append((download, status))
-
-    def recent_key(item: tuple[MediaDownloadBase, str]) -> tuple[float, int]:
-        download, status = item
-        run = latest_runs.get(download.id)
-        if status in {"downloaded", "redownloaded"}:
-            occurred_at = (
-                (run.finished_at if run is not None else None)
-                or download.downloaded_at
-                or download.created_at
-            )
-        else:
-            occurred_at = (
-                (run.finished_at if run is not None else None)
-                or download.updated_at
-                or download.created_at
-            )
-        return (-occurred_at.timestamp(), -download.id)
-
-    def workflow_key(item: tuple[MediaDownloadBase, str]) -> tuple[int, int, int]:
-        download, status = item
-        if status in {"downloading", "preparing", "waiting", "canceling", "local_processing"}:
-            return (0, 0, -download.id)
-        if status == "pending":
-            queue_position = queue_positions.get(download.id)
-            return (1, -1 if queue_position is None else queue_position, -download.id)
-        return (2, 0, -download.id)
-
-    sort_key = recent_key if order == "recent" else workflow_key
-    rows.sort(key=sort_key)
-
-    action_counts = {
-        action: sum(
-            1 for download, status in rows
-            if _download_bulk_action_matches(download, status, action)
-        )
-        for action in ("retry", "cancel", "delete-unavailable")
-    }
-
-    total = len(rows)
+    """Return one SQL-filtered cursor page in the requested UI ordering."""
+    source = _media_download_collection_source()
+    requested_statuses = sorted(set(statuses or []))
     revision = _download_collection_revision(s)
-    cursor_key: tuple[float | int, ...] | None = None
+
+    page_filter = []
+    if requested_statuses:
+        page_filter.append(source.c.status.in_(requested_statuses))
+
+    cursor_values: list[str | int | float | None] | None = None
     if cursor:
         try:
             values = decode_cursor(cursor)
             if (
                 values.get("kind") != "media-download"
                 or values.get("order") != order
-                or values.get("statuses") != cursor_statuses
+                or values.get("statuses") != requested_statuses
             ):
-                raise InvalidCursorError("Cursor does not match this download collection")
-            key_values = cursor_key_values(
-                values,
-                length=2 if order == "recent" else 3,
-            )
-            if not all(isinstance(value, (int, float)) for value in key_values):
-                raise InvalidCursorError("Invalid download cursor key")
-            # Workflow ordering can move existing rows between buckets. If that
-            # happened, restart from the head; the frontend revision check will
-            # replace the old pages rather than continuing through a mixed order.
+                raise InvalidCursorError(
+                    "Cursor does not match this download collection"
+                )
             if values.get("revision") == revision:
-                cursor_key = tuple(key_values)
+                cursor_values = cursor_key_values(
+                    values,
+                    length=2 if order == "recent" else 3,
+                )
         except InvalidCursorError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    candidates = (
-        rows
-        if cursor_key is None
-        else [item for item in rows if sort_key(item) > cursor_key]
-    )
-    selected_pairs = candidates[:limit]
-    has_more = len(candidates) > len(selected_pairs)
+    if order == "recent":
+        order_by = (source.c.recent_at.desc(), source.c.id.desc())
+        if cursor_values is not None:
+            occurred_at, media_download_id = cursor_values
+            if (
+                not isinstance(occurred_at, str)
+                or isinstance(media_download_id, bool)
+                or not isinstance(media_download_id, int)
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid download cursor key",
+                )
+            try:
+                parsed_occurred_at = datetime.fromisoformat(occurred_at)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid download cursor key",
+                ) from exc
+            page_filter.append(keyset_after([
+                KeysetField(
+                    source.c.recent_at,
+                    parsed_occurred_at,
+                    descending=True,
+                ),
+                KeysetField(
+                    source.c.id,
+                    media_download_id,
+                    descending=True,
+                ),
+            ]))
+    else:
+        order_by = (
+            source.c.workflow_bucket.asc(),
+            source.c.workflow_queue.asc(),
+            source.c.id.desc(),
+        )
+        if cursor_values is not None:
+            if (
+                any(isinstance(value, bool) for value in cursor_values)
+                or not all(isinstance(value, int) for value in cursor_values)
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Invalid download cursor key",
+                )
+            bucket, queue_position, media_download_id = cursor_values
+            page_filter.append(keyset_after([
+                KeysetField(source.c.workflow_bucket, bucket),
+                KeysetField(source.c.workflow_queue, queue_position),
+                KeysetField(
+                    source.c.id,
+                    media_download_id,
+                    descending=True,
+                ),
+            ]))
 
-    selected_ids = [download.id for download, _ in selected_pairs]
+    page_stmt = (
+        select(
+            source.c.id,
+            source.c.queue_position,
+            source.c.recent_at,
+            source.c.workflow_bucket,
+            source.c.workflow_queue,
+        )
+        .where(*page_filter)
+        .order_by(*order_by)
+        .limit(limit + 1)
+    )
+    page_rows = list(s.execute(page_stmt).mappings())
+    has_more = len(page_rows) > limit
+    page_rows = page_rows[:limit]
+    selected_ids = [int(row["id"]) for row in page_rows]
+
+    facet_rows = s.execute(
+        select(source.c.status, func.count(source.c.id))
+        .group_by(source.c.status)
+    )
+    status_counts = {
+        str(status): int(count)
+        for status, count in facet_rows
+    }
+
+    summary_stmt = select(
+        func.count(source.c.id),
+        func.coalesce(
+            func.sum(case((
+                _download_bulk_action_predicate(source, "retry"),
+                1,
+            ), else_=0)),
+            0,
+        ),
+        func.coalesce(
+            func.sum(case((
+                _download_bulk_action_predicate(source, "cancel"),
+                1,
+            ), else_=0)),
+            0,
+        ),
+        func.coalesce(
+            func.sum(case((
+                _download_bulk_action_predicate(source, "delete-unavailable"),
+                1,
+            ), else_=0)),
+            0,
+        ),
+    )
+    if requested_statuses:
+        summary_stmt = summary_stmt.where(
+            source.c.status.in_(requested_statuses),
+        )
+    total, retry_count, cancel_count, delete_count = s.execute(
+        summary_stmt
+    ).one()
+    action_counts = {
+        "retry": int(retry_count),
+        "cancel": int(cancel_count),
+        "delete-unavailable": int(delete_count),
+    }
+
     if selected_ids:
         selected_downloads_by_id = {
             download.id: download
@@ -650,17 +946,37 @@ def get_media_downloads_page(
             for media_download_id in selected_ids
             if media_download_id in selected_downloads_by_id
         ]
+        latest_runs = _latest_download_runs(s, selected_ids)
+        queue_positions = {
+            int(row["id"]): int(row["queue_position"])
+            for row in page_rows
+            if row["queue_position"] is not None
+        }
     else:
         selected_downloads = []
+        latest_runs = {}
+        queue_positions = {}
 
     next_cursor = None
-    if has_more and selected_pairs:
+    if has_more and page_rows:
+        last = page_rows[-1]
+        if order == "recent":
+            recent_at = last["recent_at"]
+            if recent_at is None:
+                raise RuntimeError("Download recent ordering produced no timestamp")
+            cursor_key = [recent_at.isoformat(), int(last["id"])]
+        else:
+            cursor_key = [
+                int(last["workflow_bucket"]),
+                int(last["workflow_queue"]),
+                int(last["id"]),
+            ]
         next_cursor = encode_cursor({
             "kind": "media-download",
             "order": order,
-            "statuses": cursor_statuses,
+            "statuses": requested_statuses,
             "revision": revision,
-            "key": list(sort_key(selected_pairs[-1])),
+            "key": cursor_key,
         })
 
     return MediaDownloadPageRead(
@@ -670,7 +986,7 @@ def get_media_downloads_page(
             latest_runs=latest_runs,
             queue_positions=queue_positions,
         ),
-        total=total,
+        total=int(total),
         limit=limit,
         next_cursor=next_cursor,
         revision=revision,
@@ -685,36 +1001,21 @@ def get_media_download_bulk_action_ids(
         statuses: Optional[list[str]],
         action: str,
 ) -> list[int]:
-    """Return every row in the filtered collection that supports one bulk action."""
-    downloads = list(s.scalars(
-        select(MediaDownloadBase)
-        .options(
-            load_only(
-                MediaDownloadBase.id,
-                MediaDownloadBase.artifact_status,
-                MediaDownloadBase.automatic_retry_suppressed,
-                raiseload=True,
-            ),
-            raiseload("*"),
-        )
-    ))
-    ids = [download.id for download in downloads]
-    latest_runs = _latest_download_runs(s, ids)
-    active_operations = _active_download_operations(s, ids)
-    requested_statuses = set(statuses or [])
+    """Return exact bulk-action IDs using the same SQL status projection as paging."""
+    source = _media_download_collection_source()
+    predicates = [_download_bulk_action_predicate(source, action)]
+    requested_statuses = sorted(set(statuses or []))
+    if requested_statuses:
+        predicates.append(source.c.status.in_(requested_statuses))
 
-    matching: list[int] = []
-    for download in downloads:
-        status = _download_collection_status(
-            download,
-            latest_run=latest_runs.get(download.id),
-            active_operation=active_operations.get(download.id),
+    return [
+        int(media_download_id)
+        for media_download_id in s.scalars(
+            select(source.c.id)
+            .where(*predicates)
+            .order_by(source.c.id)
         )
-        if requested_statuses and status not in requested_statuses:
-            continue
-        if _download_bulk_action_matches(download, status, action):
-            matching.append(download.id)
-    return matching
+    ]
 
 
 def get_media_download(s: Session, media_download_id: int) -> MediaDownloadAPIRead:

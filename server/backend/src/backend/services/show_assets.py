@@ -7,7 +7,7 @@ from pathlib import Path
 from os.path import normcase
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import exists, or_, select, union
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.models import DownloadProfileBase, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile
@@ -48,14 +48,58 @@ def show_assets_enabled(profile: ShowLocalMediaProfile) -> bool:
     return get_settings().download_settings.download_show_assets if override is None else override
 
 
+def show_profile_is_managed(
+        session: Session,
+        show_id: int,
+        profile_id: int,
+) -> bool:
+    """Return whether one show/profile pair is still managed without loading all pairs."""
+    profile_assignment = exists(
+        select(DownloadProfileBase.id).where(
+            DownloadProfileBase.show_id == show_id,
+            DownloadProfileBase.local_media_profile_id == profile_id,
+        )
+    )
+    manual_download = exists(
+        select(EpisodeMediaDownload.id)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .where(
+            Episode.show_id == show_id,
+            EpisodeMediaDownload.local_media_profile_id == profile_id,
+        )
+    )
+    return bool(session.scalar(select(or_(profile_assignment, manual_download))))
+
+
 def managed_show_profile_pairs(session: Session) -> set[tuple[int, int]]:
     """Include manual downloads as well as Download Profile assignments."""
-    pairs = set(session.execute(select(DownloadProfileBase.show_id, DownloadProfileBase.local_media_profile_id)).all())
-    pairs.update(session.execute(
-        select(Episode.show_id, EpisodeMediaDownload.local_media_profile_id)
-        .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
-    ).all())
-    return {(show_id, profile_id) for show_id, profile_id in pairs if show_id is not None and profile_id is not None}
+    pairs = union(
+        select(
+            DownloadProfileBase.show_id.label("show_id"),
+            DownloadProfileBase.local_media_profile_id.label("profile_id"),
+        ).where(
+            DownloadProfileBase.show_id.is_not(None),
+            DownloadProfileBase.local_media_profile_id.is_not(None),
+        ),
+        select(
+            Episode.show_id.label("show_id"),
+            EpisodeMediaDownload.local_media_profile_id.label("profile_id"),
+        )
+        .join(
+            EpisodeMediaDownload,
+            EpisodeMediaDownload.media_item_id == Episode.id,
+        )
+        .where(
+            Episode.show_id.is_not(None),
+            EpisodeMediaDownload.local_media_profile_id.is_not(None),
+        ),
+    ).subquery()
+    return {
+        (int(show_id), int(profile_id))
+        for show_id, profile_id in session.execute(
+            select(pairs.c.show_id, pairs.c.profile_id)
+        )
+    }
 
 
 def resolve_show_media_directory(
@@ -190,10 +234,29 @@ def request_show_asset_reconciliation(session: Session, show_id: int = 0) -> Non
 
 
 def request_profile_show_assets(session: Session, profile_id: int) -> None:
-    pairs = managed_show_profile_pairs(session)
-    pairs.update(session.execute(select(ShowLocalAsset.show_id, ShowLocalAsset.local_media_profile_id)).all())
-    for show_id in sorted({show_id for show_id, candidate in pairs if candidate == profile_id}):
-        request_show_asset_reconciliation(session, show_id)
+    show_ids = union(
+        select(DownloadProfileBase.show_id.label("show_id")).where(
+            DownloadProfileBase.local_media_profile_id == profile_id,
+            DownloadProfileBase.show_id.is_not(None),
+        ),
+        select(Episode.show_id.label("show_id"))
+        .join(
+            EpisodeMediaDownload,
+            EpisodeMediaDownload.media_item_id == Episode.id,
+        )
+        .where(
+            EpisodeMediaDownload.local_media_profile_id == profile_id,
+            Episode.show_id.is_not(None),
+        ),
+        select(ShowLocalAsset.show_id.label("show_id")).where(
+            ShowLocalAsset.local_media_profile_id == profile_id,
+            ShowLocalAsset.show_id.is_not(None),
+        ),
+    ).subquery()
+    for show_id in session.scalars(
+        select(show_ids.c.show_id).order_by(show_ids.c.show_id)
+    ):
+        request_show_asset_reconciliation(session, int(show_id))
 
 
 def update_show_artwork_metadata(show: Show, source: "DwShowRecord") -> None:

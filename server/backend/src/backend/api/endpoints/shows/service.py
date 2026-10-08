@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
@@ -9,6 +10,7 @@ from backend.api.models.show import *
 from fastapi import HTTPException
 
 from backend.db.models import Episode, Show
+from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.episode_download_scope import EpisodeDownloadScope
@@ -42,22 +44,45 @@ _ShowDownloadMaintenanceOperation = ShowDeleteDownloadsOperation | ShowRedownloa
 
 
 def _select_show_episode_download_scope(
-        scope: EpisodeDownloadScope,
+        s: Session,
+        show: Show,
         *,
         local_media_profile_id: int | None,
+        artifact_statuses: tuple[str, ...] | None = None,
 ) -> EpisodeDownloadScope:
-    """Validate and apply a show action's optional Local Media Profile scope."""
-    if not scope.downloads:
+    """Validate a show action's scope, then load only its selected downloads."""
+    any_download = s.scalar(
+        select(EpisodeMediaDownload.id)
+        .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+        .where(Episode.show_id == show.id)
+        .limit(1)
+    )
+    if any_download is None:
         raise HTTPException(status_code=422, detail="This show has no episode downloads")
-    if (
-        local_media_profile_id is not None
-        and local_media_profile_id not in scope.local_media_profile_ids
-    ):
-        raise HTTPException(
-            status_code=422,
-            detail="Local Media Profile has no downloads for this show",
+
+    if local_media_profile_id is not None:
+        scoped_download = s.scalar(
+            select(EpisodeMediaDownload.id)
+            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+            .where(
+                Episode.show_id == show.id,
+                EpisodeMediaDownload.local_media_profile_id
+                == local_media_profile_id,
+            )
+            .limit(1)
         )
-    return scope.select(local_media_profile_id=local_media_profile_id)
+        if scoped_download is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Local Media Profile has no downloads for this show",
+            )
+
+    return EpisodeDownloadScope.resolve(
+        s,
+        show_id=show.id,
+        local_media_profile_id=local_media_profile_id,
+        artifact_statuses=artifact_statuses,
+    )
 
 
 def _resolve_show_download_maintenance_scope(
@@ -74,7 +99,8 @@ def _resolve_show_download_maintenance_scope(
         raise HTTPException(status_code=404, detail="Show not found")
 
     scope = _select_show_episode_download_scope(
-        EpisodeDownloadScope.resolve(s, show_id=show.id),
+        s,
+        show,
         local_media_profile_id=local_media_profile_id,
     )
     return show, scope
@@ -318,11 +344,12 @@ def request_show_file_rename(
     if show is None:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    selected_scope = _select_show_episode_download_scope(
-        EpisodeDownloadScope.resolve(s, show_id=show.id),
+    rename_scope = _select_show_episode_download_scope(
+        s,
+        show,
         local_media_profile_id=local_media_profile_id,
+        artifact_statuses=_PHYSICAL_ARTIFACT_STATUSES,
     )
-    rename_scope = selected_scope.select(artifact_statuses=_PHYSICAL_ARTIFACT_STATUSES)
     profile_ids = rename_scope.local_media_profile_ids
 
     operation = create_operation(

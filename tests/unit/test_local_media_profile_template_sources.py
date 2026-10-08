@@ -352,6 +352,7 @@ def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):
 
 def test_random_show_source_weights_shows_equally_before_episodes(db_session, monkeypatch):
     from backend.api.endpoints.local_media_profiles import output_template
+    from backend.db.models import Episode
     from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
     from backend.types.show_types import ShowType
 
@@ -367,29 +368,26 @@ def test_random_show_source_weights_shows_equally_before_episodes(db_session, mo
     )
     for index in range(1, 11):
         _add_episode(db_session, crowded, index=index)
-    small_episode = _add_episode(db_session, small, index=1)
+    _add_episode(db_session, small, index=1)
 
-    choices = []
-
-    def choose_last(values):
-        values = list(values)
-        choices.append(values)
-        return values[-1]
-
-    monkeypatch.setattr(output_template, "choice", choose_last)
+    # Make the SQL random ordering deterministic. Ordering the grouped show rows
+    # by show id proves the first draw is over shows, not over all episode rows.
+    monkeypatch.setattr(
+        output_template.func,
+        "random",
+        lambda: Episode.show_id.desc(),
+    )
     source = output_template.get_random_show_template_source(
         db_session,
         ShowLocalMediaProfileScope.PODCAST,
     )
 
-    assert choices[0] == [crowded.id, small.id]
-    assert choices[1] == [small_episode.id]
     assert source is not None
     assert source.values["show_title"] == "Small Podcast"
     assert source.values["episode_title"] == "Episode 1"
 
 
-def test_random_show_source_respects_profile_scope(db_session, monkeypatch):
+def test_random_show_source_respects_profile_scope(db_session):
     from backend.api.endpoints.local_media_profiles import output_template
     from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
     from backend.types.show_types import ShowType
@@ -397,22 +395,13 @@ def test_random_show_source_respects_profile_scope(db_session, monkeypatch):
     podcast = _make_show(db_session, slug="podcast", show_type=ShowType.PODCAST.value)
     series = _make_show(db_session, slug="series", show_type=ShowType.SERIES.value)
     _add_episode(db_session, podcast, index=1)
-    series_episode = _add_episode(db_session, series, index=1)
+    _add_episode(db_session, series, index=1)
 
-    seen = []
-
-    def choose_only(values):
-        values = list(values)
-        seen.append(values)
-        return values[0]
-
-    monkeypatch.setattr(output_template, "choice", choose_only)
     source = output_template.get_random_show_template_source(
         db_session,
         ShowLocalMediaProfileScope.SERIES,
     )
 
-    assert seen == [[series.id], [series_episode.id]]
     assert source is not None
     assert source.values["show_title"] == "Series"
 

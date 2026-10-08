@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Iterable
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
@@ -68,14 +68,19 @@ def operation_ids_allow_execution(session: Session, operation_ids: Iterable[str]
     ids = tuple(dict.fromkeys(str(value) for value in operation_ids if value))
     if not ids:
         return True
-    rows = session.execute(
-        select(TaskOperation.status, TaskOperation.context).where(TaskOperation.id.in_(ids))
-    ).all()
-    return any(
-        status in _ACTIVE_OPERATION_STATUSES
-        and not _operation_context_cancel_requested(context)
-        for status, context in rows
+    cancel_requested = func.coalesce(
+        TaskOperation.context[OPERATION_CANCEL_REQUESTED_CONTEXT_KEY].as_boolean(),
+        False,
     )
+    return session.scalar(
+        select(TaskOperation.id)
+        .where(
+            TaskOperation.id.in_(ids),
+            TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+            cancel_requested.is_(False),
+        )
+        .limit(1)
+    ) is not None
 
 
 def run_cancel_requested(run: TaskRun) -> bool:
@@ -496,20 +501,21 @@ def _run_shared_with_other_active_operation(
         run_id: int,
         operation_id: str,
 ) -> bool:
-    rows = session.execute(
-        select(TaskOperation.status, TaskOperation.context)
+    cancel_requested = func.coalesce(
+        TaskOperation.context[OPERATION_CANCEL_REQUESTED_CONTEXT_KEY].as_boolean(),
+        False,
+    )
+    return session.scalar(
+        select(TaskOperation.id)
         .join(TaskOperationRun, TaskOperation.id == TaskOperationRun.operation_id)
         .where(
             TaskOperationRun.task_run_id == run_id,
             TaskOperationRun.operation_id != operation_id,
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+            cancel_requested.is_(False),
         )
-    ).all()
-    return any(
-        status in _ACTIVE_OPERATION_STATUSES
-        and not _operation_context_cancel_requested(context)
-        for status, context in rows
-    )
+        .limit(1)
+    ) is not None
 
 
 def _dependency_shared_with_other_active_parent(
@@ -517,8 +523,12 @@ def _dependency_shared_with_other_active_parent(
         child_operation_id: str,
         parent_operation_id: str,
 ) -> bool:
-    rows = session.execute(
-        select(TaskOperation.status, TaskOperation.context)
+    cancel_requested = func.coalesce(
+        TaskOperation.context[OPERATION_CANCEL_REQUESTED_CONTEXT_KEY].as_boolean(),
+        False,
+    )
+    return session.scalar(
+        select(TaskOperation.id)
         .join(
             TaskOperationDependency,
             TaskOperation.id == TaskOperationDependency.parent_operation_id,
@@ -527,13 +537,10 @@ def _dependency_shared_with_other_active_parent(
             TaskOperationDependency.child_operation_id == child_operation_id,
             TaskOperationDependency.parent_operation_id != parent_operation_id,
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+            cancel_requested.is_(False),
         )
-    ).all()
-    return any(
-        status in _ACTIVE_OPERATION_STATUSES
-        and not _operation_context_cancel_requested(context)
-        for status, context in rows
-    )
+        .limit(1)
+    ) is not None
 
 
 def _load_operation(session: Session, operation_id: str) -> TaskOperation | None:

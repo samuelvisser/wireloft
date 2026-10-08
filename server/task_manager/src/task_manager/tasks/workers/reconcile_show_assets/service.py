@@ -4,17 +4,18 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import logging
 from pathlib import Path
+import os
 import tempfile
 from typing import Callable
 
 from dailywire_downloader import DownloadCancelled
-from sqlalchemy import select
+from sqlalchemy import String, and_, cast, func, or_, select
 
 from backend.db.models import DownloadProfileBase, Episode, EpisodeMediaDownload, Show, ShowLocalMediaProfile
 from backend.db.models.ShowLocalAsset import ShowLocalAsset
 from backend.services.show_assets import (
     managed_show_profile_pairs, resolve_show_media_directory, shared_root_conflict,
-    show_asset_sources, show_assets_enabled, show_profile_roots,
+    show_asset_sources, show_assets_enabled, show_profile_is_managed, show_profile_roots,
 )
 from backend.utils.show_asset_files import (
     ArtworkConflict, PreparedShowAsset, asset_file_hash, asset_file_lock,
@@ -63,7 +64,7 @@ def _current(session, plan: AssetPlan) -> bool:
         return False
     if profile.output_template != plan.output_template:
         return False
-    if (plan.show_id, plan.profile_id) not in managed_show_profile_pairs(session):
+    if not show_profile_is_managed(session, plan.show_id, plan.profile_id):
         return False
     if Path(get_settings().download_settings.download_root).resolve() != plan.download_root:
         return False
@@ -80,11 +81,40 @@ def _path_rows(session, path: Path) -> list[ShowLocalAsset]:
     return list(session.scalars(select(ShowLocalAsset).where(ShowLocalAsset.file_path == str(path))))
 
 
-def _asset_rows(session, plan: AssetPlan) -> list[ShowLocalAsset]:
-    return list(session.scalars(select(ShowLocalAsset).where(
-        ShowLocalAsset.show_id == plan.show_id,
-        ShowLocalAsset.asset_type == plan.kind,
-    )))
+def _direct_child_path_filter(column, directory: Path):
+    prefix = f"{directory}{os.sep}"
+    relative = cast(func.substr(column, len(prefix) + 1), String)
+    return and_(
+        column.startswith(prefix, autoescape=True),
+        ~relative.contains(os.sep, autoescape=True),
+    )
+
+
+def _expected_format_filter(plan: AssetPlan):
+    if plan.forced_format is not None:
+        return ShowLocalAsset.file_path.endswith(
+            f".{plan.forced_format}",
+            autoescape=True,
+        )
+
+    fallback = _fallback_format()
+    return or_(
+        and_(
+            ShowLocalAsset.source_format == "jpg",
+            ShowLocalAsset.file_path.endswith(".jpg", autoescape=True),
+        ),
+        and_(
+            ShowLocalAsset.source_format == "png",
+            ShowLocalAsset.file_path.endswith(".png", autoescape=True),
+        ),
+        and_(
+            ShowLocalAsset.source_format == "other",
+            ShowLocalAsset.file_path.endswith(
+                f".{fallback}",
+                autoescape=True,
+            ),
+        ),
+    )
 
 
 def _owned_file(session, plan: AssetPlan, target: Path):
@@ -138,15 +168,22 @@ def _claim_fresh_asset(
         if not _current(session, plan):
             return False, None
         candidates = [
-            Path(row.file_path)
-            for row in _asset_rows(session, plan)
-            if Path(row.file_path).parent == plan.directory
-            and row.source_url == plan.url
-            and row.pending_hash is None
-            and row.checked_at is not None
-            and now - row.checked_at < _REFRESH_AFTER
-            and _expected_output_format(row, plan) is not None
-            and Path(row.file_path).suffix.lower() == f".{_expected_output_format(row, plan)}"
+            Path(path)
+            for path in session.scalars(
+                select(ShowLocalAsset.file_path).where(
+                    ShowLocalAsset.show_id == plan.show_id,
+                    ShowLocalAsset.asset_type == plan.kind,
+                    ShowLocalAsset.source_url == plan.url,
+                    ShowLocalAsset.pending_hash.is_(None),
+                    ShowLocalAsset.checked_at.is_not(None),
+                    ShowLocalAsset.checked_at > now - _REFRESH_AFTER,
+                    _direct_child_path_filter(
+                        ShowLocalAsset.file_path,
+                        plan.directory,
+                    ),
+                    _expected_format_filter(plan),
+                )
+            )
         ]
 
     for target in dict.fromkeys(candidates):
@@ -203,13 +240,19 @@ def _cleanup_obsolete_variants(
 ) -> None:
     with db_session() as session:
         obsolete = [
-            (row.id, Path(row.file_path))
-            for row in session.scalars(select(ShowLocalAsset).where(
-                ShowLocalAsset.show_id == plan.show_id,
-                ShowLocalAsset.local_media_profile_id == plan.profile_id,
-                ShowLocalAsset.asset_type == plan.kind,
-            ))
-            if Path(row.file_path).parent == plan.directory and Path(row.file_path) != current_target
+            (row_id, Path(file_path))
+            for row_id, file_path in session.execute(
+                select(ShowLocalAsset.id, ShowLocalAsset.file_path).where(
+                    ShowLocalAsset.show_id == plan.show_id,
+                    ShowLocalAsset.local_media_profile_id == plan.profile_id,
+                    ShowLocalAsset.asset_type == plan.kind,
+                    ShowLocalAsset.file_path != str(current_target),
+                    _direct_child_path_filter(
+                        ShowLocalAsset.file_path,
+                        plan.directory,
+                    ),
+                )
+            )
         ]
 
     for record_id, path in obsolete:
@@ -307,9 +350,19 @@ def _cleanup_old_roots(
     check_cancelled: Callable[[], None],
 ) -> None:
     with db_session() as session:
-        obsolete = [(row.id, Path(row.file_path)) for row in session.scalars(select(ShowLocalAsset).where(
-            ShowLocalAsset.show_id == show_id, ShowLocalAsset.local_media_profile_id == profile_id,
-        )) if Path(row.file_path).parent != current_root]
+        obsolete = [
+            (row_id, Path(file_path))
+            for row_id, file_path in session.execute(
+                select(ShowLocalAsset.id, ShowLocalAsset.file_path).where(
+                    ShowLocalAsset.show_id == show_id,
+                    ShowLocalAsset.local_media_profile_id == profile_id,
+                    ~_direct_child_path_filter(
+                        ShowLocalAsset.file_path,
+                        current_root,
+                    ),
+                )
+            )
+        ]
         media_paths = [Path(path).resolve() for path in session.scalars(
             select(EpisodeMediaDownload.file_path).join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
             .where(Episode.show_id == show_id, EpisodeMediaDownload.local_media_profile_id == profile_id)
@@ -326,20 +379,25 @@ def _cleanup_old_roots(
                     show = session.get(Show, show_id)
                     if row is None or profile is None or show is None or not show_assets_enabled(profile):
                         continue
-                    if (show_id, profile_id) not in managed_show_profile_pairs(session):
+                    if not show_profile_is_managed(session, show_id, profile_id):
                         continue
                     if resolve_show_media_directory(show, profile.output_template).path != str(current_root):
                         continue
-                    replacements = list(session.scalars(select(ShowLocalAsset).where(
-                        ShowLocalAsset.show_id == show_id,
-                        ShowLocalAsset.local_media_profile_id == profile_id,
-                        ShowLocalAsset.asset_type == row.asset_type,
-                    )))
-                    replacement = next((
-                        candidate for candidate in replacements
-                        if Path(candidate.file_path).parent == current_root
-                        and candidate.content_hash is not None
-                    ), None)
+                    replacement = session.scalar(
+                        select(ShowLocalAsset)
+                        .where(
+                            ShowLocalAsset.show_id == show_id,
+                            ShowLocalAsset.local_media_profile_id == profile_id,
+                            ShowLocalAsset.asset_type == row.asset_type,
+                            ShowLocalAsset.content_hash.is_not(None),
+                            _direct_child_path_filter(
+                                ShowLocalAsset.file_path,
+                                current_root,
+                            ),
+                        )
+                        .order_by(ShowLocalAsset.id)
+                        .limit(1)
+                    )
                     if replacement is None:
                         continue
                     if asset_file_hash(Path(replacement.file_path)) != replacement.content_hash:

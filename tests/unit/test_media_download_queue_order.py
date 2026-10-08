@@ -244,6 +244,162 @@ def test_download_page_filters_status_before_applying_limit():
         engine.dispose()
 
 
+def test_download_page_only_hydrates_requested_rows():
+    from sqlalchemy import event
+
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.db.models.media_download import MediaDownloadBase
+
+    session, engine = _session()
+    loaded_download_ids: list[int] = []
+
+    def record_loaded(_session, instance):
+        if isinstance(instance, MediaDownloadBase):
+            loaded_download_ids.append(instance.id)
+
+    try:
+        for index in range(20):
+            _make_download(session, slug=f"bounded-page-{index}")
+        session.commit()
+        session.expunge_all()
+        event.listen(session, "loaded_as_persistent", record_loaded)
+
+        page = get_media_downloads_page(
+            session,
+            statuses=["not_downloaded"],
+            order="workflow",
+            cursor=None,
+            limit=3,
+        )
+
+        assert page.total == 20
+        assert len(page.items) == 3
+        assert set(loaded_download_ids) == {item.id for item in page.items}
+    finally:
+        event.remove(session, "loaded_as_persistent", record_loaded)
+        session.close()
+        engine.dispose()
+
+
+def test_download_page_filters_live_progress_status_in_sql():
+    from sqlalchemy import select
+
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.operations import link_run_to_operations, refresh_operation
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="page-live-progress")
+        operation = create_media_download_operation(session, download)
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(
+                TaskDefinition.key == "download_episode"
+            )
+        )
+        assert definition_id is not None
+
+        run = TaskRun(
+            schedule_id=None,
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=download.id,
+            status=TaskStatus.RUNNING,
+            progress=25,
+            message="Downloading",
+            meta={
+                "_progress_meta": {
+                    "download": {
+                        "phase": "transferring",
+                        "main_activity": "media",
+                        "primary_transfer_complete": False,
+                    },
+                },
+            },
+            result=None,
+            attempt_count=1,
+            max_retries=2,
+            last_error=None,
+            next_retry_at=None,
+            started_at=datetime.now(timezone.utc),
+            finished_at=None,
+            runtime_ms=None,
+        )
+        session.add(run)
+        session.flush()
+        link_run_to_operations(
+            session,
+            run=run,
+            task_key="download_episode",
+            operation_ids=(operation.id,),
+            operation_slot=operation.targets[0].slot_key,
+        )
+        refresh_operation(session, operation.id)
+        session.commit()
+
+        downloading = get_media_downloads_page(
+            session,
+            statuses=["downloading"],
+            order="workflow",
+            cursor=None,
+            limit=3,
+        )
+        assert [item.id for item in downloading.items] == [download.id]
+
+        run.meta = {
+            "_progress_meta": {
+                "download": {
+                    "phase": "finishing",
+                    "main_activity": "embed",
+                    "primary_transfer_complete": True,
+                },
+            },
+        }
+        session.commit()
+
+        processing = get_media_downloads_page(
+            session,
+            statuses=["local_processing"],
+            order="workflow",
+            cursor=None,
+            limit=3,
+        )
+        assert [item.id for item in processing.items] == [download.id]
+
+        run.meta = {
+            "_progress_meta": {
+                "download": {
+                    "phase": "transferring",
+                    "main_activity": "media",
+                    "primary_transfer_complete": False,
+                    "stages": [
+                        {
+                            "id": "media",
+                            "wait": {
+                                "reason": "daily_wire_request_cooldown",
+                            },
+                        },
+                    ],
+                },
+            },
+        }
+        session.commit()
+
+        waiting = get_media_downloads_page(
+            session,
+            statuses=["waiting"],
+            order="workflow",
+            cursor=None,
+            limit=3,
+        )
+        assert [item.id for item in waiting.items] == [download.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
 
 def test_download_collection_status_matches_live_transfer_phase():
     from types import SimpleNamespace
