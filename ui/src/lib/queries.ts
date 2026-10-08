@@ -43,6 +43,8 @@ import {
     EpisodeIndexedActivityReadSchema,
     EpisodeRead,
     EpisodeReadSchema,
+    EpisodeReadView,
+    EpisodeReadViewPage,
 } from "../types/schemas/episode";
 import {RssStreamProfileRead, RssStreamProfileReadSchema} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
@@ -311,7 +313,7 @@ export function useEpisodePages(
 ) {
     const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
-    const result = useLazyCollection({
+    const result = useLazyCollection<EpisodeReadView, EpisodeReadViewPage>({
         collectionPrefix: episodeQueryKeys.forShow(showSlug),
         queryKey: ['pages', seasonId ?? null] as const,
         initialCount: pageSize,
@@ -888,7 +890,7 @@ export function useMediaDownloadsCollection({
     const operations = (pullData?.operations ?? []).filter(
         (operation) => operation.kind === 'media.download',
     )
-    const collection = useLazyCollection({
+    const collection = useLazyCollection<MediaDownloadDomainViewRead>({
         collectionPrefix: MEDIA_DOWNLOAD_COLLECTION_PREFIX,
         queryKey: [normalizedStatuses ?? null, order] as const,
         initialCount,

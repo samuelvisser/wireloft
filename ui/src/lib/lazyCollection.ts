@@ -12,7 +12,7 @@ export type LazyCollectionPage<T> = {
     nextCursor?: string | null
     previousCursor?: string | null
     total?: number
-    revision?: string
+    revision?: string | null
     facets?: Record<string, number>
     actions?: Record<string, number>
     provisional?: boolean
@@ -40,22 +40,25 @@ export function lazyCollectionQueryKey(
     ] as const
 }
 
-export function deriveSameLazyCollectionPlaceholder<T extends {id: string | number}>(
+export function deriveSameLazyCollectionPlaceholder<
+    T extends {id: string | number},
+    TPage extends LazyCollectionPage<T> = LazyCollectionPage<T>,
+>(
     queryClient: QueryClient,
     semanticQueryKey: readonly unknown[],
     initialCount: number,
-): InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest> | undefined {
+): InfiniteData<TPage, LazyCollectionPageRequest> | undefined {
     const candidates = queryClient.getQueryCache().findAll({queryKey: semanticQueryKey})
 
     let best: {
-        data: InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>
+        data: InfiniteData<TPage, LazyCollectionPageRequest>
         itemCount: number
         updatedAt: number
     } | undefined
 
     for (const query of candidates) {
         const source = query.state.data as InfiniteData<
-            LazyCollectionPage<T>,
+            TPage,
             LazyCollectionPageRequest
         > | undefined
         if (!source?.pages.length) continue
@@ -66,7 +69,7 @@ export function deriveSameLazyCollectionPlaceholder<T extends {id: string | numb
         const firstPage = source.pages[0]
         const items = contiguous.items.slice(0, initialCount)
         const placeholder: InfiniteData<
-            LazyCollectionPage<T>,
+            TPage,
             LazyCollectionPageRequest
         > = {
             pages: [{
@@ -132,7 +135,7 @@ export function contiguousLazyCollectionItems<T>(
     const revisions = new Set(
         pages
             .map((page) => page.revision)
-            .filter((revision): revision is string => revision !== undefined),
+            .filter((revision): revision is string => revision != null),
     )
     // A mixed-revision chain is being replaced by the authoritative new head.
     // It is never safe placeholder material for another consumer.
@@ -146,7 +149,10 @@ export function contiguousLazyCollectionItems<T>(
     return {items, complete}
 }
 
-type LazyCollectionOptions<T extends {id: string | number}> = {
+type LazyCollectionOptions<
+    T extends {id: string | number},
+    TPage extends LazyCollectionPage<T> = LazyCollectionPage<T>,
+> = {
     queryKey: readonly unknown[]
     collectionPrefix: readonly unknown[]
     initialCount: number
@@ -161,8 +167,8 @@ type LazyCollectionOptions<T extends {id: string | number}> = {
      */
     derivePlaceholderData?: (
         queryClient: QueryClient,
-    ) => InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest> | undefined
-    fetchPage: (request: LazyCollectionPageRequest, signal?: AbortSignal) => Promise<LazyCollectionPage<T>>
+    ) => InfiniteData<TPage, LazyCollectionPageRequest> | undefined
+    fetchPage: (request: LazyCollectionPageRequest, signal?: AbortSignal) => Promise<TPage>
 }
 
 function replaceEntitiesInCollection<T extends {id: string | number}>(
@@ -228,7 +234,10 @@ export function updateLazyCollectionEntities<T extends {id: string | number}>(
     )
 }
 
-export function useLazyCollection<T extends {id: string | number}>({
+export function useLazyCollection<
+    T extends {id: string | number},
+    TPage extends LazyCollectionPage<T> = LazyCollectionPage<T>,
+>({
     queryKey,
     collectionPrefix,
     initialCount,
@@ -238,7 +247,7 @@ export function useLazyCollection<T extends {id: string | number}>({
     pollWhilePageCountAtMost,
     derivePlaceholderData,
     fetchPage,
-}: LazyCollectionOptions<T>) {
+}: LazyCollectionOptions<T, TPage>) {
     const queryClient = useQueryClient()
     const semanticQueryKeySignature = JSON.stringify([
         ...collectionPrefix,
@@ -272,9 +281,9 @@ export function useLazyCollection<T extends {id: string | number}>({
     )
 
     const query = useInfiniteQuery<
-        LazyCollectionPage<T>,
+        TPage,
         Error,
-        InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>,
+        InfiniteData<TPage, LazyCollectionPageRequest>,
         readonly unknown[],
         LazyCollectionPageRequest
     >({
@@ -282,7 +291,7 @@ export function useLazyCollection<T extends {id: string | number}>({
         enabled,
         initialPageParam: {cursor: null, limit: initialCount},
         placeholderData: () => (
-            deriveSameLazyCollectionPlaceholder<T>(
+            deriveSameLazyCollectionPlaceholder<T, TPage>(
                 queryClient,
                 semanticQueryKey,
                 initialCount,
@@ -307,7 +316,7 @@ export function useLazyCollection<T extends {id: string | number}>({
             ? false
             : (currentQuery) => {
                 const currentData = currentQuery.state.data as
-                    | InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>
+                    | InfiniteData<TPage, LazyCollectionPageRequest>
                     | undefined
                 const pageCount = currentData?.pages.length ?? 0
                 if (
@@ -325,9 +334,9 @@ export function useLazyCollection<T extends {id: string | number}>({
 
         const latestRevision = [...query.data.pages]
             .reverse()
-            .find((page) => page.revision !== undefined)
+            .find((page) => page.revision != null)
             ?.revision
-        if (latestRevision === undefined) return query.data
+        if (latestRevision == null) return query.data
 
         const pageIndexes = query.data.pages
             .map((page, index) => page.revision === latestRevision ? index : -1)
@@ -384,13 +393,13 @@ export function useLazyCollection<T extends {id: string | number}>({
         const revisions = new Set(
             pages
                 .map((page) => page.revision)
-                .filter((value): value is string => value !== undefined),
+                .filter((value): value is string => value != null),
         )
         if (revisions.size <= 1 || pages.length === 0) return
 
         const latestRevision = [...pages]
             .reverse()
-            .find((page) => page.revision !== undefined)
+            .find((page) => page.revision != null)
             ?.revision
         const replacement = latestRevision === undefined
             ? undefined
@@ -401,7 +410,7 @@ export function useLazyCollection<T extends {id: string | number}>({
         // head. Make that response the new authoritative first page and discard
         // every cursor/page parameter derived from the previous revision before
         // asking React Query to refresh it.
-        const normalizedReplacement: LazyCollectionPage<T> = {
+        const normalizedReplacement: TPage = {
             ...replacement,
             items: replacement.items.slice(0, initialCount),
             limit: initialCount,
@@ -413,7 +422,7 @@ export function useLazyCollection<T extends {id: string | number}>({
                 : replacement.nextCursor,
         }
         queryClient.setQueryData<
-            InfiniteData<LazyCollectionPage<T>, LazyCollectionPageRequest>
+            InfiniteData<TPage, LazyCollectionPageRequest>
         >(fullQueryKey, {
             pages: [normalizedReplacement],
             pageParams: [{cursor: null, limit: initialCount}],

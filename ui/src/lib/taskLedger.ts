@@ -246,7 +246,7 @@ export function useTaskLedgerInfinite({
   const statuses = normalizeStatuses(status)
   const startedAfterValue = normalizeStartedAfter(startedAfter)
 
-  return useLazyCollection({
+  return useLazyCollection<TaskLedgerEntryRead>({
     collectionPrefix: ['taskLedger'] as const,
     queryKey: [
       definitionKey ?? null,
