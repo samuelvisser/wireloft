@@ -38,10 +38,13 @@ const DateInput = forwardRef<HTMLInputElement, DateInputProps>(function DateInpu
         }
     }, [forwardedRef])
 
-    const updateIncompleteInput = (input: HTMLInputElement) => {
-        // A partially entered date can display edited segments even when input.value is empty.
-        // Chromium does not always fire input/change events for those edits.
-        setHasIncompleteInput(input.validity.badInput)
+    const syncNativeValue = (input: HTMLInputElement) => {
+        // Native date inputs expose no partial string. Keep incomplete input distinct
+        // from an empty field so the form's date schema can reject it normally.
+        const incomplete = input.validity.badInput
+        setHasIncompleteInput(incomplete)
+        const nextValue = incomplete ? '' : (input.value || null)
+        if (nextValue !== (value ?? null)) onChange(nextValue)
     }
 
     const clearDate = () => {
@@ -68,20 +71,17 @@ const DateInput = forwardRef<HTMLInputElement, DateInputProps>(function DateInpu
                 disabled={disabled}
                 readOnly={readOnly}
                 aria-invalid={ariaInvalid}
-                onChange={(event) => {
-                    updateIncompleteInput(event.currentTarget)
-                    onChange(event.currentTarget.value || null)
-                }}
+                onChange={(event) => syncNativeValue(event.currentTarget)}
                 onInput={(event) => {
-                    updateIncompleteInput(event.currentTarget)
+                    syncNativeValue(event.currentTarget)
                     onInput?.(event)
                 }}
                 onKeyUp={(event) => {
-                    updateIncompleteInput(event.currentTarget)
+                    syncNativeValue(event.currentTarget)
                     onKeyUp?.(event)
                 }}
                 onBlur={(event) => {
-                    updateIncompleteInput(event.currentTarget)
+                    syncNativeValue(event.currentTarget)
                     onBlur?.(event)
                 }}
             />
