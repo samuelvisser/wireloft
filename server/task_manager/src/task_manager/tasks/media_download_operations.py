@@ -730,6 +730,9 @@ def record_interrupted_media_download_run_history(
 
     recorded = 0
     for run in running_runs:
+        resource_id = run.resource_id
+        if not isinstance(resource_id, int):
+            continue
         inputs = run.meta.get("inputs") if isinstance(run.meta, dict) else None
         metadata = {
             "task_run_id": int(run.id),
@@ -748,7 +751,7 @@ def record_interrupted_media_download_run_history(
 
         if record_media_download_operation_history_once(
             session,
-            int(run.resource_id),
+            resource_id,
             MediaDownloadHistoryAction.INTERRUPTED,
             operation_ids=tuple(operation_ids_by_run.get(run.id, ())),
             metadata=metadata,
@@ -862,7 +865,10 @@ def _reserve_target_dispatch(
     if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
         return False
 
-    if _has_active_media_download_run(session, target.resource_id):
+    target_resource_id = target.resource_id
+    if not isinstance(target_resource_id, int):
+        return False
+    if _has_active_media_download_run(session, target_resource_id):
         return False
 
     definition_id = session.scalar(
@@ -876,7 +882,7 @@ def _reserve_target_dispatch(
         schedule_id=None,
         definition_id=definition_id,
         resource_type=ResourceType.MEDIA_DOWNLOAD,
-        resource_id=target.resource_id,
+        resource_id=target_resource_id,
         status=TaskStatus.SCHEDULED,
         progress=0,
         result=None,
@@ -898,7 +904,7 @@ def _reserve_target_dispatch(
         session,
         def_key=target.task_key,
         resource_type=target.resource_type,
-        resource_id=target.resource_id,
+        resource_id=target_resource_id,
         operation_ids=(operation.id,),
         operation_slot=target.slot_key,
         run_id=run.id,

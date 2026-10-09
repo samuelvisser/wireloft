@@ -6,6 +6,7 @@ from ...models.media_download import EpisodeDownloadAPICreate
 from ...models.operations import EpisodeMetadataOperationAccepted, MediaDownloadOperationAccepted, TaskOperationAccepted
 from ..media_downloads.service import create_episode_download
 from backend.app import db_session
+from backend.db.models import Episode
 from backend.services.episode_download_delay import episode_download_delay_ready_at
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
@@ -26,11 +27,12 @@ def episode_download_create(episode_slug: str, body: EpisodeDownloadAPICreate):
     with db_session() as s:
         try:
             download = create_episode_download(s, episode_slug, body)
-            scheduled_ready_at = (
-                episode_download_delay_ready_at(download.media)
-                if body.schedule_for_delay
-                else None
-            )
+            scheduled_ready_at = None
+            if body.schedule_for_delay:
+                episode = download.media
+                if not isinstance(episode, Episode):
+                    raise RuntimeError("Episode download does not reference an episode")
+                scheduled_ready_at = episode_download_delay_ready_at(episode)
             operation = create_media_download_operation(
                 s,
                 download,

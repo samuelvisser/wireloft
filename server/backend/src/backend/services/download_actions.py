@@ -74,7 +74,7 @@ def retry_media_download_action(
 
         active = get_active_media_download_operation(s, media_download_id)
         if schedule_for_delay and is_media_download_publication_delay_wait(active):
-            return active.id
+            return str(active.id)
 
         if isinstance(download, EpisodeMediaDownload):
             episode = s.get(Episode, download.media_item_id)
@@ -96,8 +96,8 @@ def retry_media_download_action(
         active = get_active_media_download_operation(s, media_download_id)
         if active is not None:
             if reuse_matching_active and active.source == source:
-                return active.id
-            active_operation_id = active.id
+                return str(active.id)
+            active_operation_id = str(active.id)
         is_redownload = (
             download.downloaded_at is not None
             or download.artifact_status in {"available", "missing", "corrupted"}
@@ -132,7 +132,7 @@ def retry_media_download_action(
                 not_before=scheduled_ready_at,
             )
             dispatch_queued_media_download_operations(s)
-            operation_id = operation.id
+            operation_id = str(operation.id)
             s.commit()
             return operation_id
         except Exception:
@@ -159,7 +159,7 @@ def cancel_media_download_action(
             if not allow_inactive:
                 raise DownloadActionError("conflict", "This download is not currently in progress")
         else:
-            operation_id = operation.id
+            operation_id = str(operation.id)
 
     if operation_id is not None:
         try:

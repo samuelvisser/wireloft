@@ -23,11 +23,26 @@ _RECORDED_PUBLISHED_FINAL_VALUE_PREFIX = "wireloft:recorded_published_final:"
 
 
 class EpisodePublicationTiming(Protocol):
-    safe_live_ended: datetime | None
-    safe_published_final: datetime | None
-    last_known_pending: datetime | None
-    recorded_published_final: datetime | None
-    published_date: datetime | None
+    """Read-only publication facts exposed by an episode's metadata.
+
+    These facts are derived properties, not mutable columns; writes go through
+    set_meta() to preserve the trusted-timing markers.
+    """
+
+    @property
+    def safe_live_ended(self) -> datetime | None: ...
+
+    @property
+    def safe_published_final(self) -> datetime | None: ...
+
+    @property
+    def last_known_pending(self) -> datetime | None: ...
+
+    @property
+    def recorded_published_final(self) -> datetime | None: ...
+
+    @property
+    def published_date(self) -> datetime | None: ...
 
     def set_meta(self, key: str, value: str | None): ...
 
