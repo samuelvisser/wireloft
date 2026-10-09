@@ -134,6 +134,8 @@ def _latest_active_download_operation() -> Subquery:
             TaskOperation.id.label("operation_id"),
             TaskOperation.status.label("operation_status"),
             TaskOperation.context.label("operation_context"),
+            TaskOperation.started_at.label("operation_started_at"),
+            TaskOperation.created_at.label("operation_created_at"),
             func.row_number().over(
                 partition_by=TaskOperation.resource_id,
                 order_by=(
@@ -156,6 +158,8 @@ def _latest_active_download_operation() -> Subquery:
             ranked.c.operation_id,
             ranked.c.operation_status,
             ranked.c.operation_context,
+            ranked.c.operation_started_at,
+            ranked.c.operation_created_at,
         )
         .where(ranked.c.operation_rank == 1)
         .subquery()
@@ -305,6 +309,11 @@ def _download_status_source() -> Subquery:
             MediaDownloadBase.created_at.label("created_at"),
             MediaDownloadBase.updated_at.label("updated_at"),
             TaskRun.finished_at.label("run_finished_at"),
+            TaskRun.status.label("run_status"),
+            TaskRun.started_at.label("run_started_at"),
+            TaskRun.created_at.label("run_created_at"),
+            active_operation.c.operation_started_at,
+            active_operation.c.operation_created_at,
             queue.c.queue_position.label("queue_position"),
             _effective_download_status(active_operation),
         )
@@ -351,6 +360,40 @@ def _workflow_bucket(status_source):
     ).label("workflow_bucket")
 
 
+def _workflow_active_started_at(status_source):
+    """Sort in-progress downloads by this execution's start, oldest first.
+
+    Ignore finished runs from previous attempts when an operation is waiting
+    without a current TaskRun. Other workflow buckets use a constant key.
+    """
+    current_run_started_at = case(
+        (
+            status_source.c.run_status.in_((
+                TaskStatus.SCHEDULED,
+                TaskStatus.QUEUED,
+                TaskStatus.RUNNING,
+                TaskStatus.RETRY_SCHEDULED,
+            )),
+            func.coalesce(
+                status_source.c.run_started_at,
+                status_source.c.run_created_at,
+            ),
+        ),
+    )
+    return case(
+        (
+            status_source.c.status.in_(_ACTIVE_WORKFLOW_STATUSES),
+            func.coalesce(
+                current_run_started_at,
+                status_source.c.operation_started_at,
+                status_source.c.operation_created_at,
+                status_source.c.created_at,
+            ),
+        ),
+        else_=datetime(1970, 1, 1, tzinfo=timezone.utc),
+    ).label("workflow_active_started_at")
+
+
 def _workflow_downloaded_at(status_source):
     """Order completed downloads by the last successful transfer.
 
@@ -393,6 +436,7 @@ def _collection_source() -> Subquery:
             _recent_activity_at(status_source),
             _workflow_bucket(status_source),
             _workflow_queue_position(status_source),
+            _workflow_active_started_at(status_source),
             _workflow_downloaded_at(status_source),
         )
         .subquery()
@@ -445,6 +489,7 @@ class MediaDownloadCollectionQuery:
             ordering = (
                 self.source.c.workflow_bucket.asc(),
                 self.source.c.workflow_queue.asc(),
+                self.source.c.workflow_active_started_at.asc(),
                 self.source.c.workflow_downloaded_at.desc(),
                 self.source.c.id.desc(),
             )
@@ -456,6 +501,7 @@ class MediaDownloadCollectionQuery:
                 self.source.c.recent_at,
                 self.source.c.workflow_bucket,
                 self.source.c.workflow_queue,
+                self.source.c.workflow_active_started_at,
                 self.source.c.workflow_downloaded_at,
             )
             .where(*predicates)

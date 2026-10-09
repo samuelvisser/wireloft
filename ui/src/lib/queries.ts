@@ -716,6 +716,19 @@ export function compareMediaDownloadWorkflowOrder(left: MediaDownloadViewRead, r
         }
     }
 
+    if (leftActive && rightActive) {
+        // Match the backend: the current execution's start takes precedence
+        // over the original download record's creation time.
+        const activeStart = (download: MediaDownloadViewRead): number => (
+            (download.latestTaskStatus === 'RUNNING' ? download.latestTaskStartedAt : null)
+            ?? download.startedAt
+            ?? operationDate(download.operation?.createdAt)
+            ?? download.createdAt
+        ).getTime()
+        const byStart = activeStart(left) - activeStart(right)
+        if (byStart !== 0) return byStart
+    }
+
     // Completed downloads use their last successful download time, while other terminal statuses use ID ordering
     const leftCompletedAt = leftStatus === 'downloaded' || leftStatus === 'redownloaded'
         ? (left.downloadedAt ?? left.createdAt).getTime()

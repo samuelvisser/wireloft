@@ -562,3 +562,106 @@ def test_workflow_downloaded_order_uses_latest_download_time_across_pages():
     finally:
         session.close()
         engine.dispose()
+
+
+
+def test_workflow_orders_active_downloads_by_execution_start_across_pages():
+    from sqlalchemy import select
+
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.operations import link_run_to_operations, refresh_operation
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        # Creation order deliberately disagrees with execution start order.
+        last_started = _make_download(session, slug="active-start-last")
+        first_started = _make_download(session, slug="active-start-first")
+        middle_started = _make_download(session, slug="active-start-middle")
+        queued = _make_download(session, slug="active-start-queued")
+        completed = _make_download(session, slug="active-start-completed")
+        completed.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        completed.downloaded_at = datetime(2026, 9, 10, 5, tzinfo=timezone.utc)
+
+        definition_id = session.scalar(select(TaskDefinition.id).where(
+            TaskDefinition.key == "download_episode"
+        ))
+        assert definition_id is not None
+
+        def start_download(download, hour: int):
+            operation = create_media_download_operation(session, download)
+            run = TaskRun(
+                schedule_id=None,
+                definition_id=definition_id,
+                resource_type=ResourceType.MEDIA_DOWNLOAD,
+                resource_id=download.id,
+                status=TaskStatus.RUNNING,
+                progress=25,
+                message="Downloading",
+                meta={"_progress_meta": {"download": {
+                    "phase": "transferring",
+                    "main_activity": "media",
+                    "primary_transfer_complete": False,
+                }}},
+                result=None,
+                attempt_count=1,
+                max_retries=2,
+                last_error=None,
+                next_retry_at=None,
+                started_at=datetime(2026, 9, 10, hour, tzinfo=timezone.utc),
+                finished_at=None,
+                runtime_ms=None,
+            )
+            session.add(run)
+            session.flush()
+            link_run_to_operations(
+                session,
+                run=run,
+                task_key="download_episode",
+                operation_ids=(operation.id,),
+                operation_slot=operation.targets[0].slot_key,
+            )
+            refresh_operation(session, operation.id)
+
+        start_download(last_started, 4)
+        start_download(first_started, 1)
+        start_download(middle_started, 2)
+        create_media_download_operation(session, queued)
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, order="workflow", cursor=cursor, limit=2,
+            )
+
+        first_page = page()
+        assert [row.id for row in first_page.items] == [
+            first_started.id, middle_started.id,
+        ]
+        second_page = page(first_page.next_cursor)
+        assert [row.id for row in second_page.items] == [
+            last_started.id, queued.id,
+        ]
+        final_page = page(second_page.next_cursor)
+        assert [row.id for row in final_page.items] == [completed.id]
+
+        # A queued download that begins now joins the end of the active group,
+        # regardless of when its media record was created.
+        start_download(queued, 6)
+        session.commit()
+        first_page = page()
+        second_page = page(first_page.next_cursor)
+        final_page = page(second_page.next_cursor)
+        assert [row.id for row in first_page.items] == [
+            first_started.id, middle_started.id,
+        ]
+        assert [row.id for row in second_page.items] == [
+            last_started.id, queued.id,
+        ]
+        assert [row.id for row in final_page.items] == [completed.id]
+    finally:
+        session.close()
+        engine.dispose()

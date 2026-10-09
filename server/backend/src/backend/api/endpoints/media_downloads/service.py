@@ -371,7 +371,7 @@ def get_media_downloads_page(
             if values.get("revision") == revision:
                 cursor_values = cursor_key_values(
                     values,
-                    length=2 if order == "recent" else 4,
+                    length=2 if order == "recent" else 5,
                 )
         except InvalidCursorError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -409,15 +409,16 @@ def get_media_downloads_page(
     elif order != "recent" and cursor_values is not None:
         if (
             any(isinstance(value, bool) for value in cursor_values)
-            or not all(isinstance(value, int) for value in cursor_values[:2] + cursor_values[3:])
-            or not isinstance(cursor_values[2], str)
+            or not all(isinstance(value, int) for value in cursor_values[:2] + cursor_values[4:])
+            or not all(isinstance(value, str) for value in cursor_values[2:4])
         ):
             raise HTTPException(
                 status_code=422,
                 detail="Invalid download cursor key",
             )
-        bucket, queue_position, downloaded_at, media_download_id = cursor_values
+        bucket, queue_position, active_started_at, downloaded_at, media_download_id = cursor_values
         try:
+            parsed_active_started_at = datetime.fromisoformat(active_started_at)
             parsed_downloaded_at = datetime.fromisoformat(downloaded_at)
         except ValueError as exc:
             raise HTTPException(
@@ -427,6 +428,7 @@ def get_media_downloads_page(
         after = keyset_after([
             KeysetField(source.c.workflow_bucket, bucket),
             KeysetField(source.c.workflow_queue, queue_position),
+            KeysetField(source.c.workflow_active_started_at, parsed_active_started_at),
             KeysetField(
                 source.c.workflow_downloaded_at,
                 parsed_downloaded_at,
@@ -507,6 +509,7 @@ def get_media_downloads_page(
             cursor_key = [
                 int(last["workflow_bucket"]),
                 int(last["workflow_queue"]),
+                last["workflow_active_started_at"].isoformat(),
                 last["workflow_downloaded_at"].isoformat(),
                 int(last["id"]),
             ]
