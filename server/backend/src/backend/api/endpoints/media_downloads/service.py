@@ -401,8 +401,8 @@ def get_media_downloads_page(
                 KeysetField(source.c.workflow_queue, anchor["workflow_queue"]),
                 KeysetField(source.c.workflow_active_started_at, anchor["workflow_active_started_at"]),
                 KeysetField(
-                    source.c.workflow_downloaded_at,
-                    anchor["workflow_downloaded_at"],
+                    source.c.workflow_terminal_at,
+                    anchor["workflow_terminal_at"],
                     descending=True,
                 ),
                 KeysetField(source.c.id, cursor_id, descending=True),

@@ -395,22 +395,43 @@ def _workflow_active_started_at(status_source):
     ).label("workflow_active_started_at")
 
 
-def _workflow_downloaded_at(status_source):
-    """Order completed downloads by the last successful transfer.
+def _workflow_terminal_at(status_source):
+    """Sort all non-active, non-queued downloads by their latest state change.
 
-    Sorts by date only for completed downloads. Others get a fake constat date
-    for ordering to make those fallback to the next order priority
+    Successful transfers have a dedicated completion timestamp. Failed and
+    canceled attempts use the latest task's finish time, including when the
+    MediaDownload row itself did not change. Artifact-only states have no
+    dedicated transition timestamp, so use the record's last modification.
+    Active and queued buckets keep a constant key.
     """
     return case(
         (
             status_source.c.status.in_(("downloaded", "redownloaded")),
             func.coalesce(
                 status_source.c.downloaded_at,
+                status_source.c.run_finished_at,
+                status_source.c.created_at,
+            ),
+        ),
+        (
+            status_source.c.status.in_(("error", "cancelled")),
+            func.coalesce(
+                status_source.c.run_finished_at,
+                status_source.c.updated_at,
+                status_source.c.created_at,
+            ),
+        ),
+        (
+            status_source.c.status.not_in_(
+                (*_ACTIVE_WORKFLOW_STATUSES, "pending")
+            ),
+            func.coalesce(
+                status_source.c.updated_at,
                 status_source.c.created_at,
             ),
         ),
         else_=datetime(1970, 1, 1, tzinfo=timezone.utc),
-    ).label("workflow_downloaded_at")
+    ).label("workflow_terminal_at")
 
 
 def _workflow_queue_position(status_source):
@@ -438,7 +459,7 @@ def _collection_source() -> Subquery:
             _workflow_bucket(status_source),
             _workflow_queue_position(status_source),
             _workflow_active_started_at(status_source),
-            _workflow_downloaded_at(status_source),
+            _workflow_terminal_at(status_source),
         )
         .subquery()
     )
@@ -477,7 +498,7 @@ class MediaDownloadCollectionQuery:
             self.source.c.workflow_bucket.asc(),
             self.source.c.workflow_queue.asc(),
             self.source.c.workflow_active_started_at.asc(),
-            self.source.c.workflow_downloaded_at.desc(),
+            self.source.c.workflow_terminal_at.desc(),
             self.source.c.id.desc(),
         )
 
@@ -519,7 +540,7 @@ class MediaDownloadCollectionQuery:
                 self.source.c.workflow_bucket,
                 self.source.c.workflow_queue,
                 self.source.c.workflow_active_started_at,
-                self.source.c.workflow_downloaded_at,
+                self.source.c.workflow_terminal_at,
             )
             .where(*predicates)
             .order_by(*self._ordering(order))

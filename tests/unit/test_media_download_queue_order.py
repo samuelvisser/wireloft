@@ -879,6 +879,111 @@ def test_download_cursor_ignores_progress_only_updates():
         engine.dispose()
 
 
+def test_workflow_terminal_states_share_one_last_state_change_timeline():
+    from sqlalchemy import select
+
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+
+    session, engine = _session()
+    try:
+        downloaded = _make_download(session, slug="terminal-order-downloaded")
+        canceled = _make_download(session, slug="terminal-order-canceled")
+        missing = _make_download(session, slug="terminal-order-missing")
+        not_downloaded = _make_download(session, slug="terminal-order-absent")
+
+        downloaded.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        downloaded.downloaded_at = datetime(2026, 9, 10, 12, tzinfo=timezone.utc)
+        # A subsequent metadata update must not move an already-downloaded item.
+        downloaded.updated_at = datetime(2026, 9, 10, 20, tzinfo=timezone.utc)
+
+        canceled.updated_at = datetime(2026, 9, 10, 8, tzinfo=timezone.utc)
+        missing.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+        missing.updated_at = datetime(2026, 9, 10, 13, tzinfo=timezone.utc)
+        not_downloaded.updated_at = datetime(2026, 9, 10, 11, tzinfo=timezone.utc)
+
+        definition_id = session.scalar(select(TaskDefinition.id).where(
+            TaskDefinition.key == "download_episode"
+        ))
+        assert definition_id is not None
+        session.add(TaskRun(
+            schedule_id=None,
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=canceled.id,
+            status=TaskStatus.CANCELED,
+            progress=0,
+            message="Canceled",
+            meta=None,
+            result=None,
+            attempt_count=1,
+            max_retries=0,
+            last_error=None,
+            next_retry_at=None,
+            started_at=datetime(2026, 9, 10, 13, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 9, 10, 14, tzinfo=timezone.utc),
+            runtime_ms=3600000,
+        ))
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, order="workflow", cursor=cursor, limit=2,
+            )
+
+        first = page()
+        assert [item.id for item in first.items] == [canceled.id, missing.id]
+        assert first.next_cursor is not None
+        second = page(first.next_cursor)
+        assert [item.id for item in second.items] == [downloaded.id, not_downloaded.id]
+        assert second.next_cursor is None
+
+        # A new artifact-state update moves Missing ahead of the canceled task.
+        missing.updated_at = datetime(2026, 9, 10, 15, tzinfo=timezone.utc)
+        session.commit()
+        changed = page(first.next_cursor)
+        assert changed.revision != first.revision
+        assert [item.id for item in changed.items] == [missing.id, canceled.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_workflow_terminal_downloaded_date_ignores_record_metadata_updates():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        older = _make_download(session, slug="terminal-metadata-older")
+        newer = _make_download(session, slug="terminal-metadata-newer")
+        for download, hour in ((older, 1), (newer, 2)):
+            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, statuses=["downloaded"], order="workflow",
+                cursor=cursor, limit=1,
+            )
+
+        original = page()
+        assert [item.id for item in original.items] == [newer.id]
+        assert original.next_cursor is not None
+
+        older.artifact_error = "Updated unrelated metadata"
+        session.commit()
+        continued = page(original.next_cursor)
+        assert continued.revision == original.revision
+        assert [item.id for item in continued.items] == [older.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_workflow_downloaded_order_uses_latest_download_time_across_pages():
     from backend.api.endpoints.media_downloads.service import get_media_downloads_page
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
