@@ -23,9 +23,10 @@ type LimitMode = (typeof LimitModeReg)['values'][number]
 type DownloadStartDateInputProps = {
     field: ControllerRenderProps<any, 'downloadStartingFrom'>
     invalid: boolean
+    onClear: () => void
 }
 
-function DownloadStartDateInput({field, invalid}: DownloadStartDateInputProps) {
+function DownloadStartDateInput({field, invalid, onClear}: DownloadStartDateInputProps) {
     const [hasIncompleteInput, setHasIncompleteInput] = useState(false)
     const inputRef = useRef<HTMLInputElement | null>(null)
 
@@ -40,7 +41,7 @@ function DownloadStartDateInput({field, invalid}: DownloadStartDateInputProps) {
         // Reset the native control as well, so its visible date segments are cleared.
         if (inputRef.current) inputRef.current.value = ''
         setHasIncompleteInput(false)
-        field.onChange(null)
+        onClear()
     }
 
     return (
@@ -84,7 +85,7 @@ function DownloadStartDateInput({field, invalid}: DownloadStartDateInputProps) {
 }
 
 export default function PodcastDownloadProfileForm({form}: Props) {
-    const {control, register, watch, setValue, formState: {errors}} = form
+    const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
     const withCountdown = watch('downloadWithCountdown')
@@ -218,7 +219,15 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                         control={control}
                         name="downloadStartingFrom"
                         render={({field}) => (
-                            <DownloadStartDateInput field={field} invalid={!!errors.downloadStartingFrom}/>
+                            <DownloadStartDateInput
+                                field={field}
+                                invalid={!!errors.downloadStartingFrom}
+                                onClear={() => {
+                                    // Null satisfies the nullable Zod date schema; revalidate and discard stale errors.
+                                    setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
+                                    clearErrors('downloadStartingFrom')
+                                }}
+                            />
                         )}
                     />
                     {errors.downloadStartingFrom && (
