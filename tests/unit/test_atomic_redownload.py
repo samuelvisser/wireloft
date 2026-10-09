@@ -132,7 +132,7 @@ def test_failed_redownload_keeps_old_media_and_database_facts(
 ):
     from backend.db.models.media_download import MediaDownloadBase
     from dailywire_downloader import coordinator
-    from dailywire_downloader.storage.publication import PublicationJournal
+    from dailywire_downloader.storage import replacement
     from task_manager.tasks import download_adapter
 
     factory, media_download_id, old, sidecar, downloaded_at = old_download
@@ -150,14 +150,17 @@ def test_failed_redownload_keeps_old_media_and_database_facts(
             raise RuntimeError("post-processing failed")
         Path(path).write_bytes(b"new fully processed media")
 
-    def publish(*args, **kwargs):
-        assert old.read_bytes() == b"existing complete media"
-        raise RuntimeError("sidecar publication failed")
+    stage_file = replacement._stage_completed_file
+
+    def stage(source, destination, **kwargs):
+        if fail_at == "sidecar" and source.suffix == ".nfo":
+            assert old.read_bytes() == b"existing complete media"
+            raise RuntimeError("sidecar staging failed")
+        return stage_file(source, destination, **kwargs)
 
     monkeypatch.setattr(coordinator, "download_file", download)
     monkeypatch.setattr(coordinator, "embed_media", embed)
-    if fail_at == "sidecar":
-        monkeypatch.setattr(PublicationJournal, "publish", publish)
+    monkeypatch.setattr(replacement, "_stage_completed_file", stage)
 
     with factory() as session, pytest.raises(RuntimeError):
         download_adapter.run_download(
@@ -215,7 +218,7 @@ def test_changed_destination_swaps_database_first_then_retires_old(
         assert current.artifact_fingerprint == inspect_artifact(requested).fingerprint
 
 
-def test_failed_filename_restoration_keeps_committed_replacement(
+def test_replacement_failure_before_staging_preserves_original(
     old_download, monkeypatch,
 ):
     from backend.db.models.media_download import MediaDownloadBase
@@ -223,7 +226,7 @@ def test_failed_filename_restoration_keeps_committed_replacement(
     from dailywire_downloader.storage import replacement
     from task_manager.tasks import download_adapter
 
-    factory, media_download_id, old, sidecar, _ = old_download
+    factory, media_download_id, old, sidecar, downloaded_at = old_download
 
     def download(_url, path, **kwargs):
         Path(path).write_bytes(b"new raw media")
@@ -231,21 +234,23 @@ def test_failed_filename_restoration_keeps_committed_replacement(
 
     monkeypatch.setattr(coordinator, "download_file", download)
     monkeypatch.setattr(coordinator, "embed_media", lambda path, **kwargs: None)
-    monkeypatch.setattr(replacement, "_stage_sibling", lambda *_: (_ for _ in ()).throw(OSError("link denied")))
-
-    with factory() as session:
+    monkeypatch.setattr(
+        replacement, "_stage_completed_file",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("stage failed")),
+    )
+    with factory() as session, pytest.raises(OSError, match="stage failed"):
         download_adapter.run_download(
             session, media_download_id=media_download_id,
             is_redownload=True, prepare_existing_artifact=True,
         )
 
-    assert old.exists() is False
-    assert sidecar.exists() is False
+    assert old.read_bytes() == b"existing complete media"
+    assert sidecar.read_bytes() == b"<old />"
+    assert not list(old.parent.glob(".wireloft-replacement-*.json"))
     with factory() as session:
         current = session.get(MediaDownloadBase, media_download_id)
-        assert current.file_path == str(old.with_name("Episode-1.mp4"))
-        assert Path(current.file_path).read_bytes() == b"new raw media"
-        assert Path(current.assets[0].path).read_bytes() == b"<new />"
+        assert current.file_path == str(old)
+        assert current.downloaded_at == downloaded_at
 
 
 def test_retiring_replaced_hls_removes_only_owned_bundle(tmp_path):
@@ -312,7 +317,7 @@ def test_external_modification_during_redownload_is_not_overwritten(
     monkeypatch.setattr(coordinator, "download_file", download)
     monkeypatch.setattr(coordinator, "embed_media", lambda path, **kwargs: None)
 
-    with factory() as session:
+    with factory() as session, pytest.raises(Exception, match="Existing replacement destination changed"):
         download_adapter.run_download(
             session, media_download_id=media_download_id,
             is_redownload=True, prepare_existing_artifact=True,
@@ -322,19 +327,250 @@ def test_external_modification_during_redownload_is_not_overwritten(
     assert sidecar.read_bytes() == b"<old />"
     with factory() as session:
         download = session.get(MediaDownloadBase, media_download_id)
-        assert download.file_path != str(old)
-        assert Path(download.file_path).read_bytes() == b"new raw media"
-        assert download.artifact_fingerprint == inspect_artifact(download.file_path).fingerprint
+        assert download.file_path == str(old)
+        assert download.artifact_status == "available"
+        assert download.artifact_fingerprint != inspect_artifact(download.file_path).fingerprint
 
 
 def test_startup_cleans_only_recognized_abandoned_replacement_staging(tmp_path):
-    from dailywire_downloader.storage.temporary import cleanup_abandoned_publication_locks
+    from dailywire_downloader.storage.replacement import reconcile_abandoned_replacements
 
     eligible = tmp_path / (".wireloft-replace-" + "a" * 32 + ".part")
     unrelated = tmp_path / ".wireloft-replace-user-file.part"
     eligible.write_bytes(b"abandoned staging")
     unrelated.write_bytes(b"not owned by WireLoft")
 
-    assert cleanup_abandoned_publication_locks(tmp_path) == 1
+    assert reconcile_abandoned_replacements(tmp_path, recover=lambda *_: True) == 0
     assert not eligible.exists()
     assert unrelated.read_bytes() == b"not owned by WireLoft"
+
+
+def _publish_without_database_commit(
+    old_download, tmp_path, *,
+    monkeypatch=None, interrupt_at=None,
+):
+    """Exercise the real publication boundary without committing SQLAlchemy."""
+    from backend.db.models.media_download import MediaDownloadBase
+    from dailywire_downloader.storage import replacement
+
+    factory, download_id, old, sidecar, _ = old_download
+    media = tmp_path / "prepared.mp4"
+    nfo = tmp_path / "prepared.nfo"
+    media.write_bytes(b"verified replacement media")
+    nfo.write_bytes(b"<new />")
+    with factory() as session:
+        download = session.get(MediaDownloadBase, download_id)
+        previous = replacement.capture_previous_download(
+            download.file_path,
+            size_bytes=download.artifact_size_bytes,
+            fingerprint=download.artifact_fingerprint,
+            assets=tuple((a.path, a.size_bytes, a.fingerprint) for a in download.assets),
+        )
+    assert previous is not None
+
+    if interrupt_at is not None:
+        original_replace = replacement.os.replace
+
+        def interrupt(source, destination):
+            if Path(destination) == old and Path(source).name.startswith(".wireloft-replace-"):
+                if interrupt_at == "before_media_rename":
+                    raise OSError("simulated crash immediately before atomic rename")
+                original_replace(source, destination)
+                if interrupt_at == "after_media_rename":
+                    raise OSError("simulated crash immediately after atomic rename")
+                return
+            return original_replace(source, destination)
+
+        assert monkeypatch is not None
+        monkeypatch.setattr(replacement.os, "replace", interrupt)
+
+    kwargs = dict(
+        media_download_id=download_id,
+        previous=previous,
+        media_source=media,
+        sidecars=(replacement.ReplacementSidecar("nfo", "nfo", nfo, ".nfo"),),
+        downloaded_bytes=123,
+        format_downloaded="new format",
+        downloaded_publish_status="published_final",
+        should_cancel=lambda: False,
+    )
+    if interrupt_at is not None:
+        with pytest.raises(OSError, match="simulated crash"):
+            replacement.publish_replacement(**kwargs)
+    else:
+        replacement.publish_replacement(**kwargs)
+    return old, sidecar
+
+
+@pytest.mark.parametrize("interrupt_at", [None, "before_media_rename", "after_media_rename"])
+def test_startup_recovery_finishes_atomic_replacement_and_database(
+    old_download, tmp_path, monkeypatch, interrupt_at,
+):
+    from backend.db.models.media_download import MediaDownloadBase, MediaDownloadHistory
+    from backend.services.download_recovery import recover_abandoned_download_replacements
+    from dailywire_downloader.storage import replacement
+    from sqlalchemy import select
+
+    factory, media_download_id, old, sidecar, downloaded_at = old_download
+    _publish_without_database_commit(
+        old_download, tmp_path, monkeypatch=monkeypatch,
+        interrupt_at=interrupt_at,
+    )
+    if interrupt_at is not None:
+        # Simulate a new process, with the original OS rename function restored.
+        monkeypatch.undo()
+
+    with factory() as session:
+        stale = session.get(MediaDownloadBase, media_download_id)
+        assert stale.downloaded_at == downloaded_at
+        if interrupt_at != "before_media_rename":
+            assert stale.artifact_fingerprint != inspect_artifact(old).fingerprint
+
+    assert recover_abandoned_download_replacements(old.parent) == 1
+    assert old.read_bytes() == b"verified replacement media"
+    assert sidecar.read_bytes() == b"<new />"
+    assert not list(old.parent.glob(".wireloft-replacement-*.json"))
+    assert not list(old.parent.glob(".wireloft-replace-*.part"))
+    with factory() as session:
+        refreshed = session.get(MediaDownloadBase, media_download_id)
+        assert refreshed.file_path == str(old)
+        assert refreshed.artifact_status == "available"
+        assert refreshed.downloaded_at > downloaded_at
+        assert refreshed.artifact_fingerprint == inspect_artifact(old).fingerprint
+        assert refreshed.format_downloaded == "new format"
+        assert refreshed.assets[0].path == str(sidecar)
+        assert refreshed.assets[0].fingerprint == inspect_artifact(sidecar).fingerprint
+        history = list(session.scalars(select(MediaDownloadHistory).where(
+            MediaDownloadHistory.media_download_id == media_download_id,
+            MediaDownloadHistory.action == "completed",
+        )))
+        assert len(history) == 1
+        assert history[0].event_metadata["recovered_after_restart"] is True
+    # Idempotent startup: a second run cannot record a duplicate completion.
+    assert recover_abandoned_download_replacements(old.parent) == 0
+
+
+def test_startup_recovery_preserves_newer_external_media(
+    old_download, tmp_path, monkeypatch,
+):
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.services.download_recovery import recover_abandoned_download_replacements
+
+    factory, media_download_id, old, sidecar, _ = old_download
+    _publish_without_database_commit(
+        old_download, tmp_path, monkeypatch=monkeypatch,
+        interrupt_at="before_media_rename",
+    )
+    monkeypatch.undo()
+    old.write_bytes(b"externally modified media")
+
+    assert recover_abandoned_download_replacements(old.parent) == 0
+    assert old.read_bytes() == b"externally modified media"
+    assert list(old.parent.glob(".wireloft-replacement-*.json"))
+    with factory() as session:
+        current = session.get(MediaDownloadBase, media_download_id)
+        assert current.artifact_fingerprint != inspect_artifact(old).fingerprint
+
+
+def test_recovery_preserves_corrupted_staging_for_investigation(
+    old_download, tmp_path, monkeypatch,
+):
+    from backend.services.download_recovery import recover_abandoned_download_replacements
+    from dailywire_downloader.storage import replacement
+
+    _, _, old, _, _ = old_download
+    _publish_without_database_commit(
+        old_download, tmp_path, monkeypatch=monkeypatch,
+        interrupt_at="before_media_rename",
+    )
+    monkeypatch.undo()
+    journal = next(old.parent.glob(".wireloft-replacement-*.json"))
+    record = replacement._load_record(journal, old.parent)
+    assert record is not None
+    Path(record["media"]["staged"]).write_bytes(b"invalid staging data")
+
+    assert recover_abandoned_download_replacements(old.parent) == 0
+    assert journal.exists()
+    assert old.read_bytes() == b"existing complete media"
+
+
+def test_recovery_after_database_commit_only_cleans_journal(
+    old_download, tmp_path,
+):
+    from backend.db.models.media_download import MediaDownloadBase, MediaDownloadHistory
+    from backend.services.download_recovery import (
+        _commit_abandoned_replacement, recover_abandoned_download_replacements,
+    )
+    from dailywire_downloader.storage import replacement
+    from sqlalchemy import select
+
+    factory, media_download_id, old, sidecar, _ = old_download
+    _publish_without_database_commit(old_download, tmp_path)
+    journal = next(old.parent.glob(".wireloft-replacement-*.json"))
+    record = replacement._load_record(journal, old.parent)
+    assert record is not None
+
+    # First recovery commits new identity, then the process crashes before
+    # journal cleanup. The following startup must not add a second completion.
+    assert _commit_abandoned_replacement(record, lambda: True)
+    with factory() as session:
+        completed_before = session.scalar(
+            select(MediaDownloadHistory.id).where(
+                MediaDownloadHistory.media_download_id == media_download_id,
+                MediaDownloadHistory.action == "completed",
+            )
+        )
+    assert recover_abandoned_download_replacements(old.parent) == 1
+    with factory() as session:
+        downloaded = session.get(MediaDownloadBase, media_download_id)
+        assert downloaded.file_path == str(old)
+        assert downloaded.artifact_fingerprint == inspect_artifact(old).fingerprint
+        completed_after = session.scalar(
+            select(MediaDownloadHistory.id).where(
+                MediaDownloadHistory.media_download_id == media_download_id,
+                MediaDownloadHistory.action == "completed",
+            )
+        )
+        assert completed_before == completed_after
+    assert not journal.exists()
+
+
+def test_direct_mode_uses_existing_workspace_startup_cleanup(tmp_path):
+    from dailywire_downloader.storage import create_temporary_download_workspace
+    from dailywire_downloader.storage.temporary import cleanup_abandoned_destination_workspaces
+
+    download_root = tmp_path / "downloads"
+    destination = download_root / "show" / "episode.mp4"
+    workspace = create_temporary_download_workspace(destination.parent, destination)
+    part = workspace.path.with_name(workspace.path.name + ".part")
+    part.write_bytes(b"interrupted direct-mode media")
+
+    assert workspace.workspace.exists()
+    assert cleanup_abandoned_destination_workspaces(
+        download_root, is_committed=lambda *_: False,
+    ) == 1
+    assert not workspace.workspace.exists()
+    assert not part.exists()
+
+
+def test_stale_journal_cannot_replace_database_owner(
+    old_download, tmp_path, monkeypatch,
+):
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.services.download_recovery import recover_abandoned_download_replacements
+    from dailywire_downloader.storage.identity import inspect_artifact
+
+    factory, media_download_id, old, sidecar, _ = old_download
+    _publish_without_database_commit(
+        old_download, tmp_path, monkeypatch=monkeypatch,
+        interrupt_at="before_media_rename",
+    )
+    monkeypatch.undo()
+    with factory() as session:
+        current = session.get(MediaDownloadBase, media_download_id)
+        current.artifact_fingerprint = "e" * 64
+        session.commit()
+
+    assert recover_abandoned_download_replacements(old.parent) == 0
+    assert old.read_bytes() == b"existing complete media"
+    assert list(old.parent.glob(".wireloft-replacement-*.json"))

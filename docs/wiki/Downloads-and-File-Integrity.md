@@ -37,7 +37,9 @@ Failed, cancelled, missing, or corrupted downloads can be retried where appropri
 
 When you **re-download an existing file**, WireLoft keeps the previous version available while it transfers the replacement, completes processing, and publishes the new file. It switches to the finished replacement only after successful publication, avoiding the long gap where the previous file would otherwise be unavailable. A failed or cancelled replacement leaves the previous completed download intact.
 
-The original filename is normally reused. If the destination has changed, an external file would be overwritten, or a format such as a local HLS bundle cannot safely be replaced in place, WireLoft uses the new completed path instead. The operation may temporarily need enough storage for both versions.
+For ordinary files with an unchanged destination, the completed replacement is staged beside the original file and then atomically renamed over it. The recorded file path never changes. If WireLoft crashes during publication, the existing startup filesystem recovery verifies file identities and finishes any interrupted replacement without downloading everything again.
+
+When the output destination changes or a local HLS bundle cannot be replaced as one file, WireLoft publishes the new version separately before retiring the old one. Files modified outside WireLoft are never deliberately overwritten. Re-downloads can temporarily require enough disk space for both versions.
 
 ### Download log
 
