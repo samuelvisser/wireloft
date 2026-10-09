@@ -144,6 +144,7 @@ class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
         local_media_profile_id: int | None,
         selected_profile_count: int,
         disabled_profile_count: int,
+        selected_media_download_ids: Sequence[int] | None = None,
     ) -> None:
         super().__init__(
             show,
@@ -151,11 +152,21 @@ class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
             selected_profile_count=selected_profile_count,
         )
         self.disabled_profile_count = disabled_profile_count
+        # None preserves the existing unfiltered show-wide behavior. An empty
+        # tuple is a valid filtered request with no matching downloads.
+        self.selected_media_download_ids = (
+            tuple(selected_media_download_ids)
+            if selected_media_download_ids is not None else None
+        )
 
     def task_kwargs(self) -> dict[str, object]:
         return {
             **super().task_kwargs(),
             "download_profiles_disabled": self.disabled_profile_count,
+            **(
+                {"selected_media_download_ids": list(self.selected_media_download_ids)}
+                if self.selected_media_download_ids is not None else {}
+            ),
         }
 
 

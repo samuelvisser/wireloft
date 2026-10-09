@@ -173,14 +173,14 @@ export default function ShowDownloadAllDialog({
   return (
     <ConfirmDialog
       open
-      title="Download all episodes"
+      title="Bulk download"
       onDismiss={() => {if (!starting) onDismiss()}}
       icon={faIcon('fas', 'download')}
       className="show-download-all-dialog"
       dismissOnOverlayClick={!starting}
       cancelButton={{disabled: starting}}
       confirmButton={{
-        label: starting ? 'Starting…' : 'Download All',
+        label: starting ? 'Starting…' : 'Bulk download',
         onClick: () => void submit(),
         disabled: starting || !compatibleProfiles.length,
       }}

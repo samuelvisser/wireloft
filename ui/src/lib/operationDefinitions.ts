@@ -545,7 +545,7 @@ export const frontendOperationDefinitions = {
   'show.delete_downloads': {
     kind: 'show.delete_downloads',
     resourceType: 'show',
-    label: 'Delete downloads',
+    label: 'Bulk delete',
     invalidate: invalidateShowDownloadDeletion,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
@@ -567,7 +567,7 @@ export const frontendOperationDefinitions = {
   'show.download_all': {
     kind: 'show.download_all',
     resourceType: 'show',
-    label: 'Download All',
+    label: 'Bulk download',
     invalidate: invalidateShowFiles,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
@@ -575,13 +575,13 @@ export const frontendOperationDefinitions = {
         ?? resultNumber(operation, 'completed')
         ?? contextNumber(operation, 'downloads_requested')
         ?? 0
-      return `Download All finished for ${showTitle}: ${completed} ${plural(completed, 'episode')} downloaded`
+      return `Bulk download finished for ${showTitle}: ${completed} ${plural(completed, 'episode')} downloaded`
     },
   },
   'show.redownload_episodes': {
     kind: 'show.redownload_episodes',
     resourceType: 'show',
-    label: 'Re-download',
+    label: 'Bulk delete and re-download',
     invalidate: invalidateShowFiles,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
@@ -594,7 +594,7 @@ export const frontendOperationDefinitions = {
       const profileDetail = profiles === undefined
         ? ''
         : ` using ${profiles} ${plural(profiles, 'Local Media Profile')}`
-      return `Re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
+      return `Bulk delete and re-download finished for ${showTitle}: ${files} episode ${plural(files, 'file')} re-downloaded${profileDetail}`
     },
   },
   'movie.refresh_extras': {

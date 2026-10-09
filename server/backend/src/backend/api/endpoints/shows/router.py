@@ -154,6 +154,9 @@ def show_delete_downloads(show_slug: str, body: ShowDeleteDownloadsAPIRequest):
                 s,
                 show_slug,
                 body.local_media_profile_id,
+                delete_older_than=body.delete_older_than,
+                delete_older_than_days=body.delete_older_than_days,
+                delete_older_than_latest_episodes=body.delete_older_than_latest_episodes,
             )
             s.commit()
             return result
@@ -175,6 +178,9 @@ def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequ
                 s,
                 show_slug,
                 body.local_media_profile_id,
+                delete_older_than=body.delete_older_than,
+                delete_older_than_days=body.delete_older_than_days,
+                delete_older_than_latest_episodes=body.delete_older_than_latest_episodes,
             )
             s.commit()
             return result

@@ -269,16 +269,16 @@ export default function ShowPage() {
   const deleteDownloadsDisabledReason = deleteDownloadsOperation
     ? deleteDownloadsOperation.status === 'WAITING'
       ? deleteDownloadsOperation.message || OPERATION_WAITING_MESSAGE
-      : `A delete downloads operation is running for ${show.title}.`
+      : `A bulk delete operation is running for ${show.title}.`
     : redownloadOperation
-      ? `A delete and re-download operation is running for ${show.title}.`
+      ? `A bulk delete and re-download operation is running for ${show.title}.`
       : downloadStateDisabledReason
   const redownloadDisabledReason = redownloadOperation
     ? redownloadOperation.status === 'WAITING'
       ? redownloadOperation.message || OPERATION_WAITING_MESSAGE
-      : `A delete and re-download operation is running for ${show.title}.`
+      : `A bulk delete and re-download operation is running for ${show.title}.`
     : deleteDownloadsOperation
-      ? `A delete downloads operation is running for ${show.title}.`
+      ? `A bulk delete operation is running for ${show.title}.`
       : downloadStateDisabledReason
 
   const controlTaskOperation = async (
@@ -433,7 +433,7 @@ export default function ShowPage() {
                   onSelect: () => setSyncLogOpen(true),
                 },
                 {
-                  label: 'Download All',
+                  label: 'Bulk download',
                   icon: faIcon('fas', 'download'),
                   disabled: downloadAllBusy,
                   disabledReason: downloadAllBusy ? `A bulk download is running for ${show.title}.` : undefined,
@@ -460,23 +460,23 @@ export default function ShowPage() {
                   onSelect: () => setFileRenameConfirm(true),
                 },
                 {
-                  label: 'Delete all downloads',
+                  label: 'Bulk delete',
                   icon: faIcon('fas', 'trash'),
                   tone: 'danger',
                   disabled: deleteDownloadsDisabledReason !== undefined,
                   disabledReason: deleteDownloadsDisabledReason,
                   operation: deleteDownloadsOperation,
-                  controls: operationControls(deleteDownloadsOperation?.id, 'download deletion'),
+                  controls: operationControls(deleteDownloadsOperation?.id, 'bulk delete'),
                   onSelect: () => setDeleteDownloadsConfirm(true),
                 },
                 {
-                  label: 'Delete and re-download all episodes',
+                  label: 'Bulk delete and re-download',
                   icon: faIcon('fas', 'trash'),
                   tone: 'danger',
                   disabled: redownloadDisabledReason !== undefined,
                   disabledReason: redownloadDisabledReason,
                   operation: redownloadOperation,
-                  controls: operationControls(redownloadOperation?.id, 're-download', false),
+                  controls: operationControls(redownloadOperation?.id, 'bulk delete and re-download', false),
                   onSelect: () => setRedownloadConfirm(true),
                 },
                 {
@@ -670,13 +670,14 @@ export default function ShowPage() {
         operationDefinition={frontendOperationDefinitions['show.delete_downloads']}
         requestPath={`/shows/${encodeURIComponent(id)}/delete-downloads`}
         resourceLabel={show.title}
-        title="Delete all downloads"
+        title="Bulk delete"
         onDismiss={() => setDeleteDownloadsConfirm(false)}
         icon={faIcon('fas', 'trash')}
         iconTone="danger"
-        confirmLabel="Delete downloads"
+        confirmLabel="Bulk delete"
         disabled={deleteDownloadsBusy || redownloadBusy}
         scope_by_local_media_profile
+        showDeleteOlderThan
         localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>
@@ -692,13 +693,14 @@ export default function ShowPage() {
         operationDefinition={frontendOperationDefinitions['show.redownload_episodes']}
         requestPath={`/shows/${encodeURIComponent(id)}/redownload-episodes`}
         resourceLabel={show.title}
-        title="Delete and re-download all episodes"
+        title="Bulk delete and re-download"
         onDismiss={() => setRedownloadConfirm(false)}
         icon={faIcon('fas', 'arrows-rotate')}
         iconTone="danger"
-        confirmLabel="Delete and re-download"
+        confirmLabel="Bulk delete and re-download"
         disabled={deleteDownloadsBusy || redownloadBusy}
         scope_by_local_media_profile
+        showDeleteOlderThan
         localMediaProfiles={actionLocalMediaProfiles}
       >
         <p>

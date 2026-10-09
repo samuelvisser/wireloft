@@ -229,3 +229,138 @@ def test_show_redownload_scope_creates_only_selected_profile_dependency(monkeypa
     finally:
         session.close()
         engine.dispose()
+
+
+def test_bulk_redownload_selects_only_episodes_older_than_latest_limit(monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    from backend.api.endpoints.shows import service
+    from backend.db.models import Episode, Season
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_types import MediaType
+    from task_manager.scheduler.db import TaskOperationDependency
+
+    session, engine = _session()
+    try:
+        _disable_dispatch(monkeypatch)
+        (
+            show,
+            audio_profile,
+            _video_profile,
+            _unused_profile,
+            original_audio,
+            original_video,
+        ) = _library(session, tmp_path)
+        first_episode = session.get(Episode, original_audio.media_item_id)
+        first_episode.published_date = datetime.now(timezone.utc) - timedelta(days=100)
+        season = session.query(Season).filter_by(show_id=show.id).one()
+
+        def add_episode(index: int, days_old: int, *, downloaded: bool):
+            episode = Episode(
+                uuid=f"retention-episode-{index}",
+                type=MediaType.EPISODE.value,
+                show=show,
+                season=season,
+                index=index,
+                episode_identifier=f"ep.{index}",
+                slug=f"retention-episode-{index}",
+                title=f"Retention episode {index}",
+                description="",
+                duration=60,
+                publish_status="published_final",
+                sharing_url=f"https://example.test/retention-episode-{index}",
+                published_date=datetime.now(timezone.utc) - timedelta(days=days_old),
+            )
+            session.add(episode)
+            session.flush()
+            if not downloaded:
+                return None
+            path = tmp_path / f"episode-{index}.mp3"
+            path.write_bytes(b"audio")
+            download = EpisodeMediaDownload(
+                type=MediaType.EPISODE.value,
+                media_item_id=episode.id,
+                local_media_profile_id=audio_profile.id,
+                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+                file_path=str(path),
+                downloaded_bytes=5,
+            )
+            session.add(download)
+            session.flush()
+            return download
+
+        middle = add_episode(2, 40, downloaded=True)
+        newest_downloaded = add_episode(3, 2, downloaded=True)
+        add_episode(4, 0, downloaded=False)
+        result = service.request_show_episode_redownload(
+            session,
+            show.slug,
+            None,
+            delete_older_than="latest_episodes",
+            delete_older_than_latest_episodes=2,
+        )
+        dependencies = session.query(TaskOperationDependency).filter_by(
+            parent_operation_id=result["operation_id"],
+        ).all()
+        assert {
+            dependency.context["media_download_id"] for dependency in dependencies
+        } == {original_audio.id, original_video.id, middle.id}
+        assert newest_downloaded.id not in {
+            dependency.context["media_download_id"] for dependency in dependencies
+        }
+
+        # Days are based on episode publication dates and use the same
+        # selection logic for both maintenance actions.
+        days_result = service.request_show_episode_redownload(
+            session,
+            show.slug,
+            None,
+            delete_older_than="days",
+            delete_older_than_days=50,
+        )
+        day_dependencies = session.query(TaskOperationDependency).filter_by(
+            parent_operation_id=days_result["operation_id"],
+        ).all()
+        assert {
+            dependency.context["media_download_id"] for dependency in day_dependencies
+        } == {original_audio.id, original_video.id}
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_bulk_redownload_without_older_downloads_does_not_touch_recent_files(monkeypatch, tmp_path):
+    from datetime import timedelta
+
+    from backend.api.endpoints.shows import service
+    from backend.db.models import Episode
+    from task_manager.scheduler.db import TaskOperationDependency
+
+    session, engine = _session()
+    try:
+        _disable_dispatch(monkeypatch)
+        (
+            show,
+            _audio_profile,
+            _video_profile,
+            _unused_profile,
+            original_audio,
+            _original_video,
+        ) = _library(session, tmp_path)
+        episode = session.get(Episode, original_audio.media_item_id)
+        episode.published_date = datetime.now(timezone.utc) - timedelta(days=2)
+
+        with pytest.raises(HTTPException) as exc:
+            service.request_show_episode_redownload(
+                session,
+                show.slug,
+                None,
+                delete_older_than="days",
+                delete_older_than_days=90,
+            )
+        assert exc.value.status_code == 422
+        assert session.query(TaskOperationDependency).all() == []
+    finally:
+        session.close()
+        engine.dispose()

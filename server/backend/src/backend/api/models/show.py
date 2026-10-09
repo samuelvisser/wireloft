@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 from datetime import date, datetime
 
 from pydantic import AliasChoices, AliasPath, computed_field, Field, model_validator
@@ -78,9 +78,25 @@ class ShowDownloadAllAPIRequest(RequestBase):
 
 
 class _ShowDownloadMaintenanceAPIRequest(RequestBase):
-    """Scope a destructive show download action to one or every profile in use."""
+    """Scope show download maintenance to selected profiles and older episodes."""
 
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+    delete_older_than: Literal["all", "days", "latest_episodes"] = "all"
+    delete_older_than_days: int | None = Field(default=None, ge=1)
+    delete_older_than_latest_episodes: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_older_than_limit(self):
+        if self.delete_older_than == "all":
+            if self.delete_older_than_days is not None or self.delete_older_than_latest_episodes is not None:
+                raise ValueError("Delete all does not accept an age limit")
+        elif self.delete_older_than == "days":
+            if self.delete_older_than_days is None or self.delete_older_than_latest_episodes is not None:
+                raise ValueError("Delete older than days requires a number of days")
+        else:
+            if self.delete_older_than_latest_episodes is None or self.delete_older_than_days is not None:
+                raise ValueError("Delete older than latest episodes requires a number of episodes")
+        return self
 
 
 class ShowDeleteDownloadsAPIRequest(_ShowDownloadMaintenanceAPIRequest):

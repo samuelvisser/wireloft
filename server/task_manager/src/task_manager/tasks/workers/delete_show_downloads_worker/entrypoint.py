@@ -21,6 +21,7 @@ async def delete_show_downloads_worker(
         progress=None,
         local_media_profile_id: int | None = None,
         download_profiles_disabled: int = 0,
+        selected_media_download_ids: list[int] | None = None,
 ) -> TaskResult:
     """Run an explicitly requested show-wide download deletion."""
     if resource_id is None:
@@ -32,6 +33,7 @@ async def delete_show_downloads_worker(
             show_id=resource_id,
             local_media_profile_id=local_media_profile_id,
             download_profiles_disabled=download_profiles_disabled,
+            selected_media_download_ids=selected_media_download_ids,
             progress=progress,
         )
 
