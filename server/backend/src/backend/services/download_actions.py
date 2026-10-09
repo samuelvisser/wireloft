@@ -3,7 +3,6 @@ from __future__ import annotations
 from contextlib import contextmanager
 import os
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db import get_session

@@ -1,4 +1,6 @@
 {
   "fas:circle-video": "fas:video",
-  "fas:floppy-disk-circle-xmark": "fas:floppy-disk"
+  "fas:floppy-disk-circle-xmark": "fas:floppy-disk",
+  "fass:books": "fas:book-bookmark",
+  "fass:rectangle-history": "fas:clock-rotate-left"
 }
