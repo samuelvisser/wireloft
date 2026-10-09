@@ -21,6 +21,7 @@ class EpisodeDownloadScope:
     _session: Session = field(repr=False, compare=False)
     _local_media_profile_id: int | None = field(default=None, repr=False, compare=False)
     _artifact_statuses: frozenset[str] | None = field(default=None, repr=False, compare=False)
+    _filtered_download_ids: frozenset[int] | None = field(default=None, repr=False, compare=False)
 
     @staticmethod
     def _downloads(
@@ -135,7 +136,11 @@ class EpisodeDownloadScope:
                 if (selected_episode_ids is None or download.media_item_id in selected_episode_ids)
                 and (selected_download_ids is None or download.id in selected_download_ids)
             )
-            return replace(self, downloads=downloads)
+            return replace(
+                self,
+                downloads=downloads,
+                _filtered_download_ids=frozenset(download.id for download in downloads),
+            )
 
         if (
             selected_profile_id == self._local_media_profile_id
@@ -150,6 +155,11 @@ class EpisodeDownloadScope:
             local_media_profile_id=selected_profile_id,
             artifact_statuses=selected_statuses,
         )
+        if self._filtered_download_ids is not None:
+            downloads = tuple(
+                download for download in downloads
+                if download.id in self._filtered_download_ids
+            )
         return replace(
             self,
             downloads=downloads,

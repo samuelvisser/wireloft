@@ -231,7 +231,7 @@ def test_show_redownload_scope_creates_only_selected_profile_dependency(monkeypa
         engine.dispose()
 
 
-def test_bulk_redownload_selects_only_episodes_older_than_latest_limit(monkeypatch, tmp_path):
+def test_bulk_redownload_selects_only_episodes_older_than_latest_download_limit(monkeypatch, tmp_path):
     from datetime import timedelta
 
     from backend.api.endpoints.shows import service
@@ -297,18 +297,30 @@ def test_bulk_redownload_selects_only_episodes_older_than_latest_limit(monkeypat
             session,
             show.slug,
             None,
-            delete_older_than="latest_episodes",
-            delete_older_than_latest_episodes=2,
+            delete_older_than="latest_downloads",
+            delete_older_than_latest_downloads=2,
         )
         dependencies = session.query(TaskOperationDependency).filter_by(
             parent_operation_id=result["operation_id"],
         ).all()
-        assert {
-            dependency.context["media_download_id"] for dependency in dependencies
-        } == {original_audio.id, original_video.id, middle.id}
-        assert newest_downloaded.id not in {
+        selected_ids = {
             dependency.context["media_download_id"] for dependency in dependencies
         }
+        assert selected_ids == {original_audio.id, original_video.id}
+        assert middle.id not in selected_ids
+        assert newest_downloaded.id not in selected_ids
+
+        # Every actual download fits within the limit. The undownloaded
+        # newest episode must not cause any file to be re-downloaded.
+        with pytest.raises(HTTPException) as exc:
+            service.request_show_episode_redownload(
+                session,
+                show.slug,
+                None,
+                delete_older_than="latest_downloads",
+                delete_older_than_latest_downloads=4,
+            )
+        assert exc.value.status_code == 422
 
         # Days are based on episode publication dates and use the same
         # selection logic for both maintenance actions.

@@ -15,22 +15,22 @@ import {getZodDefaults} from '../../utils/defaultZod'
 const DeleteOlderThanReg = createSelectRegistry('BulkDeleteOlderThan', {
     all: {label: 'Delete all'},
     days: {label: 'Delete older than days'},
-    latest_episodes: {label: 'Delete older than latest episodes'},
+    latest_downloads: {label: 'Delete older than latest downloads'},
 })
 
 const DeleteOlderThanSchema = z.object({
-    deleteOlderThan: z.enum(['all', 'days', 'latest_episodes']).default('all'),
+    deleteOlderThan: z.enum(['all', 'days', 'latest_downloads']).default('all'),
     deleteOlderThanDays: z.number().int().positive().nullable().default(null),
-    deleteOlderThanLatestEpisodes: z.number().int().positive().nullable().default(null),
+    deleteOlderThanLatestDownloads: z.number().int().positive().nullable().default(null),
 }).superRefine((value, ctx) => {
     if (value.deleteOlderThan === 'days' && value.deleteOlderThanDays === null) {
         ctx.addIssue({code: 'custom', path: ['deleteOlderThanDays'], message: 'Enter a positive number of days.'})
     }
-    if (value.deleteOlderThan === 'latest_episodes' && value.deleteOlderThanLatestEpisodes === null) {
+    if (value.deleteOlderThan === 'latest_downloads' && value.deleteOlderThanLatestDownloads === null) {
         ctx.addIssue({
             code: 'custom',
-            path: ['deleteOlderThanLatestEpisodes'],
-            message: 'Enter a positive number of episodes.',
+            path: ['deleteOlderThanLatestDownloads'],
+            message: 'Enter a positive number of downloads.',
         })
     }
 })
@@ -154,10 +154,10 @@ export default function ActionConfirmDialogue({
                                 deleteOlderThan: 'days',
                                 deleteOlderThanDays: ageFilter.deleteOlderThanDays,
                             }
-                            : ageFilter.deleteOlderThan === 'latest_episodes'
+                            : ageFilter.deleteOlderThan === 'latest_downloads'
                                 ? {
-                                    deleteOlderThan: 'latest_episodes',
-                                    deleteOlderThanLatestEpisodes: ageFilter.deleteOlderThanLatestEpisodes,
+                                    deleteOlderThan: 'latest_downloads',
+                                    deleteOlderThanLatestDownloads: ageFilter.deleteOlderThanLatestDownloads,
                                 }
                                 : {deleteOlderThan: 'all'}
                     ) : {}),
@@ -215,7 +215,7 @@ export default function ActionConfirmDialogue({
                                     onChange={(value) => {
                                         field.onChange(value)
                                         setValue('deleteOlderThanDays', value === 'days' ? 30 : null, {shouldValidate: true})
-                                        setValue('deleteOlderThanLatestEpisodes', value === 'latest_episodes' ? 10 : null, {shouldValidate: true})
+                                        setValue('deleteOlderThanLatestDownloads', value === 'latest_downloads' ? 10 : null, {shouldValidate: true})
                                     }}
                                 />
                             )}
@@ -252,12 +252,12 @@ export default function ActionConfirmDialogue({
                             <div className="help">Only episodes published more than this many days ago are selected.</div>
                         </div>
                     )}
-                    {deleteOlderThan === 'latest_episodes' && (
+                    {deleteOlderThan === 'latest_downloads' && (
                         <div className="form-row">
-                            <label htmlFor={`${olderThanId}-count`}>Latest episodes to keep</label>
+                            <label htmlFor={`${olderThanId}-count`}>Latest downloads to keep</label>
                             <Controller
                                 control={control}
-                                name="deleteOlderThanLatestEpisodes"
+                                name="deleteOlderThanLatestDownloads"
                                 render={({field}) => (
                                     <input
                                         id={`${olderThanId}-count`}
@@ -273,14 +273,14 @@ export default function ActionConfirmDialogue({
                                         onBlur={field.onBlur}
                                         ref={field.ref}
                                         disabled={starting}
-                                        aria-invalid={!!errors.deleteOlderThanLatestEpisodes}
+                                        aria-invalid={!!errors.deleteOlderThanLatestDownloads}
                                     />
                                 )}
                             />
-                            {errors.deleteOlderThanLatestEpisodes && (
-                                <div className="error" role="alert">{errors.deleteOlderThanLatestEpisodes.message}</div>
+                            {errors.deleteOlderThanLatestDownloads && (
+                                <div className="error" role="alert">{errors.deleteOlderThanLatestDownloads.message}</div>
                             )}
-                            <div className="help">Keep the show's latest published episodes, even if some are not downloaded.</div>
+                            <div className="help">Keep the latest downloads in the selected Local Media Profile scope. Episodes without downloads do not count.</div>
                         </div>
                     )}
                 </>

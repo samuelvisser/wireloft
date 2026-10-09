@@ -423,13 +423,14 @@ def _select_show_downloads_older_than(
         *,
         delete_older_than: str,
         delete_older_than_days: int | None,
-        delete_older_than_latest_episodes: int | None,
+        delete_older_than_latest_downloads: int | None,
 ) -> EpisodeDownloadScope:
-    """Select published episodes outside the requested retention window.
+    """Select older downloads, excluding episodes that have never been downloaded.
 
-    Count limits are measured across *all indexed published episodes of the show*,
-    not merely already downloaded episodes or one Local Media Profile. Episodes
-    without a reliable publication date are preserved by filtered deletions.
+    The latest-downloads limit counts actual artifacts in the selected Local Media
+    Profile scope. AVAILABLE and CORRUPTED represent existing downloaded files;
+    ABSENT or MISSING records cannot consume retention slots. Downloads without
+    a usable episode publication date are preserved for filtered deletions.
     """
     if delete_older_than == "all":
         return scope
@@ -443,27 +444,39 @@ def _select_show_downloads_older_than(
         )),
         published_at.is_not(None),
     )
-    older_episode_ids = select(Episode.id).where(*published_episodes)
+
+    if delete_older_than == "latest_downloads":
+        if delete_older_than_latest_downloads is None or delete_older_than_latest_downloads <= 0:
+            raise HTTPException(status_code=422, detail="Specify a positive number of latest downloads")
+
+        # Count one slot per existing downloaded artifact, not per indexed episode.
+        # Keeping the first N artifacts preserves the newest downloads even when
+        # many more recent episodes have never been downloaded.
+        older_download_ids = (
+            select(EpisodeMediaDownload.id)
+            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+            .where(
+                Episode.show_id == scope.show.id,
+                published_at.is_not(None),
+                EpisodeMediaDownload.local_media_profile_id.in_(scope.local_media_profile_ids),
+                EpisodeMediaDownload.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
+            )
+            .order_by(published_at.desc(), Episode.id.desc(), EpisodeMediaDownload.id.desc())
+            .offset(delete_older_than_latest_downloads)
+        )
+        return scope.select(media_download_ids=set(s.scalars(older_download_ids)))
 
     if delete_older_than == "days":
         if delete_older_than_days is None or delete_older_than_days <= 0:
             raise HTTPException(status_code=422, detail="Specify a positive number of days")
         cutoff = datetime.now(timezone.utc) - timedelta(days=delete_older_than_days)
-        older_episode_ids = older_episode_ids.where(published_at < cutoff)
-    elif delete_older_than == "latest_episodes":
-        if delete_older_than_latest_episodes is None or delete_older_than_latest_episodes <= 0:
-            raise HTTPException(status_code=422, detail="Specify a positive number of latest episodes")
-        retained_episode_ids = (
-            select(Episode.id)
-            .where(*published_episodes)
-            .order_by(published_at.desc(), Episode.id.desc())
-            .limit(delete_older_than_latest_episodes)
+        older_episode_ids = select(Episode.id).where(
+            *published_episodes,
+            published_at < cutoff,
         )
-        older_episode_ids = older_episode_ids.where(Episode.id.notin_(retained_episode_ids))
-    else:
-        raise HTTPException(status_code=422, detail="Invalid Delete older than option")
+        return scope.select(episode_ids=set(s.scalars(older_episode_ids)))
 
-    return scope.select(episode_ids=set(s.scalars(older_episode_ids)))
+    raise HTTPException(status_code=422, detail="Invalid Delete older than option")
 
 
 def request_show_download_delete(
@@ -473,7 +486,7 @@ def request_show_download_delete(
         *,
         delete_older_than: str = "all",
         delete_older_than_days: int | None = None,
-        delete_older_than_latest_episodes: int | None = None,
+        delete_older_than_latest_downloads: int | None = None,
 ) -> dict[str, bool | int | str]:
     """Disable affected profiles and queue deletion in the same durable transaction."""
     show, scope = _resolve_show_download_maintenance_scope(
@@ -486,7 +499,7 @@ def request_show_download_delete(
         scope,
         delete_older_than=delete_older_than,
         delete_older_than_days=delete_older_than_days,
-        delete_older_than_latest_episodes=delete_older_than_latest_episodes,
+        delete_older_than_latest_downloads=delete_older_than_latest_downloads,
     )
 
     # Disable before the operation can be dispatched. The router commits these
@@ -520,7 +533,7 @@ def request_show_episode_redownload(
         *,
         delete_older_than: str = "all",
         delete_older_than_days: int | None = None,
-        delete_older_than_latest_episodes: int | None = None,
+        delete_older_than_latest_downloads: int | None = None,
 ) -> dict[str, bool | int | str]:
     """Queue replacement downloads for existing show artifacts in the selected profile scope."""
     show, scope = _resolve_show_download_maintenance_scope(
@@ -533,7 +546,7 @@ def request_show_episode_redownload(
         scope,
         delete_older_than=delete_older_than,
         delete_older_than_days=delete_older_than_days,
-        delete_older_than_latest_episodes=delete_older_than_latest_episodes,
+        delete_older_than_latest_downloads=delete_older_than_latest_downloads,
     )
     scope = scope.select(artifact_statuses=(
         MediaDownloadArtifactStatus.AVAILABLE.value,
