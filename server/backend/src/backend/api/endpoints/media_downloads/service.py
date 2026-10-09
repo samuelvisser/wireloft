@@ -371,10 +371,11 @@ def get_media_downloads_page(
             ):
                 raise InvalidCursorError("Cursor does not match this download collection")
             if values.get("revision") == revision:
-                cursor_values = cursor_key_values(values, length=1)
-                if not isinstance(cursor_values[0], int) or isinstance(cursor_values[0], bool):
+                cursor_value = cursor_key_values(values, length=1)[0]
+                if isinstance(cursor_value, int) and not isinstance(cursor_value, bool):
+                    cursor_id = cursor_value
+                else:
                     raise InvalidCursorError("Invalid download cursor key")
-                cursor_id = cursor_values[0]
         except InvalidCursorError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
