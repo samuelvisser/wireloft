@@ -90,7 +90,7 @@ Example:
 
 ### Custom date formatting
 
-The existing date variables keep their convenient preformatted values, such as `date` as `YYYY-MM-DD` and the separate `year`, `month`, and `day` values. When you need another representation, use the `strftime` filter instead of combining additional date variables:
+Most of our date variables have conveniently preformatted values, such as `date` as `YYYY-MM-DD` and the separate `year`, `month`, and `day` values. When you need another representation, use the `strftime` filter:
 
 ```jinja
 /downloads/{{ show_title }}/{{ date | strftime("%d %B %Y") }} - {{ episode_title }}.ext
