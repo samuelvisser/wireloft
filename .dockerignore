@@ -22,6 +22,8 @@ ui/dist/
 ui/.npmrc
 
 # Misc
-tests/
+# Include offline unit and UI tests in disposable build stages.
+# Manual REST integration files can contain local credentials.
+tests/rest/
 dev/
 *.md

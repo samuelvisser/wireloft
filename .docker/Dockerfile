@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ########################################
-# 1) Build the React UI (Vite + TS)
+# 1) Build and test the React UI (Vite + TS)
 ########################################
 FROM node:22-alpine AS ui-build
 
@@ -31,6 +31,9 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
 # Give Vite the correct application version to bake in
 COPY pyproject.toml /pyproject.toml
 COPY ui/ ./
+COPY tests/ui/ /tests/ui/
+
+RUN npm test
 
 RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
         npm run build:pro-icons; \
@@ -40,9 +43,9 @@ RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
 
 
 ########################################
-# 2) Backend + runtime image
+# 2) Install production backend dependencies
 ########################################
-FROM python:3.13-slim AS runtime
+FROM python:3.13-slim AS backend-base
 
 # ffmpeg -> remuxing downloaded video into .mp4
 # nginx  -> serves the built UI and reverse-proxies /api/* to the backend
@@ -74,6 +77,33 @@ COPY server ./server
 # Preserve uv's download/build cache independently of Docker's normal layer cache
 RUN --mount=type=cache,id=wireloft-uv,target=/root/.cache/uv,sharing=locked \
     uv sync --frozen --no-dev
+
+########################################
+# 3) Backend tests (not part of the runtime image)
+########################################
+FROM backend-base AS backend-tests
+
+# Include the repository files referenced by the unit tests.
+COPY tests/unit ./tests/unit
+COPY release.py ./release.py
+COPY .docker/app/nginx.conf ./.docker/app/nginx.conf
+COPY config/config.yml.default ./config/config.yml.default
+
+RUN --mount=type=cache,id=wireloft-uv,target=/root/.cache/uv,sharing=locked \
+    uv sync --frozen --group dev
+
+RUN uv run --no-sync pytest && touch /tmp/wireloft-backend-tests-passed
+
+
+########################################
+# 4) Runtime image: inherit only production dependencies
+########################################
+FROM backend-base AS runtime
+
+# A test-stage bind mount forces pytest to pass before the runtime can build.
+# Nothing from this mount or the test-only stage is persisted in the image.
+RUN --mount=type=bind,from=backend-tests,source=/tmp/wireloft-backend-tests-passed,target=/tmp/wireloft-backend-tests-passed,ro \
+    test -f /tmp/wireloft-backend-tests-passed
 
 # Default config seed, copied into the /config volume on first run if missing.
 COPY config/config.yml.default ./config/config.yml.default

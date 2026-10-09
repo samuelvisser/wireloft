@@ -148,7 +148,17 @@ uv sync --group dev
 uv run pytest
 ```
 
-Network sockets are disabled during this suite. Requests in `tests/rest` are
+Run the complete frontend suite (Node tests and React component tests):
+
+```bash
+npm --prefix ui test
+```
+
+The Docker image build runs both automated suites and the TypeScript check.
+A test failure stops the image build. Test files and development-only dependencies
+stay in intermediate build stages and are not included in the runtime image.
+
+Network sockets are disabled during the backend suite. Requests in `tests/rest` are
 manual integration aids and require an access token supplied through a private
 JetBrains HTTP Client environment file.
 
