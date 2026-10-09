@@ -1,12 +1,9 @@
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {useRef, useState} from 'react'
-import {Controller, ControllerRenderProps, UseFormReturn} from 'react-hook-form'
+import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
-import {faIcon} from '../../icons/faIcon'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
-import './PodcastDownloadProfileForm.css'
 
 type Props = {
     form: UseFormReturn<any>
@@ -19,70 +16,6 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
     episodes: {label: 'Number of episodes'},
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
-
-type DownloadStartDateInputProps = {
-    field: ControllerRenderProps<any, 'downloadStartingFrom'>
-    invalid: boolean
-    onClear: () => void
-}
-
-function DownloadStartDateInput({field, invalid, onClear}: DownloadStartDateInputProps) {
-    const [hasIncompleteInput, setHasIncompleteInput] = useState(false)
-    const inputRef = useRef<HTMLInputElement | null>(null)
-
-    const updateIncompleteInput = (input: HTMLInputElement) => {
-        // Native date fields can display partial segments while their value is still empty.
-        // Chromium does not always emit input/change events for these edits.
-        setHasIncompleteInput(input.validity.badInput)
-    }
-
-    const clearDate = () => {
-        // React's controlled value may already be empty for a partially entered date.
-        // Reset the native control as well, so its visible date segments are cleared.
-        if (inputRef.current) inputRef.current.value = ''
-        setHasIncompleteInput(false)
-        onClear()
-    }
-
-    return (
-        <div className="input podcast-download-start-date" data-invalid={invalid ? 'true' : undefined}>
-            <input
-                id="download-starting-from"
-                className="podcast-download-start-date__input"
-                type="date"
-                name={field.name}
-                value={field.value ?? ''}
-                onChange={(event) => {
-                    updateIncompleteInput(event.currentTarget)
-                    field.onChange(event.currentTarget.value || null)
-                }}
-                onInput={(event) => updateIncompleteInput(event.currentTarget)}
-                onKeyUp={(event) => updateIncompleteInput(event.currentTarget)}
-                onBlur={(event) => {
-                    updateIncompleteInput(event.currentTarget)
-                    field.onBlur()
-                }}
-                ref={(node) => {
-                    inputRef.current = node
-                    field.ref(node)
-                }}
-                aria-invalid={invalid}
-                aria-describedby={invalid ? 'download-starting-from-errors' : 'download-starting-from-help'}
-            />
-            {(field.value || hasIncompleteInput) && (
-                <button
-                    type="button"
-                    className="podcast-download-start-date__clear"
-                    onClick={clearDate}
-                    aria-label="Clear download starting from date"
-                    title="Clear date"
-                >
-                    <FontAwesomeIcon icon={faIcon('fas', 'xmark')}/>
-                </button>
-            )}
-        </div>
-    )
-}
 
 export default function PodcastDownloadProfileForm({form}: Props) {
     const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
@@ -219,9 +152,12 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                         control={control}
                         name="downloadStartingFrom"
                         render={({field}) => (
-                            <DownloadStartDateInput
-                                field={field}
-                                invalid={!!errors.downloadStartingFrom}
+                            <DateInput
+                                {...field}
+                                id="download-starting-from"
+                                aria-invalid={!!errors.downloadStartingFrom}
+                                aria-describedby={errors.downloadStartingFrom ? 'download-starting-from-errors' : 'download-starting-from-help'}
+                                clearButtonLabel="Clear download starting from date"
                                 onClear={() => {
                                     // Null satisfies the nullable Zod date schema; revalidate and discard stale errors.
                                     setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
