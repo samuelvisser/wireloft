@@ -35,6 +35,10 @@ Active or queued work can be cancelled. Cancellation stops the WireLoft download
 
 Failed, cancelled, missing, or corrupted downloads can be retried where appropriate. Queued items do not show Retry because they have not failed—they can be prioritized instead.
 
+When you **re-download an existing file**, WireLoft keeps the previous version available while it transfers the replacement, completes processing, and publishes the new file. It switches to the finished replacement only after successful publication, avoiding the long gap where the previous file would otherwise be unavailable. A failed or cancelled replacement leaves the previous completed download intact.
+
+The original filename is normally reused. If the destination has changed, an external file would be overwritten, or a format such as a local HLS bundle cannot safely be replaced in place, WireLoft uses the new completed path instead. The operation may temporarily need enough storage for both versions.
+
 ### Download log
 
 Open the download log when you need to understand why a particular item failed or was retried. This is usually more useful than starting with the complete application log because it focuses on that media item.
