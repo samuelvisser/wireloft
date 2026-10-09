@@ -371,7 +371,7 @@ def get_media_downloads_page(
             if values.get("revision") == revision:
                 cursor_values = cursor_key_values(
                     values,
-                    length=2 if order == "recent" else 3,
+                    length=2 if order == "recent" else 4,
                 )
         except InvalidCursorError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -409,16 +409,29 @@ def get_media_downloads_page(
     elif order != "recent" and cursor_values is not None:
         if (
             any(isinstance(value, bool) for value in cursor_values)
-            or not all(isinstance(value, int) for value in cursor_values)
+            or not all(isinstance(value, int) for value in cursor_values[:2] + cursor_values[3:])
+            or not isinstance(cursor_values[2], str)
         ):
             raise HTTPException(
                 status_code=422,
                 detail="Invalid download cursor key",
             )
-        bucket, queue_position, media_download_id = cursor_values
+        bucket, queue_position, downloaded_at, media_download_id = cursor_values
+        try:
+            parsed_downloaded_at = datetime.fromisoformat(downloaded_at)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="Invalid download cursor key",
+            ) from exc
         after = keyset_after([
             KeysetField(source.c.workflow_bucket, bucket),
             KeysetField(source.c.workflow_queue, queue_position),
+            KeysetField(
+                source.c.workflow_downloaded_at,
+                parsed_downloaded_at,
+                descending=True,
+            ),
             KeysetField(
                 source.c.id,
                 media_download_id,
@@ -494,6 +507,7 @@ def get_media_downloads_page(
             cursor_key = [
                 int(last["workflow_bucket"]),
                 int(last["workflow_queue"]),
+                last["workflow_downloaded_at"].isoformat(),
                 int(last["id"]),
             ]
         next_cursor = encode_cursor({

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
@@ -350,6 +351,24 @@ def _workflow_bucket(status_source):
     ).label("workflow_bucket")
 
 
+def _workflow_downloaded_at(status_source):
+    """Order completed downloads by the last successful transfer, not row ID.
+
+    The constant keeps the existing ID order for other workflow statuses
+    within the final bucket and gives keyset pagination a non-null key.
+    """
+    return case(
+        (
+            status_source.c.status.in_(("downloaded", "redownloaded")),
+            func.coalesce(
+                status_source.c.downloaded_at,
+                status_source.c.created_at,
+            ),
+        ),
+        else_=datetime(1970, 1, 1, tzinfo=timezone.utc),
+    ).label("workflow_downloaded_at")
+
+
 def _workflow_queue_position(status_source):
     return case(
         (
@@ -374,6 +393,7 @@ def _collection_source() -> Subquery:
             _recent_activity_at(status_source),
             _workflow_bucket(status_source),
             _workflow_queue_position(status_source),
+            _workflow_downloaded_at(status_source),
         )
         .subquery()
     )
@@ -425,6 +445,7 @@ class MediaDownloadCollectionQuery:
             ordering = (
                 self.source.c.workflow_bucket.asc(),
                 self.source.c.workflow_queue.asc(),
+                self.source.c.workflow_downloaded_at.desc(),
                 self.source.c.id.desc(),
             )
 
@@ -435,6 +456,7 @@ class MediaDownloadCollectionQuery:
                 self.source.c.recent_at,
                 self.source.c.workflow_bucket,
                 self.source.c.workflow_queue,
+                self.source.c.workflow_downloaded_at,
             )
             .where(*predicates)
             .order_by(*ordering)

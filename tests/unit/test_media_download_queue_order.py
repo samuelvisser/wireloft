@@ -523,3 +523,42 @@ def test_download_cursor_restarts_when_workflow_revision_changes():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_workflow_downloaded_order_uses_latest_download_time_across_pages():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        old = _make_download(session, slug="workflow-originally-old")
+        middle = _make_download(session, slug="workflow-middle")
+        new = _make_download(session, slug="workflow-new")
+        for download, hour in ((old, 1), (middle, 2), (new, 3)):
+            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, statuses=["downloaded"], order="workflow",
+                cursor=cursor, limit=2,
+            )
+
+        first = page()
+        assert [item.id for item in first.items] == [new.id, middle.id]
+        assert first.next_cursor is not None
+        second = page(first.next_cursor)
+        assert [item.id for item in second.items] == [old.id]
+
+        # Re-downloading the oldest record must move it above newer records
+        # even though its original ID does not change.
+        old.downloaded_at = datetime(2026, 9, 10, 4, tzinfo=timezone.utc)
+        session.commit()
+        first = page()
+        assert [item.id for item in first.items] == [old.id, new.id]
+        second = page(first.next_cursor)
+        assert [item.id for item in second.items] == [middle.id]
+    finally:
+        session.close()
+        engine.dispose()
