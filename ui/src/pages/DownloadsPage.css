@@ -64,6 +64,7 @@
 .downloads-table td:last-child > div {
     flex-wrap: nowrap !important;
     gap: 4px !important;
+    margin-right: 4px;
 }
 
 .downloads-table td:nth-child(4) > div {
