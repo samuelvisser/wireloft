@@ -159,7 +159,6 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                                 aria-describedby={errors.downloadStartingFrom ? 'download-starting-from-errors' : 'download-starting-from-help'}
                                 clearButtonLabel="Clear download starting from date"
                                 onClear={() => {
-                                    // Null satisfies the nullable Zod date schema; revalidate and discard stale errors.
                                     setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
                                     clearErrors('downloadStartingFrom')
                                 }}
