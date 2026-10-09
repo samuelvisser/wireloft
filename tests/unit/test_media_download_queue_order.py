@@ -105,14 +105,59 @@ def test_queue_positions_use_the_dispatcher_order():
         session.commit()
 
         assert get_media_download_queue_positions(session) == {
-            first_download.id: 1,
-            second_download.id: 2,
+            second_download.id: 1,
+            first_download.id: 2,
             normal_download.id: 3,
         }
     finally:
         session.close()
         engine.dispose()
 
+
+
+def test_reprioritizing_a_queued_download_moves_it_to_front_of_dispatch_order():
+    from task_manager.tasks.media_download_operations import (
+        _ordered_queued_media_download_operations,
+        create_media_download_operation,
+        get_media_download_queue_positions,
+        prioritize_media_download_operation,
+    )
+
+    session, engine = _session()
+    try:
+        ordinary = _make_download(session, slug="reprioritize-ordinary")
+        first_download = _make_download(session, slug="reprioritize-first")
+        second_download = _make_download(session, slug="reprioritize-second")
+
+        create_media_download_operation(session, ordinary)
+        first = create_media_download_operation(session, first_download)
+        second = create_media_download_operation(session, second_download)
+
+        first.prioritized_at = datetime(2026, 9, 10, 1, 0, tzinfo=timezone.utc)
+        second.prioritized_at = first.prioritized_at + timedelta(seconds=1)
+        session.flush()
+
+        assert [operation.resource_id for operation in
+                _ordered_queued_media_download_operations(session)] == [
+            second_download.id, first_download.id, ordinary.id,
+        ]
+
+        # Clicking an earlier priority again moves it ahead of the most recent.
+        prioritize_media_download_operation(session, first_download.id)
+        session.commit()
+
+        assert get_media_download_queue_positions(session) == {
+            first_download.id: 1,
+            second_download.id: 2,
+            ordinary.id: 3,
+        }
+        assert [operation.resource_id for operation in
+                _ordered_queued_media_download_operations(session)] == [
+            first_download.id, second_download.id, ordinary.id,
+        ]
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def test_scoped_collection_queue_positions_preserve_global_positions():
@@ -225,8 +270,8 @@ def test_download_page_uses_dispatcher_queue_order_and_paginates():
                 limit=2,
             )
         assert [item.id for item in first_page.items] == [
-            first_download.id,
             second_download.id,
+            first_download.id,
         ]
         assert [item.queue_position for item in first_page.items] == [1, 2]
 

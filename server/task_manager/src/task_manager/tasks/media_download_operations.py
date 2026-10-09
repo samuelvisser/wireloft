@@ -257,10 +257,9 @@ def prioritize_media_download_operation(
 ) -> TaskOperation:
     """Move one queued media download ahead of the ordinary FIFO queue.
 
-    Priority itself remains FIFO: each click records a fresh UTC timestamp, so
-    downloads prioritized earlier are selected before downloads prioritized
-    later. Re-prioritizing the same download deliberately moves it to the end of
-    the prioritized group.
+    Prioritized downloads are handled newest-first: each click records a fresh
+    UTC timestamp, moving the download to the front of the prioritized group,
+    including when a previously prioritized download is prioritized again.
     """
     operation = get_active_media_download_operation(session, media_download_id)
     if operation is None or operation.status != OperationStatus.QUEUED.value:
@@ -950,7 +949,7 @@ def _ordered_queued_media_download_operations(
         )
         .order_by(
             case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
-            TaskOperation.prioritized_at.asc(),
+            TaskOperation.prioritized_at.desc(),
             TaskOperation.created_at.asc(),
             # Bulk dependency creation can insert many media.download operations
             # inside one transaction. SQLite's server timestamp has only
@@ -970,7 +969,7 @@ def media_download_queue_position_subquery():
     """Return a SQL subquery mapping unreserved queued downloads to 1-based positions."""
     queue_order = (
         case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
-        TaskOperation.prioritized_at.asc(),
+        TaskOperation.prioritized_at.desc(),
         TaskOperation.created_at.asc(),
         TaskOperationTarget.id.asc(),
         TaskOperation.id.asc(),
