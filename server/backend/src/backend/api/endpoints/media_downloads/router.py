@@ -23,6 +23,7 @@ from backend.app import db_session
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     prioritize_media_download_operation,
+    get_media_download_queue_positions
 )
 
 router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
