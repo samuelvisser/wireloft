@@ -564,30 +564,69 @@ class MediaDownloadCollectionQuery:
 
 
 def media_download_collection_revision(session: Session) -> str:
-    """Version mutable collection state so stale cursors restart from the head."""
+    """Version membership and ordering changes without tracking live progress.
+
+    TaskRun and TaskOperation updated_at change on every progress report.
+    Including either timestamp invalidates in-flight pagination cursors even
+    when nothing moves in the collection. Track execution lifecycle timestamps
+    and status counts instead, along with durable media-download changes.
+    """
     download_count, download_updated = session.execute(
         select(
             func.count(MediaDownloadBase.id),
             func.max(MediaDownloadBase.updated_at),
         )
     ).one()
-    operation_count, operation_updated = session.execute(
+    (
+        operation_count,
+        operation_started,
+        operation_finished,
+        operation_prioritized,
+        queued_operations,
+        running_operations,
+        waiting_operations,
+    ) = session.execute(
         select(
             func.count(TaskOperation.id),
-            func.max(TaskOperation.updated_at),
+            func.max(TaskOperation.started_at),
+            func.max(TaskOperation.finished_at),
+            func.max(TaskOperation.prioritized_at),
+            func.sum(case((TaskOperation.status == OperationStatus.QUEUED.value, 1), else_=0)),
+            func.sum(case((TaskOperation.status == OperationStatus.RUNNING.value, 1), else_=0)),
+            func.sum(case((TaskOperation.status == OperationStatus.WAITING.value, 1), else_=0)),
         ).where(TaskOperation.kind == "media.download")
     ).one()
-    run_count, run_updated = session.execute(
+    (
+        run_count,
+        run_started,
+        run_finished,
+        running_runs,
+        queued_runs,
+    ) = session.execute(
         select(
             func.count(TaskRun.id),
-            func.max(TaskRun.updated_at),
+            func.max(TaskRun.started_at),
+            func.max(TaskRun.finished_at),
+            func.sum(case((TaskRun.status == TaskStatus.RUNNING, 1), else_=0)),
+            func.sum(case((TaskRun.status == TaskStatus.QUEUED, 1), else_=0)),
         ).where(TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD)
     ).one()
+    timestamps = (
+        download_updated,
+        operation_started,
+        operation_finished,
+        operation_prioritized,
+        run_started,
+        run_finished,
+    )
     return "|".join([
         str(download_count or 0),
-        download_updated.isoformat() if download_updated is not None else "",
         str(operation_count or 0),
-        operation_updated.isoformat() if operation_updated is not None else "",
+        str(queued_operations or 0),
+        str(running_operations or 0),
+        str(waiting_operations or 0),
         str(run_count or 0),
-        run_updated.isoformat() if run_updated is not None else "",
+        str(running_runs or 0),
+        str(queued_runs or 0),
+        *(value.isoformat() if value is not None else "" for value in timestamps),
     ])

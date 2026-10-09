@@ -570,6 +570,95 @@ def test_download_cursor_restarts_when_workflow_revision_changes():
         engine.dispose()
 
 
+def test_download_cursor_ignores_progress_only_updates():
+    from sqlalchemy import select
+
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.operations import link_run_to_operations, refresh_operation
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        active_download = _make_download(session, slug="cursor-progress-active")
+        newer = _make_download(session, slug="cursor-progress-newer")
+        older = _make_download(session, slug="cursor-progress-older")
+        operation = create_media_download_operation(session, active_download)
+        definition_id = session.scalar(
+            select(TaskDefinition.id).where(TaskDefinition.key == "download_episode")
+        )
+        assert definition_id is not None
+
+        run = TaskRun(
+            schedule_id=None,
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=active_download.id,
+            status=TaskStatus.RUNNING,
+            progress=10,
+            message="Downloading",
+            meta={"_progress_meta": {"download": {
+                "phase": "transferring",
+                "main_activity": "media",
+                "primary_transfer_complete": False,
+            }}},
+            result=None,
+            attempt_count=1,
+            max_retries=2,
+            last_error=None,
+            next_retry_at=None,
+            started_at=datetime.now(timezone.utc),
+            finished_at=None,
+            runtime_ms=None,
+        )
+        session.add(run)
+        session.flush()
+        link_run_to_operations(
+            session,
+            run=run,
+            task_key="download_episode",
+            operation_ids=(operation.id,),
+            operation_slot=operation.targets[0].slot_key,
+        )
+        refresh_operation(session, operation.id)
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, order="workflow", cursor=cursor, limit=2,
+            )
+
+        first_page = page()
+        assert first_page.next_cursor is not None
+        assert [item.id for item in first_page.items] == [active_download.id, older.id]
+
+        # Both timestamps advance on normal progress reports without changing
+        # the status, queue order, or start time of this execution.
+        updated = datetime.now(timezone.utc) + timedelta(days=1)
+        run.progress = 55
+        run.updated_at = updated
+        operation.progress = 55
+        operation.updated_at = updated
+        session.commit()
+
+        next_page = page(first_page.next_cursor)
+        assert next_page.revision == first_page.revision
+        assert [item.id for item in next_page.items] == [newer.id]
+        assert next_page.next_cursor is None
+
+        # A real queue-order change must still invalidate the old cursor.
+        queued_operation = create_media_download_operation(session, newer)
+        queued_operation.prioritized_at = updated
+        session.commit()
+        changed = page(first_page.next_cursor)
+        assert changed.revision != first_page.revision
+        assert [item.id for item in changed.items] == [active_download.id, newer.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_workflow_downloaded_order_uses_latest_download_time_across_pages():
     from backend.api.endpoints.media_downloads.service import get_media_downloads_page
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
