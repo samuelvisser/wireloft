@@ -158,6 +158,7 @@ type LazyCollectionOptions<
     initialCount: number
     batchSize: number
     enabled?: boolean
+    staleTime?: number
     pollIntervalMs?: number
     pollWhilePageCountAtMost?: number
     /**
@@ -243,6 +244,7 @@ export function useLazyCollection<
     initialCount,
     batchSize,
     enabled = true,
+    staleTime,
     pollIntervalMs,
     pollWhilePageCountAtMost,
     derivePlaceholderData,
@@ -289,6 +291,7 @@ export function useLazyCollection<
     >({
         queryKey: fullQueryKey,
         enabled,
+        staleTime,
         initialPageParam: {cursor: null, limit: initialCount},
         placeholderData: () => (
             deriveSameLazyCollectionPlaceholder<T, TPage>(

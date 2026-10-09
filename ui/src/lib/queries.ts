@@ -969,6 +969,9 @@ export function useMediaDownloadsCollection({
         initialCount,
         batchSize,
         enabled,
+        // Refetch cached filter variants when selected while keeping their rows visible.
+        // This leaves TanStack Query's normal sequential infinite-page refresh intact.
+        staleTime: 0,
         derivePlaceholderData: (queryClient) => deriveMediaDownloadCollectionPlaceholder(
             queryClient,
             {
