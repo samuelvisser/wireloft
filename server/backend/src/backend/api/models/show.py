@@ -9,6 +9,7 @@ from backend.api.models.base import RequestBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
+from backend.types.download_profile_types import EpIdType
 from backend.utils.helpers import generate_uuid
 
 
@@ -53,6 +54,14 @@ class ShowFileRenameAPIRequest(RequestBase):
     """Select one Local Media Profile, or every profile with existing episode media."""
 
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+
+
+class ShowDownloadAllAPIRequest(RequestBase):
+    """Queue indexed episodes for one Local Media Profile and a show-specific filter."""
+
+    local_media_profile_id: int = Field(gt=0)
+    season_ids: list[int] = Field(default_factory=list)
+    episode_types: list[EpIdType] = Field(default_factory=list)
 
 
 class _ShowDownloadMaintenanceAPIRequest(RequestBase):

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { useDownloadProfilesView, useEpisodePages, useShow, useShowDownloads, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
+import { useDownloadProfilesView, useEpisodePages, useLocalMediaProfiles, useShow, useShowDownloads, useShowSeasons, useStreamProfilesView } from '../../lib/queries'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'react-hot-toast'
 import EpisodeCard, {groupDownloadsByEpisodeSlug} from '../../components/Episode/EpisodeCard'
@@ -17,6 +17,7 @@ import {PreferredFormatReg} from '../../types/local_media_profile'
 import {getEpisodePreviewTotal, loadEpisodePreviewFromStorage, removeEpisodePreviewFromStorage, removeSeasonsFromStorage} from '../../lib/cache'
 import {episodeQueryKeys} from '../../lib/showQueryOptions'
 import SimpleSelect from '../../components/common/SimpleSelect'
+import ShowDownloadAllDialog from './ShowDownloadAllDialog'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './ShowPage.css'
 import {faIcon} from '../../icons/faIcon'
@@ -48,6 +49,7 @@ export default function ShowPage() {
   const [fileRenameConfirm, setFileRenameConfirm] = useState(false)
   const [deleteDownloadsConfirm, setDeleteDownloadsConfirm] = useState(false)
   const [redownloadConfirm, setRedownloadConfirm] = useState(false)
+  const [downloadAllConfirm, setDownloadAllConfirm] = useState(false)
   const [syncLogOpen, setSyncLogOpen] = useState(false)
   const [copiedStreamProfileId, setCopiedStreamProfileId] = useState<number | null>(null)
   const [selectedSeasonId, setSelectedSeasonId] = useState<number | null>(null)
@@ -57,7 +59,7 @@ export default function ShowPage() {
     data: seasonsData,
     isLoading: seasonsLoading,
     isPlaceholderData: seasonsPlaceholder,
-  } = useShowSeasons(isSeasonal ? id : undefined)
+  } = useShowSeasons(isSeasonal || show?.type === 'series' ? id : undefined)
   const seasons = useMemo(
     () => [...(seasonsData ?? [])].sort((a, b) => b.index - a.index),
     [seasonsData],
@@ -131,6 +133,7 @@ export default function ShowPage() {
     error: downloadsError,
   } = useShowDownloads(id)
   const { data: downloadProfiles } = useDownloadProfilesView()
+  const { data: localMediaProfiles } = useLocalMediaProfiles()
   const { data: streamProfiles } = useStreamProfilesView()
   const downloadsBySlug = useMemo(() => groupDownloadsByEpisodeSlug(downloads), [downloads])
 
@@ -140,12 +143,14 @@ export default function ShowPage() {
   const fileRenameOperation = useActiveOperation('show.rename_files', 'show', operationResourceId)
   const deleteDownloadsOperation = useActiveOperation('show.delete_downloads', 'show', operationResourceId)
   const redownloadOperation = useActiveOperation('show.redownload_episodes', 'show', operationResourceId)
+  const downloadAllOperation = useActiveOperation('show.download_all', 'show', operationResourceId)
   const manualSyncing = syncOperation !== undefined
   const syncBusy = syncStarting || manualSyncing
   const metadataRefreshBusy = metadataRefreshOperation !== undefined
   const fileRenameBusy = fileRenameOperation !== undefined
   const deleteDownloadsBusy = deleteDownloadsOperation !== undefined
   const redownloadBusy = redownloadOperation !== undefined
+  const downloadAllBusy = downloadAllOperation !== undefined
 
   const attachedDownloadProfiles = useMemo(
     () => (downloadProfiles ?? []).filter((profile) => profile.showSlug === id),
@@ -428,6 +433,15 @@ export default function ShowPage() {
                   onSelect: () => setSyncLogOpen(true),
                 },
                 {
+                  label: 'Download All',
+                  icon: faIcon('fas', 'download'),
+                  disabled: downloadAllBusy,
+                  disabledReason: downloadAllBusy ? `A bulk download is running for ${show.title}.` : undefined,
+                  operation: downloadAllOperation,
+                  controls: operationControls(downloadAllOperation?.id, 'bulk download'),
+                  onSelect: () => setDownloadAllConfirm(true),
+                },
+                {
                   label: 'Refresh all metadata',
                   icon: faIcon('fas', 'clipboard-list'),
                   disabled: metadataRefreshBusy,
@@ -607,6 +621,17 @@ export default function ShowPage() {
         onClose={() => setSyncLogOpen(false)}
         onSyncNow={syncNow}
       />
+
+      {downloadAllConfirm && (
+        <ShowDownloadAllDialog
+          showSlug={id}
+          showTitle={show.title}
+          showType={show.type === 'series' ? 'series' : 'podcast'}
+          seasons={seasons}
+          localMediaProfiles={localMediaProfiles ?? []}
+          onDismiss={() => setDownloadAllConfirm(false)}
+        />
+      )}
 
       <ActionConfirmDialogue
         open={metadataRefreshConfirm}

@@ -571,6 +571,40 @@ def _reconcile_existing_artifact(s: Session, download: MediaDownloadBase) -> Non
         resolve_media_download_file(s, download)
 
 
+def create_new_episode_download(
+    s: Session,
+    episode: Episode,
+    profile: LocalMediaProfileBase,
+    *,
+    redownload_when_final: bool = False,
+    redownload_when_delay_passed: bool = False,
+) -> EpisodeMediaDownload:
+    """Persist an episode download for an already-selected episode and profile."""
+    download = EpisodeMediaDownload(
+        type=MediaType.EPISODE.value,
+        media_item_id=episode.id,
+        local_media_profile_id=profile.id,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
+        file_path="",
+        redownload_when_final=redownload_when_final,
+        redownload_when_delay_passed=redownload_when_delay_passed,
+    )
+    s.add(download)
+    s.flush()
+    download.file_path = _resolve_episode_download_path(s, profile, episode, download)
+    s.flush()
+    record_media_download_history(
+        s,
+        download.id,
+        MediaDownloadHistoryAction.CREATED,
+        metadata={
+            "file_path": download.file_path,
+            "local_media_profile_id": profile.id,
+        },
+    )
+    return download
+
+
 def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownloadAPICreate) -> EpisodeMediaDownload:
     episode: Optional[Episode] = s.query(Episode).filter(Episode.slug == episode_slug).one_or_none()
     if episode is None:
@@ -611,30 +645,13 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         s.flush()
         return existing
 
-    download = EpisodeMediaDownload(
-        type=MediaType.EPISODE.value,
-        media_item_id=episode.id,
-        local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
-        file_path="",
+    return create_new_episode_download(
+        s,
+        episode,
+        profile,
         redownload_when_final=redownload_when_final,
         redownload_when_delay_passed=redownload_when_delay_passed,
     )
-    s.add(download)
-    s.flush()
-    download.file_path = _resolve_episode_download_path(s, profile, episode, download)
-    s.flush()
-    record_media_download_history(
-        s,
-        download.id,
-        MediaDownloadHistoryAction.CREATED,
-        metadata={
-            "file_path": download.file_path,
-            "local_media_profile_id": profile.id,
-        },
-    )
-    return download
-
 
 def create_movie_download(
     s: Session,

@@ -36,6 +36,22 @@ class ShowSyncOperation(_ShowOperation):
     task = _FETCH_EPISODES_TASK_KEY
 
 
+class ShowDownloadAllOperation(_ShowOperation):
+    kind = "show.download_all"
+
+    def __init__(self, show: Show, *, local_media_profile_id: int, download_count: int) -> None:
+        super().__init__(show)
+        self.local_media_profile_id = local_media_profile_id
+        self.download_count = download_count
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "local_media_profile_id": self.local_media_profile_id,
+            "downloads_requested": self.download_count,
+        }
+
+
 class ShowMetadataRefreshOperation(_ShowOperation):
     kind = "show.refresh_metadata"
 

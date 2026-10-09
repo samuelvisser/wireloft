@@ -438,6 +438,8 @@ def attach_redownload_dependencies(
         session: Session,
         parent_operation: TaskOperation,
         downloads: list[MediaDownloadBase] | tuple[MediaDownloadBase, ...],
+        *,
+        source: str = OperationSource.SYSTEM.value,
 ) -> tuple[TaskOperation, ...]:
     """Attach one independently visible media.download operation per artifact.
 
@@ -484,14 +486,14 @@ def attach_redownload_dependencies(
                 download.id,
                 MediaDownloadHistoryAction.RETRY_REQUESTED,
                 metadata={
-                    "source": OperationSource.SYSTEM.value,
+                    "source": source,
                     "parent_operation_id": parent_operation.id,
                 },
             )
             child = create_media_download_operation(
                 session,
                 download,
-                source=OperationSource.SYSTEM.value,
+                source=source,
                 is_redownload=is_redownload,
                 prepare_existing_artifact=True,
             )

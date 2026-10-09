@@ -10,12 +10,14 @@ from .service import (
     delete_show,
     request_show_sync,
     request_show_metadata_refresh,
+    request_show_download_all,
     request_show_file_rename,
     request_show_download_delete,
     request_show_episode_redownload,
 )
 from ...models.operations import (
     ShowDeleteDownloadsOperationAccepted,
+    ShowDownloadAllOperationAccepted,
     ShowFileRenameOperationAccepted,
     ShowMetadataOperationAccepted,
     ShowRedownloadOperationAccepted,
@@ -26,6 +28,7 @@ from ...models.show import (
     ShowAPICreate,
     ShowAPIUpdate,
     ShowDeleteDownloadsAPIRequest,
+    ShowDownloadAllAPIRequest,
     ShowFileRenameAPIRequest,
     ShowRedownloadEpisodesAPIRequest,
 )
@@ -93,6 +96,23 @@ def show_metadata_refresh(show_slug: str):
     with db_session() as s:
         try:
             result = request_show_metadata_refresh(s, show_slug)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
+    "/{show_slug}/download-all",
+    response_model=ShowDownloadAllOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def show_download_all(show_slug: str, body: ShowDownloadAllAPIRequest):
+    """Queue all eligible indexed episodes for one Local Media Profile."""
+    with db_session() as s:
+        try:
+            result = request_show_download_all(s, show_slug, body)
             s.commit()
             return result
         except Exception:

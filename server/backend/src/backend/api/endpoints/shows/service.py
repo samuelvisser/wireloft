@@ -3,13 +3,20 @@ from __future__ import annotations
 from typing import Optional
 
 from sqlalchemy import exists, select
+from sqlalchemy import or_, select
+
 from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.show import *
 from fastapi import HTTPException
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, Season, Show, ShowLocalMediaProfile
+from backend.db.models.media_download import EpisodeMediaDownload
+from backend.types.episode_types import EpisodePublishStatus
+from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
+from backend.types.show_types import ShowType
+from backend.api.endpoints.media_downloads.service import create_new_episode_download
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
@@ -24,10 +31,12 @@ from task_manager.tasks.helpers.download_profiles import (
     disable_download_profiles_for_episode_scope,
 )
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
+from task_manager.scheduler.types import OperationSource
 
 from .events import ShowAdded
 from .operations import (
     ShowDeleteDownloadsOperation,
+    ShowDownloadAllOperation,
     ShowFileRenameOperation,
     ShowIndexOperation,
     ShowMetadataRefreshOperation,
@@ -290,6 +299,94 @@ def request_show_metadata_refresh(
     return {
         "queued": bool(episodes),
         "episodes_queued": len(episodes),
+        "operation_id": operation.id,
+    }
+
+
+def request_show_download_all(
+        s: Session,
+        show_slug: str,
+        body: ShowDownloadAllAPIRequest,
+) -> dict[str, bool | int | str]:
+    """Download indexed, published episodes for one profile without replacing available files."""
+    show = s.scalar(select(Show).where(Show.slug == show_slug))
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    profile = s.get(ShowLocalMediaProfile, body.local_media_profile_id)
+    if profile is None:
+        raise HTTPException(status_code=422, detail="Select a Show Local Media Profile")
+    if profile.show_scope not in (ShowLocalMediaProfileScope.BOTH, show.type):
+        raise HTTPException(status_code=422, detail="Local Media Profile is not available for this show type")
+
+    statement = select(Episode).where(
+        Episode.show_id == show.id,
+        Episode.publish_status.in_((
+            EpisodePublishStatus.PUBLISHED_FINAL,
+            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+        )),
+    )
+    if show.type == ShowType.SERIES.value:
+        if body.episode_types or not body.season_ids:
+            raise HTTPException(status_code=422, detail="Select at least one season")
+        selected_ids = set(body.season_ids)
+        valid_ids = set(s.scalars(
+            select(Season.id).where(Season.show_id == show.id, Season.id.in_(selected_ids))
+        ))
+        if selected_ids != valid_ids:
+            raise HTTPException(status_code=422, detail="A selected season does not belong to this show")
+        statement = statement.where(Episode.season_id.in_(selected_ids))
+    else:
+        if body.season_ids or not body.episode_types:
+            raise HTTPException(status_code=422, detail="Select at least one episode type")
+        statement = statement.where(or_(*(
+            Episode.episode_identifier.like(f"{episode_type}.%")
+            for episode_type in set(body.episode_types)
+        )))
+
+    episodes = list(s.scalars(statement.order_by(Episode.id)))
+    existing_by_episode = {
+        download.media_item_id: download
+        for download in s.scalars(
+            select(EpisodeMediaDownload).where(
+                EpisodeMediaDownload.local_media_profile_id == profile.id,
+                EpisodeMediaDownload.media_item_id.in_([episode.id for episode in episodes]),
+            )
+        )
+    }
+    downloads: list[EpisodeMediaDownload] = []
+    for episode in episodes:
+        download = existing_by_episode.get(episode.id)
+        if download is not None and download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
+            continue
+        if download is None:
+            download = create_new_episode_download(s, episode, profile)
+        downloads.append(download)
+
+    operation = create_operation(
+        s,
+        ShowDownloadAllOperation(
+            show,
+            local_media_profile_id=profile.id,
+            download_count=len(downloads),
+        ),
+    )
+    if downloads:
+        attach_redownload_dependencies(
+            s, operation, tuple(downloads), source=OperationSource.UI.value,
+        )
+    else:
+        complete_operation(
+            s,
+            operation.id,
+            summary=f"No new episodes to download for {show.title}",
+            data={"downloads_completed": 0},
+        )
+
+    s.flush()
+    return {
+        "queued": bool(downloads),
+        "episodes_queued": len(downloads),
         "operation_id": operation.id,
     }
 
