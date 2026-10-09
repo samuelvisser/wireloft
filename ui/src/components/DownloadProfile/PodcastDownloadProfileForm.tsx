@@ -1,8 +1,11 @@
+import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
+import {faIcon} from '../../icons/faIcon'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import SimpleSelect from '../common/SimpleSelect'
+import './PodcastDownloadProfileForm.css'
 
 type Props = {
     form: UseFormReturn<any>
@@ -151,18 +154,34 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                         control={control}
                         name="downloadStartingFrom"
                         render={({field}) => (
-                            <input
-                                id="download-starting-from"
-                                className="input"
-                                type="date"
-                                name={field.name}
-                                value={field.value ?? ''}
-                                onChange={(event) => field.onChange(event.target.value || null)}
-                                onBlur={field.onBlur}
-                                ref={field.ref}
-                                aria-invalid={!!errors.downloadStartingFrom}
-                                aria-describedby={errors.downloadStartingFrom ? 'download-starting-from-errors' : 'download-starting-from-help'}
-                            />
+                            <div
+                                className="input podcast-download-start-date"
+                                data-invalid={errors.downloadStartingFrom ? 'true' : undefined}
+                            >
+                                <input
+                                    id="download-starting-from"
+                                    className="podcast-download-start-date__input"
+                                    type="date"
+                                    name={field.name}
+                                    value={field.value ?? ''}
+                                    onChange={(event) => field.onChange(event.target.value || null)}
+                                    onBlur={field.onBlur}
+                                    ref={field.ref}
+                                    aria-invalid={!!errors.downloadStartingFrom}
+                                    aria-describedby={errors.downloadStartingFrom ? 'download-starting-from-errors' : 'download-starting-from-help'}
+                                />
+                                {field.value && (
+                                    <button
+                                        type="button"
+                                        className="podcast-download-start-date__clear"
+                                        onClick={() => field.onChange(null)}
+                                        aria-label="Clear download starting from date"
+                                        title="Clear date"
+                                    >
+                                        <FontAwesomeIcon icon={faIcon('fas', 'xmark')}/>
+                                    </button>
+                                )}
+                            </div>
                         )}
                     />
                     {errors.downloadStartingFrom && (
