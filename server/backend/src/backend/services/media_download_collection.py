@@ -422,7 +422,7 @@ def _workflow_terminal_at(status_source):
             ),
         ),
         (
-            status_source.c.status.not_in_(
+            status_source.c.status.not_in(
                 (*_ACTIVE_WORKFLOW_STATUSES, "pending")
             ),
             func.coalesce(
