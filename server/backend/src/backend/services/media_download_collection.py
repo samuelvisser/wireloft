@@ -352,10 +352,10 @@ def _workflow_bucket(status_source):
 
 
 def _workflow_downloaded_at(status_source):
-    """Order completed downloads by the last successful transfer, not row ID.
+    """Order completed downloads by the last successful transfer.
 
-    The constant keeps the existing ID order for other workflow statuses
-    within the final bucket and gives keyset pagination a non-null key.
+    Sorts by date only for completed downloads. Others get a fake constat date
+    for ordering to make those fallback to the next order priority
     """
     return case(
         (
