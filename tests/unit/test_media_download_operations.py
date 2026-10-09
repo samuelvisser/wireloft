@@ -157,7 +157,7 @@ def test_episode_api_delay_readiness_and_manual_redownload_intent_use_safe_delay
     session, engine = _session()
     try:
         settings = get_settings().download_settings
-        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
         monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
         download = _make_download(session, slug="manual-safe-delay")
@@ -240,7 +240,7 @@ def test_manual_schedule_uses_same_system_publication_wait_as_download_profile(m
     session, engine = _session()
     try:
         settings = get_settings().download_settings
-        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
         monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
         download = _make_download(session, slug="manual-scheduled-delay")
@@ -304,7 +304,7 @@ def test_manual_retry_schedule_creates_delayed_system_operation(monkeypatch):
     setup_session, engine = _session()
     try:
         settings = get_settings().download_settings
-        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
         monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
         download = _make_download(setup_session, slug="manual-retry-scheduled-delay")
@@ -367,7 +367,7 @@ def test_manual_unsafe_download_followup_waits_until_delay_passes(monkeypatch):
     session, engine = _session()
     try:
         settings = get_settings().download_settings
-        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
         monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
         download = _make_download(session, slug="manual-safe-delay-followup")
@@ -406,7 +406,7 @@ def test_manual_unsafe_download_finishing_after_delay_queues_replacement_immedia
     session, engine = _session()
     try:
         settings = get_settings().download_settings
-        monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+        monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
         monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
         download = _make_download(session, slug="manual-safe-delay-already-passed")

@@ -347,14 +347,14 @@ export default function DownloadsSettingsTab({
                 description="Limits and retry behaviour for downloads started by WireLoft."
             >
                 <DurationField
-                    id="settings-automatic-episode-download-delay"
+                    id="settings-episode-download-delay"
                     label="Episode download delay"
-                    value={draft.downloadSettings.automaticEpisodeDownloadDelayMinutes}
+                    value={draft.downloadSettings.episodeDownloadDelayMinutes}
                     backendUnit="minutes"
-                    error={errorFor('downloadSettings.automaticEpisodeDownloadDelayMinutes')}
-                    environmentVariable={environmentVariableFor('downloadSettings.automaticEpisodeDownloadDelayMinutes')}
+                    error={errorFor('downloadSettings.episodeDownloadDelayMinutes')}
+                    environmentVariable={environmentVariableFor('downloadSettings.episodeDownloadDelayMinutes')}
                     onChange={(value) => updateDraft((next) => {
-                        next.downloadSettings.automaticEpisodeDownloadDelayMinutes = value
+                        next.downloadSettings.episodeDownloadDelayMinutes = value
                     })}
                     help={
                         <ReadMore summary={<span>Delay before downloading published episodes.</span>}>
@@ -364,14 +364,14 @@ export default function DownloadsSettingsTab({
                                 it as fully ready.
                             </p>
                             <p>
-                                This delay is therefore applied to download profiles trying to download an episode that just published.
-                                If you want to disable this delay completely, just set its value to 0.
+                                This delay applies to automatic downloads. For manual downloads, you can choose to wait until the delay expires or download immediately.
+                                Set the delay to 0 to disable it.
                             </p>
                         </ReadMore>
                     }
                 />
                 <EnsureSafeDelayToggle
-                    delayMinutes={draft.downloadSettings.automaticEpisodeDownloadDelayMinutes}
+                    delayMinutes={draft.downloadSettings.episodeDownloadDelayMinutes}
                     checked={draft.downloadSettings.ensureSafeDelay}
                     environmentVariable={environmentVariableFor('downloadSettings.ensureSafeDelay')}
                     onChange={(checked) => updateDraft((next) => {

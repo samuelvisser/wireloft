@@ -18,6 +18,62 @@ def _migration(revision: str, down_revision: str | None):
     )
 
 
+def test_episode_delay_config_migration_preserves_yaml_comments():
+    from backend.db.background_migrations.versions.b7d2f49c0a13_episode_download_delay_setting import (
+        _renamed_delay_setting,
+    )
+
+    source = (
+        "downloadSettings:\n"
+        "  automaticEpisodeDownloadDelayMinutes: 22  # keep this\n"
+        "  ensureSafeDelay: true\n"
+    )
+    updated = _renamed_delay_setting(source)
+
+    assert updated == (
+        "downloadSettings:\n"
+        "  episodeDownloadDelayMinutes: 22  # keep this\n"
+        "  ensureSafeDelay: true\n"
+    )
+    assert _renamed_delay_setting(updated) == updated
+
+
+def test_episode_delay_config_migration_prefers_canonical_value():
+    from backend.db.background_migrations.versions.b7d2f49c0a13_episode_download_delay_setting import (
+        _renamed_delay_setting,
+    )
+
+    source = (
+        "downloadSettings:\n"
+        "  episodeDownloadDelayMinutes: 30\n"
+        "  automaticEpisodeDownloadDelayMinutes: 12\n"
+    )
+
+    assert _renamed_delay_setting(source) == (
+        "downloadSettings:\n"
+        "  episodeDownloadDelayMinutes: 30\n"
+    )
+
+
+def test_episode_delay_config_migration_reloads_settings(tmp_path, monkeypatch):
+    from backend.db.background_migrations.versions import b7d2f49c0a13_episode_download_delay_setting as migration
+
+    path = tmp_path / "config.yml"
+    path.write_text("downloadSettings:\n  automaticEpisodeDownloadDelayMinutes: 41\n", encoding="utf-8")
+    monkeypatch.setattr(migration, "get_config_path", lambda: path)
+    reload_calls = []
+    monkeypatch.setattr(migration, "reload_settings", lambda: reload_calls.append(True))
+
+    class Context:
+        def raise_if_cancelled(self):
+            pass
+
+    asyncio.run(migration.migrate(Context()))
+
+    assert "episodeDownloadDelayMinutes: 41" in path.read_text(encoding="utf-8")
+    assert reload_calls == [True]
+
+
 def test_background_migration_chain_is_ordered_by_down_revision():
     from backend.db.background_migrations.registry import _validate_migration_chain
 
