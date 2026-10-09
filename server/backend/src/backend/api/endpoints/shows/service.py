@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import exists, select
-from sqlalchemy import or_, select
+from sqlalchemy import exists, func, or_, select
 
 from sqlalchemy.orm import Session
 
@@ -17,7 +18,7 @@ from backend.types.episode_types import EpisodePublishStatus
 from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
 from backend.types.show_types import ShowType
 from backend.api.endpoints.media_downloads.service import create_new_episode_download
-from backend.db.models.media_download import EpisodeMediaDownload
+from config import get_settings
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.episode_download_scope import EpisodeDownloadScope
@@ -319,32 +320,55 @@ def request_show_download_all(
     if profile.show_scope not in (ShowLocalMediaProfileScope.BOTH, show.type):
         raise HTTPException(status_code=422, detail="Local Media Profile is not available for this show type")
 
+    if not body.episode_types:
+        raise HTTPException(status_code=422, detail="Select at least one episode type")
+    published_at = func.coalesce(Episode.published_date, Episode.went_live_date)
     statement = select(Episode).where(
         Episode.show_id == show.id,
         Episode.publish_status.in_((
             EpisodePublishStatus.PUBLISHED_FINAL,
             EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
         )),
+        or_(*(
+            Episode.episode_identifier.like(f"{episode_type}.%")
+            for episode_type in set(body.episode_types)
+        )),
     )
     if show.type == ShowType.SERIES.value:
-        if body.episode_types or not body.season_ids:
+        if not body.season_ids:
             raise HTTPException(status_code=422, detail="Select at least one season")
+        if body.download_days_in_past or body.download_episode_count or body.download_starting_from:
+            raise HTTPException(status_code=422, detail="Podcast limits cannot be used for series")
         selected_ids = set(body.season_ids)
         valid_ids = set(s.scalars(
             select(Season.id).where(Season.show_id == show.id, Season.id.in_(selected_ids))
         ))
         if selected_ids != valid_ids:
             raise HTTPException(status_code=422, detail="A selected season does not belong to this show")
-        statement = statement.where(Episode.season_id.in_(selected_ids))
+        statement = (
+            statement.where(Episode.season_id.in_(selected_ids))
+            .order_by(Episode.season_id.asc(), Episode.index.asc(), Episode.id.asc())
+        )
     else:
-        if body.season_ids or not body.episode_types:
-            raise HTTPException(status_code=422, detail="Select at least one episode type")
-        statement = statement.where(or_(*(
-            Episode.episode_identifier.like(f"{episode_type}.%")
-            for episode_type in set(body.episode_types)
-        )))
+        if body.season_ids:
+            raise HTTPException(status_code=422, detail="Podcast downloads cannot filter by season")
+        if body.download_days_in_past:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=body.download_days_in_past)
+            statement = statement.where(or_(published_at.is_(None), published_at >= cutoff))
+        elif body.download_starting_from is not None:
+            local_start = datetime.combine(
+                body.download_starting_from, time.min,
+                tzinfo=ZoneInfo(get_settings().timezone),
+            )
+            statement = statement.where(
+                published_at.is_not(None),
+                published_at >= local_start.astimezone(timezone.utc),
+            )
+        statement = statement.order_by(published_at.desc(), Episode.id.desc())
+        if body.download_episode_count:
+            statement = statement.limit(body.download_episode_count)
 
-    episodes = list(s.scalars(statement.order_by(Episode.id)))
+    episodes = list(s.scalars(statement))
     existing_by_episode = {
         download.media_item_id: download
         for download in s.scalars(
@@ -373,7 +397,9 @@ def request_show_download_all(
     )
     if downloads:
         attach_redownload_dependencies(
-            s, operation, tuple(downloads), source=OperationSource.UI.value,
+            s, operation, tuple(downloads),
+            source=OperationSource.SYSTEM.value,
+            respect_episode_publication=True,
         )
     else:
         complete_operation(

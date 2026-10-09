@@ -46,6 +46,10 @@ async def run_download_profile_worker(
     s.rollback()
 
     if not profile_ids:
+        # A final-publication event must also release manual bulk downloads
+        # waiting for a countdown, even when this show has no Download Profiles.
+        dispatch_queued_media_download_operations(s)
+        s.commit()
         update_progress(progress, 100, "No enabled download profile in scope")
         print("download_profile_worker completed: nothing to do")
         return

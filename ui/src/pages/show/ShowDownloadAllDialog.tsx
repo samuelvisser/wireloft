@@ -16,10 +16,20 @@ import type {SeasonRead} from '../../types/schemas/season'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import './ShowDownloadAllDialog.css'
 
+const LimitByReg = createSelectRegistry('DownloadAllLimitBy', {
+  none: {label: 'No limits'},
+  date: {label: 'Date'},
+  episodes: {label: 'Number of episodes'},
+})
+
 const downloadAllFormSchema = z.object({
   localMediaProfileId: z.number().int().positive(),
   seasonIds: z.array(z.number().int().positive()),
   episodeTypes: z.array(z.string()),
+  limitBy: z.enum(['none', 'date', 'episodes']),
+  downloadDaysInPast: z.number().int().positive(),
+  downloadEpisodeCount: z.number().int().positive(),
+  downloadStartingFrom: z.iso.date().nullable(),
 })
 
 type DownloadAllForm = z.infer<typeof downloadAllFormSchema>
@@ -76,23 +86,43 @@ export default function ShowDownloadAllDialog({
           message: 'Select at least one season.',
         })
       }
-      if (showType === 'podcast' && data.episodeTypes.length === 0) {
+      if (data.episodeTypes.length === 0) {
         context.addIssue({
           code: 'custom',
           path: ['episodeTypes'],
           message: 'Select at least one episode type.',
         })
       }
+      if (showType === 'podcast' && data.limitBy === 'date' && data.downloadDaysInPast < 1) {
+        context.addIssue({
+          code: 'custom',
+          path: ['downloadDaysInPast'],
+          message: 'Enter a positive number of days.',
+        })
+      }
+      if (showType === 'podcast' && data.limitBy === 'episodes' && data.downloadEpisodeCount < 1) {
+        context.addIssue({
+          code: 'custom',
+          path: ['downloadEpisodeCount'],
+          message: 'Enter a positive number of episodes.',
+        })
+      }
     }),
     [showType],
   )
-  const {control, handleSubmit, setValue, formState: {errors, dirtyFields}} = useForm<DownloadAllForm>({
+  const {control, handleSubmit, setValue, watch, formState: {errors, dirtyFields}} = useForm<DownloadAllForm>({
     resolver: zodResolver(schema),
     defaultValues: {
       seasonIds: [],
       episodeTypes: [...EpisodeTypeReg.values],
+      limitBy: 'none',
+      downloadDaysInPast: 180,
+      downloadEpisodeCount: 5,
+      downloadStartingFrom: null,
     },
   })
+
+  const limitBy = watch('limitBy')
 
   // Each selector initializes as its data arrives, without overwriting edits to another field.
   useEffect(() => {
@@ -122,7 +152,10 @@ export default function ShowDownloadAllDialog({
         body: JSON.stringify({
           localMediaProfileId: values.localMediaProfileId,
           seasonIds: showType === 'series' ? values.seasonIds : [],
-          episodeTypes: showType === 'podcast' ? values.episodeTypes : [],
+          episodeTypes: values.episodeTypes,
+          downloadDaysInPast: showType === 'podcast' && values.limitBy === 'date' ? values.downloadDaysInPast : 0,
+          downloadEpisodeCount: showType === 'podcast' && values.limitBy === 'episodes' ? values.downloadEpisodeCount : 0,
+          downloadStartingFrom: showType === 'podcast' && values.limitBy === 'none' ? values.downloadStartingFrom : null,
         }),
       })
       onDismiss()
@@ -153,6 +186,7 @@ export default function ShowDownloadAllDialog({
       }}
     >
       <p>Download the selected episodes from "{showTitle}". Existing downloaded files will not be replaced.</p>
+      <p>Downloads will wait for any countdown and configured post-publication delay before starting.</p>
       {showType === 'series' ? (
         <div className="form-row">
           <div className="show-download-all-label-row">
@@ -190,9 +224,9 @@ export default function ShowDownloadAllDialog({
           />
           {errors.seasonIds && <div className="error" role="alert">{errors.seasonIds.message}</div>}
         </div>
-      ) : (
-        <div className="form-row">
-          <div className="show-download-all-label-row">
+      ) : null}
+      <div className="form-row">
+        <div className="show-download-all-label-row">
             <label htmlFor={`${selectId}-type`}>Episode types to download</label>
             <button
               type="button"
@@ -225,7 +259,104 @@ export default function ShowDownloadAllDialog({
             )}
           />
           {errors.episodeTypes && <div className="error" role="alert">{errors.episodeTypes.message}</div>}
-        </div>
+      </div>
+      {showType === 'podcast' && (
+        <>
+          <div className="form-row">
+            <label htmlFor={`${selectId}-limit`}>Limit by</label>
+            <Controller
+              name="limitBy"
+              control={control}
+              render={({field}) => (
+                <SimpleSelect
+                  inputId={`${selectId}-limit`}
+                  registry={LimitByReg}
+                  value={field.value}
+                  onChange={(value) => {
+                    field.onChange(value)
+                    if (value !== 'date') setValue('downloadDaysInPast', 180)
+                    if (value !== 'episodes') setValue('downloadEpisodeCount', 5)
+                    if (value !== 'none') setValue('downloadStartingFrom', null)
+                  }}
+                  onBlur={field.onBlur}
+                  isDisabled={starting}
+                />
+              )}
+            />
+          </div>
+          {limitBy === 'date' ? (
+                <div className="form-row">
+                  <label htmlFor={`${selectId}-days`}>Download days in past</label>
+                  <Controller
+                    name="downloadDaysInPast"
+                    control={control}
+                    render={({field}) => (
+                      <input
+                        {...field}
+                        id={`${selectId}-days`}
+                        className="input"
+                        type="number"
+                        min={1}
+                        step={1}
+                        disabled={starting}
+                        onChange={(event) => field.onChange(event.currentTarget.valueAsNumber)}
+                        aria-invalid={!!errors.downloadDaysInPast}
+                      />
+                    )}
+                  />
+                  {errors.downloadDaysInPast && (
+                    <div className="error" role="alert">{errors.downloadDaysInPast.message}</div>
+                  )}
+                </div>
+              ) : limitBy === 'episodes' ? (
+                <div className="form-row">
+                  <label htmlFor={`${selectId}-count`}>Latest episodes to download</label>
+                  <Controller
+                    name="downloadEpisodeCount"
+                    control={control}
+                    render={({field}) => (
+                      <input
+                        {...field}
+                        id={`${selectId}-count`}
+                        className="input"
+                        type="number"
+                        min={1}
+                        step={1}
+                        disabled={starting}
+                        onChange={(event) => field.onChange(event.currentTarget.valueAsNumber)}
+                        aria-invalid={!!errors.downloadEpisodeCount}
+                      />
+                    )}
+                  />
+                  {errors.downloadEpisodeCount && (
+                    <div className="error" role="alert">{errors.downloadEpisodeCount.message}</div>
+                  )}
+                </div>
+              ) : (
+                <div className="form-row">
+                  <label htmlFor={`${selectId}-start`}>Download starting from</label>
+                  <Controller
+                    name="downloadStartingFrom"
+                    control={control}
+                    render={({field}) => (
+                      <input
+                        id={`${selectId}-start`}
+                        className="input"
+                        type="date"
+                        value={field.value ?? ''}
+                        name={field.name}
+                        onChange={(event) => field.onChange(event.target.value || null)}
+                        onBlur={field.onBlur}
+                        ref={field.ref}
+                        disabled={starting}
+                        aria-invalid={!!errors.downloadStartingFrom}
+                      />
+                    )}
+                  />
+                  <div className="help">Optional. Leave blank to include all eligible episodes.</div>
+                </div>
+              )}
+        </>
       )}
       <div className="form-row">
         <label htmlFor={`${selectId}-profile`}>Local Media Profile</label>

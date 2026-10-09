@@ -60,6 +60,8 @@ logger = logging.getLogger(__name__)
 MEDIA_DOWNLOAD_OPERATION_KIND = "media.download"
 MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON = "publication_delay"
 MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE = "Waiting for the post-publication download delay"
+MEDIA_DOWNLOAD_COUNTDOWN_WAIT_REASON = "publication_countdown"
+MEDIA_DOWNLOAD_COUNTDOWN_WAIT_MESSAGE = "Waiting for the episode countdown to finish"
 _PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY = "publication_delay_bypassed"
 _DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
 _DELAY_DISPATCH_JOB_PREFIX = "media-download-delay"
@@ -412,6 +414,15 @@ def set_media_download_operation_not_before(
         and operation.context.get(_PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY) is True
     ):
         return operation
+    # A Download Profile may also target this artifact while a manual bulk action
+    # awaits final publication. Do not let a countdown-enabled profile clear that
+    # explicit wait until the episode has actually reached its final version.
+    wait_state = operation_admission_wait_state(operation)
+    if wait_state is not None and wait_state.get("reason") == MEDIA_DOWNLOAD_COUNTDOWN_WAIT_REASON:
+        download = session.get(EpisodeMediaDownload, media_download_id)
+        episode = session.get(Episode, download.media_item_id) if download is not None else None
+        if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL:
+            return operation
     if not operation.targets:
         return operation
 
@@ -434,12 +445,35 @@ def set_media_download_operation_not_before(
     return operation
 
 
+def _set_media_download_countdown_wait(
+        session: Session,
+        operation: TaskOperation,
+) -> None:
+    """Block unstarted automatic downloads until Daily Wire publishes final media."""
+    if (
+        isinstance(operation.context, dict)
+        and operation.context.get(_PUBLICATION_DELAY_BYPASSED_CONTEXT_KEY) is True
+    ):
+        return
+    if not operation.targets:
+        return
+    if not operation_target_needs_dispatch(session, operation.id, operation.targets[0].slot_key):
+        return
+    set_operation_admission_wait(
+        operation,
+        reason=MEDIA_DOWNLOAD_COUNTDOWN_WAIT_REASON,
+        message=MEDIA_DOWNLOAD_COUNTDOWN_WAIT_MESSAGE,
+    )
+    refresh_operation(session, operation.id)
+
+
 def attach_redownload_dependencies(
         session: Session,
         parent_operation: TaskOperation,
         downloads: list[MediaDownloadBase] | tuple[MediaDownloadBase, ...],
         *,
         source: str = OperationSource.SYSTEM.value,
+        respect_episode_publication: bool = False,
 ) -> tuple[TaskOperation, ...]:
     """Attach one independently visible media.download operation per artifact.
 
@@ -468,10 +502,30 @@ def attach_redownload_dependencies(
     children: list[TaskOperation] = []
     dependency_specs: list[OperationDependencySpec] = []
     for download in unique_downloads:
+        episode = session.get(Episode, download.media_item_id) if (
+            respect_episode_publication and isinstance(download, EpisodeMediaDownload)
+        ) else None
+        waiting_for_countdown = (
+            episode is not None
+            and episode.publish_status == EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN
+        )
+        ready_at = (
+            episode_download_delay_ready_at(episode)
+            if episode is not None and not waiting_for_countdown
+            else None
+        )
+
         active = get_active_media_download_operation(session, download.id)
         if active is not None:
             child = active
             cancel_policy = OperationDependencyCancelPolicy.DETACH.value
+            if waiting_for_countdown and child.source == OperationSource.SYSTEM.value:
+                _set_media_download_countdown_wait(session, child)
+            elif (
+                episode is not None
+                and child.source == OperationSource.SYSTEM.value
+            ):
+                set_media_download_operation_not_before(session, download.id, ready_at)
         else:
             is_redownload = (
                 download.downloaded_at is not None
@@ -495,8 +549,11 @@ def attach_redownload_dependencies(
                 download,
                 source=source,
                 is_redownload=is_redownload,
-                prepare_existing_artifact=True,
+                prepare_existing_artifact=(is_redownload if respect_episode_publication else True),
+                not_before=ready_at,
             )
+            if waiting_for_countdown:
+                _set_media_download_countdown_wait(session, child)
             cancel_policy = OperationDependencyCancelPolicy.CANCEL_IF_EXCLUSIVE.value
 
         weight = sizes.get(download.id) or fallback_size
@@ -815,6 +872,19 @@ def queue_episode_redownload_if_ready(
     if episode is None or episode.publish_status != EpisodePublishStatus.PUBLISHED_FINAL.value:
         return False
 
+    if (
+        download.redownload_when_final
+        and download.downloaded_publish_status == EpisodePublishStatus.PUBLISHED_FINAL
+        and download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE
+    ):
+        # This may already be the final version if a bulk request waited through
+        # countdown while an automatic profile had armed a final re-download.
+        # Keep a separate post-publication-delay intent if one was requested.
+        download.redownload_when_final = False
+        if not download.redownload_when_delay_passed:
+            session.flush()
+            return False
+
     active_operation = get_active_media_download_operation(session, download.id)
     if active_operation is not None:
         if (
@@ -1048,10 +1118,47 @@ def _refresh_waiting_media_download_operations(session: Session) -> None:
             )
         )
     )
+    wait_states = {operation.id: operation_admission_wait_state(operation) for operation in waiting}
+    countdown_download_ids = [
+        int(operation.resource_id)
+        for operation in waiting
+        if (
+            operation.resource_id is not None
+            and (state := wait_states[operation.id]) is not None
+            and state["reason"] == MEDIA_DOWNLOAD_COUNTDOWN_WAIT_REASON
+        )
+    ]
+    # Read countdown publication states in one query, rather than doing two ORM
+    # lookups per episode every time the constrained download queue is checked.
+    countdown_episodes = dict(session.execute(
+        select(MediaDownloadBase.id, Episode)
+        .join(Episode, Episode.id == MediaDownloadBase.media_item_id)
+        .where(MediaDownloadBase.id.in_(countdown_download_ids))
+    ).all()) if countdown_download_ids else {}
+
     for operation in waiting:
-        wait_state = operation_admission_wait_state(operation)
+        wait_state = wait_states[operation.id]
         if wait_state is None:
             refresh_operation(session, operation.id)
+            continue
+
+        if wait_state["reason"] == MEDIA_DOWNLOAD_COUNTDOWN_WAIT_REASON:
+            episode = countdown_episodes.get(operation.resource_id)
+            if episode is not None and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL:
+                ready_at = episode_download_delay_ready_at(episode)
+                if ready_at is not None and ready_at > datetime.now(timezone.utc):
+                    set_operation_admission_wait(
+                        operation,
+                        reason=MEDIA_DOWNLOAD_PUBLICATION_DELAY_REASON,
+                        message=MEDIA_DOWNLOAD_PUBLICATION_DELAY_MESSAGE,
+                        until=ready_at,
+                    )
+                else:
+                    clear_operation_admission_wait(operation)
+                refresh_operation(session, operation.id)
+                wait_state = operation_admission_wait_state(operation)
+
+        if wait_state is None:
             continue
 
         until = wait_state.get("until")

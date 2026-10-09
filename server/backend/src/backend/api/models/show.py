@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from typing import Optional, Union
-from datetime import datetime
+from datetime import date, datetime
 
-from pydantic import AliasChoices, AliasPath, computed_field, Field
+from pydantic import AliasChoices, AliasPath, computed_field, Field, model_validator
 
 from backend.api.models.base import RequestBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
@@ -62,6 +62,19 @@ class ShowDownloadAllAPIRequest(RequestBase):
     local_media_profile_id: int = Field(gt=0)
     season_ids: list[int] = Field(default_factory=list)
     episode_types: list[EpIdType] = Field(default_factory=list)
+    download_days_in_past: int = Field(default=0, ge=0)
+    download_episode_count: int = Field(default=0, ge=0)
+    download_starting_from: date | None = None
+
+    @model_validator(mode="after")
+    def validate_podcast_limits(self):
+        if self.download_days_in_past and self.download_episode_count:
+            raise ValueError("Choose either a date limit or an episode-count limit, not both")
+        if self.download_starting_from is not None and (
+            self.download_days_in_past or self.download_episode_count
+        ):
+            raise ValueError("Download starting from can only be used when Limit by is set to No limits")
+        return self
 
 
 class _ShowDownloadMaintenanceAPIRequest(RequestBase):
