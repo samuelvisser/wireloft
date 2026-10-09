@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
-from typing import Optional, Sequence
+from typing import Optional, Sequence, cast
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import false, func, or_, select
 from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 
-from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, Season, SeriesDownloadProfile
+from backend.db.models import DownloadProfileBase, Episode, LocalMediaProfileBase, PodcastDownloadProfile, Season, SeriesDownloadProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_download_history_types import MediaDownloadHistoryAction
@@ -213,6 +213,8 @@ def ensure_episode_download(
         defer_artifact_preparation: bool = False,
 ) -> DownloadAction:
     """Reconcile one desired episode artifact without encoding worker state on it."""
+    local_media_profile = cast(LocalMediaProfileBase, profile.local_media_profile)
+    local_media_profile_id = cast(int, profile.local_media_profile_id)
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)
         .filter(
@@ -232,7 +234,7 @@ def ensure_episode_download(
         download = EpisodeMediaDownload(
             type=MediaType.EPISODE.value,
             media_item_id=episode.id,
-            local_media_profile_id=profile.local_media_profile_id,
+            local_media_profile_id=local_media_profile_id,
             download_profile_id=profile.id,
             artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
             file_path="",
@@ -241,9 +243,9 @@ def ensure_episode_download(
         s.add(download)
         s.flush()
         download.file_path = str(resolve_episode_output_path(
-            profile.local_media_profile.output_template,
+            local_media_profile.output_template,
             episode=episode,
-            local_media_profile=profile.local_media_profile,
+            local_media_profile=local_media_profile,
             media_download=download,
         ))
         s.flush()
@@ -253,7 +255,7 @@ def ensure_episode_download(
             MediaDownloadHistoryAction.CREATED,
             metadata={
                 "file_path": download.file_path,
-                "local_media_profile_id": profile.local_media_profile_id,
+                "local_media_profile_id": local_media_profile_id,
                 "download_profile_id": profile.id,
             },
         )
@@ -263,9 +265,9 @@ def ensure_episode_download(
         existing.redownload_when_final = True
 
     target_path = str(resolve_episode_output_path(
-        profile.local_media_profile.output_template,
+        local_media_profile.output_template,
         episode=episode,
-        local_media_profile=profile.local_media_profile,
+        local_media_profile=local_media_profile,
         media_download=existing,
     ))
 

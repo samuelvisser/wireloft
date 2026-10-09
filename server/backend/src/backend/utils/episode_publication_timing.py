@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from backend.db.datetime_types import utc_datetime
 from backend.types.episode_types import (
     EpisodePublishStatus,
     PENDING_EPISODE_PUBLISH_STATUSES,
-    PRE_PUBLISH_EPISODE_PUBLISH_STATUSES
+    PRE_PUBLISH_EPISODE_PUBLISH_STATUSES,
 )
+
+if TYPE_CHECKING:
+    from backend.db.models.media_item.Episode import Episode
 
 
 TRUSTED_LIVE_ENDED_META_KEY = "ep_status.trusted_live_ended"
@@ -23,11 +26,23 @@ _RECORDED_PUBLISHED_FINAL_VALUE_PREFIX = "wireloft:recorded_published_final:"
 
 
 class EpisodePublicationTiming(Protocol):
-    safe_live_ended: datetime | None
-    safe_published_final: datetime | None
-    last_known_pending: datetime | None
-    recorded_published_final: datetime | None
-    published_date: datetime | None
+    """Read-only publication facts exposed by an episode's metadata.
+
+    These facts are derived properties, not mutable columns; writes go through
+    set_meta() to preserve the trusted-timing markers.
+    """
+
+    @property
+    def safe_live_ended(self) -> datetime | None: ...
+
+    @property
+    def safe_published_final(self) -> datetime | None: ...
+
+    @property
+    def last_known_pending(self) -> datetime | None: ...
+
+    @property
+    def recorded_published_final(self) -> datetime | None: ...
 
     def set_meta(self, key: str, value: str | None): ...
 
@@ -173,7 +188,7 @@ def record_published_final_observation(
     return current
 
 
-def best_effort_published_date(episode: EpisodePublicationTiming) -> datetime | None:
+def best_effort_published_date(episode: Episode) -> datetime | None:
     """Return WireLoft's best available publication timestamp for automation.
 
     A trusted continuously observed final transition wins. When a restart broke
@@ -182,18 +197,21 @@ def best_effort_published_date(episode: EpisodePublicationTiming) -> datetime | 
     WireLoft recorded PUBLISHED_FINAL is deliberately not used because it is an
     upper bound and may be hours late after downtime.
     """
-    if episode.safe_published_final is not None:
-        return utc_datetime(episode.safe_published_final)
+    safe_published_final = episode.safe_published_final
+    if safe_published_final is not None:
+        return utc_datetime(safe_published_final)
 
+    episode_published_date = episode.published_date
     published_date = (
-        utc_datetime(episode.published_date)
-        if episode.published_date is not None
+        utc_datetime(episode_published_date)
+        if episode_published_date is not None
         else None
     )
-    if episode.last_known_pending is None:
+    pending_observation = episode.last_known_pending
+    if pending_observation is None:
         return published_date
 
-    last_known_pending = utc_datetime(episode.last_known_pending)
+    last_known_pending = utc_datetime(pending_observation)
     if published_date is None:
         return last_known_pending
     return max(last_known_pending, published_date)
