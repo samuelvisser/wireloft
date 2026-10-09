@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from hashlib import blake2b
 
 from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
@@ -466,6 +467,36 @@ class MediaDownloadCollectionQuery:
     def build(cls) -> "MediaDownloadCollectionQuery":
         return cls(source=_collection_source())
 
+    def _ordering(self, order: str):
+        if order == "recent":
+            return (
+                self.source.c.recent_at.desc(),
+                self.source.c.id.desc(),
+            )
+        return (
+            self.source.c.workflow_bucket.asc(),
+            self.source.c.workflow_queue.asc(),
+            self.source.c.workflow_active_started_at.asc(),
+            self.source.c.workflow_downloaded_at.desc(),
+            self.source.c.id.desc(),
+        )
+
+    def ordered_ids_statement(self, *, statuses: Sequence[str], order: str):
+        """Project only ordered IDs, using exactly the same ordering as paging."""
+        statement = select(self.source.c.id)
+        if statuses:
+            statement = statement.where(self.source.c.status.in_(statuses))
+        return statement.order_by(*self._ordering(order))
+
+    def cursor_anchor_statement(self, *, media_download_id: int, statuses: Sequence[str], order: str):
+        """Retrieve the current sort values of an ID in the filtered collection."""
+        return self.page_statement(
+            statuses=statuses,
+            order=order,
+            after=self.source.c.id == media_download_id,
+            limit=1,
+        )
+
     def page_statement(
         self,
         *,
@@ -480,20 +511,6 @@ class MediaDownloadCollectionQuery:
         if after is not None:
             predicates.append(after)
 
-        if order == "recent":
-            ordering = (
-                self.source.c.recent_at.desc(),
-                self.source.c.id.desc(),
-            )
-        else:
-            ordering = (
-                self.source.c.workflow_bucket.asc(),
-                self.source.c.workflow_queue.asc(),
-                self.source.c.workflow_active_started_at.asc(),
-                self.source.c.workflow_downloaded_at.desc(),
-                self.source.c.id.desc(),
-            )
-
         return (
             select(
                 self.source.c.id,
@@ -505,7 +522,7 @@ class MediaDownloadCollectionQuery:
                 self.source.c.workflow_downloaded_at,
             )
             .where(*predicates)
-            .order_by(*ordering)
+            .order_by(*self._ordering(order))
             .limit(limit + 1)
         )
 
@@ -563,70 +580,22 @@ class MediaDownloadCollectionQuery:
         )
 
 
-def media_download_collection_revision(session: Session) -> str:
-    """Version membership and ordering changes without tracking live progress.
+def media_download_collection_revision(
+    session: Session,
+    *,
+    collection: MediaDownloadCollectionQuery,
+    statuses: Sequence[str],
+    order: str,
+) -> str:
+    """Fingerprint the membership and relative order of one filtered collection.
 
-    TaskRun and TaskOperation updated_at change on every progress report.
-    Including either timestamp invalidates in-flight pagination cursors even
-    when nothing moves in the collection. Track execution lifecycle timestamps
-    and status counts instead, along with durable media-download changes.
+    Execution progress, statuses and timestamps matter only if they change
+    the ordered sequence of matching IDs. Project only IDs instead of hydrating
+    ORM entities, and hash incrementally to keep Python memory constant.
     """
-    download_count, download_updated = session.execute(
-        select(
-            func.count(MediaDownloadBase.id),
-            func.max(MediaDownloadBase.updated_at),
-        )
-    ).one()
-    (
-        operation_count,
-        operation_started,
-        operation_finished,
-        operation_prioritized,
-        queued_operations,
-        running_operations,
-        waiting_operations,
-    ) = session.execute(
-        select(
-            func.count(TaskOperation.id),
-            func.max(TaskOperation.started_at),
-            func.max(TaskOperation.finished_at),
-            func.max(TaskOperation.prioritized_at),
-            func.sum(case((TaskOperation.status == OperationStatus.QUEUED.value, 1), else_=0)),
-            func.sum(case((TaskOperation.status == OperationStatus.RUNNING.value, 1), else_=0)),
-            func.sum(case((TaskOperation.status == OperationStatus.WAITING.value, 1), else_=0)),
-        ).where(TaskOperation.kind == "media.download")
-    ).one()
-    (
-        run_count,
-        run_started,
-        run_finished,
-        running_runs,
-        queued_runs,
-    ) = session.execute(
-        select(
-            func.count(TaskRun.id),
-            func.max(TaskRun.started_at),
-            func.max(TaskRun.finished_at),
-            func.sum(case((TaskRun.status == TaskStatus.RUNNING, 1), else_=0)),
-            func.sum(case((TaskRun.status == TaskStatus.QUEUED, 1), else_=0)),
-        ).where(TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD)
-    ).one()
-    timestamps = (
-        download_updated,
-        operation_started,
-        operation_finished,
-        operation_prioritized,
-        run_started,
-        run_finished,
-    )
-    return "|".join([
-        str(download_count or 0),
-        str(operation_count or 0),
-        str(queued_operations or 0),
-        str(running_operations or 0),
-        str(waiting_operations or 0),
-        str(run_count or 0),
-        str(running_runs or 0),
-        str(queued_runs or 0),
-        *(value.isoformat() if value is not None else "" for value in timestamps),
-    ])
+    digest = blake2b(digest_size=16)
+    for media_download_id in session.scalars(
+        collection.ordered_ids_statement(statuses=statuses, order=order)
+    ).yield_per(512):
+        digest.update(f"{media_download_id},".encode("ascii"))
+    return digest.hexdigest()

@@ -355,10 +355,12 @@ def get_media_downloads_page(
     collection = MediaDownloadCollectionQuery.build()
     source = collection.source
     requested_statuses = sorted(set(statuses or []))
-    revision = media_download_collection_revision(s)
+    revision = media_download_collection_revision(
+        s, collection=collection, statuses=requested_statuses, order=order,
+    )
 
     after = None
-    cursor_values: list[str | int | float | None] | None = None
+    cursor_id: int | None = None
     if cursor:
         try:
             values = decode_cursor(cursor)
@@ -369,77 +371,41 @@ def get_media_downloads_page(
             ):
                 raise InvalidCursorError("Cursor does not match this download collection")
             if values.get("revision") == revision:
-                cursor_values = cursor_key_values(
-                    values,
-                    length=2 if order == "recent" else 5,
-                )
+                cursor_values = cursor_key_values(values, length=1)
+                if not isinstance(cursor_values[0], int) or isinstance(cursor_values[0], bool):
+                    raise InvalidCursorError("Invalid download cursor key")
+                cursor_id = cursor_values[0]
         except InvalidCursorError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    if order == "recent" and cursor_values is not None:
-        occurred_at, media_download_id = cursor_values
-        if (
-            not isinstance(occurred_at, str)
-            or isinstance(media_download_id, bool)
-            or not isinstance(media_download_id, int)
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="Invalid download cursor key",
-            )
-        try:
-            parsed_occurred_at = datetime.fromisoformat(occurred_at)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail="Invalid download cursor key",
-            ) from exc
-        after = keyset_after([
-            KeysetField(
-                source.c.recent_at,
-                parsed_occurred_at,
-                descending=True,
-            ),
-            KeysetField(
-                source.c.id,
-                media_download_id,
-                descending=True,
-            ),
-        ])
-    elif order != "recent" and cursor_values is not None:
-        if (
-            any(isinstance(value, bool) for value in cursor_values)
-            or not all(isinstance(value, int) for value in cursor_values[:2] + cursor_values[4:])
-            or not all(isinstance(value, str) for value in cursor_values[2:4])
-        ):
-            raise HTTPException(
-                status_code=422,
-                detail="Invalid download cursor key",
-            )
-        bucket, queue_position, active_started_at, downloaded_at, media_download_id = cursor_values
-        try:
-            parsed_active_started_at = datetime.fromisoformat(active_started_at)
-            parsed_downloaded_at = datetime.fromisoformat(downloaded_at)
-        except ValueError as exc:
-            raise HTTPException(
-                status_code=422,
-                detail="Invalid download cursor key",
-            ) from exc
-        after = keyset_after([
-            KeysetField(source.c.workflow_bucket, bucket),
-            KeysetField(source.c.workflow_queue, queue_position),
-            KeysetField(source.c.workflow_active_started_at, parsed_active_started_at),
-            KeysetField(
-                source.c.workflow_downloaded_at,
-                parsed_downloaded_at,
-                descending=True,
-            ),
-            KeysetField(
-                source.c.id,
-                media_download_id,
-                descending=True,
-            ),
-        ])
+    if cursor_id is not None:
+        # The revision checks membership and relative order, not timestamps.
+        # Resolve the boundary's *current* sort keys so continuation stays
+        # correct when a timestamp changes without moving the row.
+        anchor = s.execute(collection.cursor_anchor_statement(
+            media_download_id=cursor_id,
+            statuses=requested_statuses,
+            order=order,
+        )).mappings().first()
+        if anchor is None:
+            raise HTTPException(status_code=422, detail="Invalid download cursor key")
+        if order == "recent":
+            after = keyset_after([
+                KeysetField(source.c.recent_at, anchor["recent_at"], descending=True),
+                KeysetField(source.c.id, cursor_id, descending=True),
+            ])
+        else:
+            after = keyset_after([
+                KeysetField(source.c.workflow_bucket, anchor["workflow_bucket"]),
+                KeysetField(source.c.workflow_queue, anchor["workflow_queue"]),
+                KeysetField(source.c.workflow_active_started_at, anchor["workflow_active_started_at"]),
+                KeysetField(
+                    source.c.workflow_downloaded_at,
+                    anchor["workflow_downloaded_at"],
+                    descending=True,
+                ),
+                KeysetField(source.c.id, cursor_id, descending=True),
+            ])
 
     page_rows = list(s.execute(
         collection.page_statement(
@@ -500,19 +466,8 @@ def get_media_downloads_page(
     next_cursor = None
     if has_more and page_rows:
         last = page_rows[-1]
-        if order == "recent":
-            recent_at = last["recent_at"]
-            if recent_at is None:
-                raise RuntimeError("Download recent ordering produced no timestamp")
-            cursor_key = [recent_at.isoformat(), int(last["id"])]
-        else:
-            cursor_key = [
-                int(last["workflow_bucket"]),
-                int(last["workflow_queue"]),
-                last["workflow_active_started_at"].isoformat(),
-                last["workflow_downloaded_at"].isoformat(),
-                int(last["id"]),
-            ]
+        # Re-evaluate ordering keys on continuation, so store only the row ID.
+        cursor_key = [int(last["id"])]
         next_cursor = encode_cursor({
             "kind": "media-download",
             "order": order,

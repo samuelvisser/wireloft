@@ -570,6 +570,226 @@ def test_download_cursor_restarts_when_workflow_revision_changes():
         engine.dispose()
 
 
+def test_download_cursor_only_invalidates_for_filtered_membership_or_order():
+    from sqlalchemy import select
+
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.operations import link_run_to_operations, refresh_operation
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+    from task_manager.tasks.media_download_operations import create_media_download_operation
+
+    session, engine = _session()
+    try:
+        active = _make_download(session, slug="cursor-filter-active")
+        downloaded = _make_download(session, slug="cursor-filter-done")
+        downloaded.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        downloaded.downloaded_at = datetime(2026, 9, 10, 1, tzinfo=timezone.utc)
+        operation = create_media_download_operation(session, active)
+        definition_id = session.scalar(select(TaskDefinition.id).where(
+            TaskDefinition.key == "download_episode"
+        ))
+        assert definition_id is not None
+        run = TaskRun(
+            schedule_id=None,
+            definition_id=definition_id,
+            resource_type=ResourceType.MEDIA_DOWNLOAD,
+            resource_id=active.id,
+            status=TaskStatus.RUNNING,
+            progress=20,
+            message="Downloading",
+            meta={"_progress_meta": {"download": {
+                "phase": "transferring",
+                "main_activity": "media",
+                "primary_transfer_complete": False,
+            }}},
+            result=None,
+            attempt_count=1,
+            max_retries=2,
+            last_error=None,
+            next_retry_at=None,
+            started_at=datetime.now(timezone.utc),
+            finished_at=None,
+            runtime_ms=None,
+        )
+        session.add(run)
+        session.flush()
+        link_run_to_operations(
+            session,
+            run=run,
+            task_key="download_episode",
+            operation_ids=(operation.id,),
+            operation_slot=operation.targets[0].slot_key,
+        )
+        refresh_operation(session, operation.id)
+        session.commit()
+
+        def page(statuses, cursor=None):
+            return get_media_downloads_page(
+                session, statuses=statuses, order="workflow", cursor=cursor,
+                limit=1,
+            )
+
+        # Processing stays in the same workflow bucket as downloading.
+        all_statuses = ["downloading", "local_processing", "downloaded"]
+        before_all = page(all_statuses)
+        before_downloading = page(["downloading"])
+        assert [item.id for item in before_all.items] == [active.id]
+        assert before_all.next_cursor is not None
+        assert [item.id for item in before_downloading.items] == [active.id]
+
+        run.progress = 85
+        run.meta = {"_progress_meta": {"download": {
+            "phase": "finishing",
+            "main_activity": "embed",
+            "primary_transfer_complete": True,
+        }}}
+        session.commit()
+
+        after_all = page(all_statuses, before_all.next_cursor)
+        after_downloading = page(["downloading"])
+        assert after_all.revision == before_all.revision
+        assert [item.id for item in after_all.items] == [downloaded.id]
+        assert after_downloading.revision != before_downloading.revision
+        assert after_downloading.items == []
+
+        # Removing the last matching row also changes its filtered revision.
+        before_processing = page(["local_processing"])
+        run.meta = {"_progress_meta": {"download": {
+            "phase": "transferring",
+            "main_activity": "media",
+            "primary_transfer_complete": False,
+        }}}
+        session.commit()
+        after_processing = page(["local_processing"])
+        assert after_processing.revision != before_processing.revision
+        assert after_processing.items == []
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_cursor_keeps_position_when_sort_timestamp_changes_but_order_does_not():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        latest = _make_download(session, slug="cursor-anchor-latest")
+        middle = _make_download(session, slug="cursor-anchor-middle")
+        oldest = _make_download(session, slug="cursor-anchor-oldest")
+        for download, hour in ((latest, 5), (middle, 3), (oldest, 1)):
+            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, statuses=["downloaded"], order="recent",
+                cursor=cursor, limit=2,
+            )
+
+        first = page()
+        assert [item.id for item in first.items] == [latest.id, middle.id]
+        assert first.next_cursor is not None
+
+        # Both sort keys change, but ranks stay the same; the cursor's original
+        # timestamp would skip the oldest row at its new timestamp.
+        middle.downloaded_at = datetime(2026, 9, 10, 4, tzinfo=timezone.utc)
+        oldest.downloaded_at = datetime(2026, 9, 10, 3, tzinfo=timezone.utc)
+        session.commit()
+
+        continued = page(first.next_cursor)
+        assert continued.revision == first.revision
+        assert [item.id for item in continued.items] == [oldest.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_download_cursor_ignores_unrelated_changes_and_detects_reordering():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        first = _make_download(session, slug="cursor-irrelevant-first")
+        second = _make_download(session, slug="cursor-irrelevant-second")
+        excluded = _make_download(session, slug="cursor-irrelevant-excluded")
+        for download, hour in ((first, 3), (second, 2), (excluded, 1)):
+            download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+            download.downloaded_at = datetime(2026, 9, 10, hour, tzinfo=timezone.utc)
+        excluded.artifact_status = MediaDownloadArtifactStatus.MISSING.value
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, statuses=["downloaded"], order="workflow",
+                cursor=cursor, limit=1,
+            )
+
+        initial = page()
+        assert [item.id for item in initial.items] == [first.id]
+        excluded.artifact_error = "File temporarily unavailable"
+        first.artifact_error = "Metadata changed"
+        session.commit()
+        unchanged = page(initial.next_cursor)
+        assert unchanged.revision == initial.revision
+        assert [item.id for item in unchanged.items] == [second.id]
+
+        second.downloaded_at = datetime(2026, 9, 10, 4, tzinfo=timezone.utc)
+        session.commit()
+        changed = page(initial.next_cursor)
+        assert changed.revision != initial.revision
+        assert [item.id for item in changed.items] == [second.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_prioritization_changes_revision_only_when_queue_order_changes():
+    from backend.api.endpoints.media_downloads.service import get_media_downloads_page
+    from task_manager.tasks.media_download_operations import (
+        create_media_download_operation,
+    )
+
+    session, engine = _session()
+    try:
+        earlier = _make_download(session, slug="cursor-queue-earlier")
+        later = _make_download(session, slug="cursor-queue-later")
+        first = create_media_download_operation(session, earlier)
+        second = create_media_download_operation(session, later)
+        session.commit()
+
+        def page(cursor=None):
+            return get_media_downloads_page(
+                session, statuses=["pending"], order="workflow",
+                cursor=cursor, limit=1,
+            )
+
+        original = page()
+        assert original.next_cursor is not None
+        assert [item.id for item in original.items] == [earlier.id]
+
+        # Making an already-front queued row prioritized doesn't move anything.
+        first.prioritized_at = datetime(2026, 9, 10, 1, tzinfo=timezone.utc)
+        session.commit()
+        same_order = page(original.next_cursor)
+        assert same_order.revision == original.revision
+        assert [item.id for item in same_order.items] == [later.id]
+
+        # Prioritizing the second row puts it first: same members, new order.
+        second.prioritized_at = datetime(2026, 9, 10, 2, tzinfo=timezone.utc)
+        session.commit()
+        changed = page(original.next_cursor)
+        assert changed.revision != original.revision
+        assert [item.id for item in changed.items] == [later.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def test_download_cursor_ignores_progress_only_updates():
     from sqlalchemy import select
 
