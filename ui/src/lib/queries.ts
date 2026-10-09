@@ -716,7 +716,17 @@ export function compareMediaDownloadWorkflowOrder(left: MediaDownloadViewRead, r
         }
     }
 
-    return right.id - left.id
+    // Match the backend workflow cursor ordering: completed downloads use
+    // their last successful download time, while other terminal statuses keep
+    // their existing ID ordering (the backend uses the epoch for those).
+    const leftCompletedAt = leftStatus === 'downloaded' || leftStatus === 'redownloaded'
+        ? (left.downloadedAt ?? left.createdAt).getTime()
+        : 0
+    const rightCompletedAt = rightStatus === 'downloaded' || rightStatus === 'redownloaded'
+        ? (right.downloadedAt ?? right.createdAt).getTime()
+        : 0
+    const byDownloadedAt = rightCompletedAt - leftCompletedAt
+    return byDownloadedAt || right.id - left.id
 }
 
 function mediaDownloadRecentOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
