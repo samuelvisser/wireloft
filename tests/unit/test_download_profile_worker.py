@@ -135,7 +135,7 @@ def db_session(monkeypatch, tmp_path):
     # the global publication delay opt in explicitly below.
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         0,
     )
     yield session
@@ -208,7 +208,7 @@ def test_episode_trigger_creates_visible_delayed_download_operation(db_session, 
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -282,7 +282,7 @@ def test_download_profile_selection_keeps_episodes_before_delay_deadline(db_sess
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -327,7 +327,7 @@ def test_countdown_download_delay_uses_safe_live_ended(db_session, monkeypatch):
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -370,7 +370,7 @@ def test_final_download_delay_uses_safe_published_final(db_session, monkeypatch)
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -408,7 +408,7 @@ def test_ensure_safe_delay_uses_recorded_final_when_safe_final_is_missing(db_ses
     from config import get_settings
 
     settings = get_settings().download_settings
-    monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+    monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
     monkeypatch.setattr(settings, "ensure_safe_delay", False)
 
     show = _make_show(db_session)
@@ -453,7 +453,7 @@ def test_ensure_safe_delay_prefers_safe_final_over_recorded_final(db_session, mo
     from config import get_settings
 
     settings = get_settings().download_settings
-    monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 10)
+    monkeypatch.setattr(settings, "episode_download_delay_minutes", 10)
     monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
     show = _make_show(db_session)
@@ -491,7 +491,7 @@ def test_ensure_safe_delay_does_not_apply_when_download_delay_is_zero(db_session
     from config import get_settings
 
     settings = get_settings().download_settings
-    monkeypatch.setattr(settings, "automatic_episode_download_delay_minutes", 0)
+    monkeypatch.setattr(settings, "episode_download_delay_minutes", 0)
     monkeypatch.setattr(settings, "ensure_safe_delay", True)
 
     show = _make_show(db_session)
@@ -521,7 +521,7 @@ def test_final_download_delay_uses_last_known_pending_after_monitor_restart(db_s
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -560,7 +560,7 @@ def test_final_download_falls_back_instead_of_using_safe_live_ended(db_session, 
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -600,7 +600,7 @@ def test_download_delay_falls_back_to_dailywire_timestamp_without_trusted_monito
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -628,7 +628,7 @@ def test_download_delay_does_not_backfill_outside_episode_count_scope(db_session
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)
@@ -672,7 +672,7 @@ def test_download_delay_does_not_remove_recent_artifact_from_retention_scope(db_
 
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         10,
     )
     show = _make_show(db_session)

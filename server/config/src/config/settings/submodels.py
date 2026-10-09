@@ -356,11 +356,11 @@ class DownloadSettings(SubmodelBase):
         ge=1,
         description="Maximum number of download attempts",
     )
-    automatic_episode_download_delay_minutes: int = Field(
+    episode_download_delay_minutes: int = Field(
         default=10,
         ge=0,
         description=(
-            "Minimum minutes after the selected publication timing before Download Profiles may automatically download an episode"
+            "Delay in minutes after episode publication before a delayed download may start (unless explicitly bypassed)"
         ),
     )
     ensure_safe_delay: bool = Field(

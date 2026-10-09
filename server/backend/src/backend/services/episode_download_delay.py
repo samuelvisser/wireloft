@@ -12,7 +12,7 @@ from config import get_settings
 def episode_download_delay_ready_at(episode: Episode) -> datetime | None:
     """Return when WireLoft's configured post-publication download delay expires."""
     settings = get_settings().download_settings
-    delay_minutes = settings.automatic_episode_download_delay_minutes
+    delay_minutes = settings.episode_download_delay_minutes
     if delay_minutes <= 0:
         return None
 

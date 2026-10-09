@@ -61,6 +61,52 @@ def test_ensure_safe_delay_defaults_disabled_and_is_exposed_in_settings_api():
     assert values.download_settings.ensure_safe_delay is False
 
 
+def test_episode_download_delay_uses_new_config_and_api_name(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings, save_ui_settings
+    from backend.api.models.settings import SettingsAPIUpdate
+
+    monkeypatch.delenv("WL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES", raising=False)
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(
+        "downloadSettings:\n"
+        "  episodeDownloadDelayMinutes: 17\n",
+        encoding="utf-8",
+    )
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    path = "downloadSettings.episodeDownloadDelayMinutes"
+    assert current.values.download_settings.episode_download_delay_minutes == 17
+    assert path in current.configured_fields
+    assert current.values.model_dump(by_alias=True)["downloadSettings"]["episodeDownloadDelayMinutes"] == 17
+
+    values = current.values.model_copy(deep=True)
+    values.download_settings.episode_download_delay_minutes = 25
+    result = save_ui_settings(SettingsAPIUpdate(
+        values=values,
+        changed_fields=[path],
+    ))
+
+    document = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert document["downloadSettings"]["episodeDownloadDelayMinutes"] == 25
+    assert result.values.download_settings.episode_download_delay_minutes == 25
+    assert path in result.configured_fields
+
+
+def test_episode_download_delay_environment_override_uses_new_name(tmp_path, monkeypatch):
+    from backend.api.endpoints.settings.service import get_ui_settings
+
+    config_path = tmp_path / "config.yml"
+    config_path.write_text("downloadSettings:\n  episodeDownloadDelayMinutes: 17\n", encoding="utf-8")
+    env_name = "WL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES"
+    monkeypatch.setenv(env_name, "23")
+    _point_settings_at(config_path, monkeypatch)
+
+    current = get_ui_settings()
+    assert current.values.download_settings.episode_download_delay_minutes == 23
+    assert current.environment_overrides["downloadSettings.episodeDownloadDelayMinutes"] == env_name
+
+
 def test_settings_api_rejects_unexpected_admin_auth():
     from backend.api.models.settings import SettingsValues
 

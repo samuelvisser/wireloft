@@ -69,7 +69,7 @@ SettingFieldPath = Literal[
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
-    "downloadSettings.automaticEpisodeDownloadDelayMinutes",
+    "downloadSettings.episodeDownloadDelayMinutes",
     "downloadSettings.ensureSafeDelay",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
@@ -129,7 +129,7 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.verifyDownloadsCron",
     "downloadSettings.maxConcurrentDownloads",
     "downloadSettings.maxDownloadAttempts",
-    "downloadSettings.automaticEpisodeDownloadDelayMinutes",
+    "downloadSettings.episodeDownloadDelayMinutes",
     "downloadSettings.ensureSafeDelay",
     "downloadSettings.downloadTimeoutSeconds",
     "downloadSettings.downloadRoot",
@@ -270,7 +270,7 @@ class DownloadSettingsValue(_SettingsValueModel):
     verify_downloads_cron: str = Field(min_length=1)
     max_concurrent_downloads: int = Field(ge=1)
     max_download_attempts: int = Field(ge=1)
-    automatic_episode_download_delay_minutes: int = Field(ge=0)
+    episode_download_delay_minutes: int = Field(ge=0)
     ensure_safe_delay: bool
     download_timeout_seconds: int = Field(ge=1)
     download_root: Path
