@@ -545,7 +545,7 @@ export const frontendOperationDefinitions = {
   'show.delete_downloads': {
     kind: 'show.delete_downloads',
     resourceType: 'show',
-    label: 'Bulk delete',
+    label: 'Bulk delete downloads',
     invalidate: invalidateShowDownloadDeletion,
     success: (operation) => {
       const showTitle = contextString(operation, 'show_title') || operation.title
