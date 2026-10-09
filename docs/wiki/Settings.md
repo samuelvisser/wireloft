@@ -98,8 +98,6 @@ These settings are available under **Settings → Downloads**.
 | `downloadSettings.verifyDownloadsCronEnabled` | `WL_DOWNLOAD_SETTINGS__VERIFY_DOWNLOADS_CRON_ENABLED` | `true` | Enables the periodic download-verification cron schedule. |
 | `downloadSettings.verifyDownloadsCron` | `WL_DOWNLOAD_SETTINGS__VERIFY_DOWNLOADS_CRON` | `0 */2 * * *` | Schedule for periodic download verification; every two hours by default. |
 
-Existing `config.yml` values for the episode download delay are renamed automatically during the 1.2.3 background migration. If the delay is configured through an environment variable, update the override to `WL_DOWNLOAD_SETTINGS__EPISODE_DOWNLOAD_DELAY_MINUTES` before upgrading.
-
 ### Direct versus temporary mode
 
 **Temporary** is the default. It keeps incomplete download and processing work in the local temporary folder and publishes the completed media into the final library at the end. This is especially useful when `/downloads` is SMB, NFS, or other network storage because remuxing and metadata embedding otherwise rewrite the full media file across the network. **Direct** writes and processes media in the destination instead.
