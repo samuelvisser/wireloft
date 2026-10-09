@@ -1020,3 +1020,206 @@ def test_run_worker_no_enabled_profiles_is_a_noop(db_session, monkeypatch):
 
     created.assert_not_called()
     dispatched.assert_not_called()
+
+
+# ---------- manually downloaded episode retention ----------
+
+@pytest.mark.parametrize("include_manual, expected_removed", [(False, 0), (True, 1)])
+def test_cleanup_of_manual_downloads_requires_explicit_opt_in(db_session, include_manual, expected_removed):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    older = _make_episode(db_session, show, season, slug="old", ep_id="ep.1", status="published_final",
+                          published_at=_now() - timedelta(days=20), index=1)
+    newest = _make_episode(db_session, show, season, slug="new", ep_id="ep.2", status="published_final",
+                           published_at=_now(), index=2)
+    profile = _make_podcast_profile(
+        db_session, show, lmp,
+        download_episode_count=1,
+        delete_older_episodes=True,
+        include_manually_downloaded_episodes=include_manual,
+    )
+    old_manual = _completed_download(db_session, older, lmp, profile)
+    new_manual = _completed_download(db_session, newest, lmp, profile)
+    old_manual.download_profile_id = None
+    new_manual.download_profile_id = None
+    old_id, new_id = old_manual.id, new_manual.id
+    old_path, new_path = Path(old_manual.file_path), Path(new_manual.file_path)
+    db_session.commit()
+
+    assert cleanup_older_episodes(db_session, profile) == expected_removed
+    db_session.commit()
+
+    assert old_path.exists() is not include_manual
+    assert new_path.exists()
+    assert (db_session.get(EpisodeMediaDownload, old_id) is None) is include_manual
+    assert db_session.get(EpisodeMediaDownload, new_id).download_profile_id is None
+
+
+def test_manual_retention_respects_rolling_date_window(db_session):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    older = _make_episode(db_session, show, season, slug="month-old", ep_id="ep.1",
+                          status="published_final", published_at=_now() - timedelta(days=30), index=1)
+    newest = _make_episode(db_session, show, season, slug="yesterday", ep_id="ep.2",
+                           status="published_final", published_at=_now() - timedelta(days=1), index=2)
+    profile = _make_podcast_profile(
+        db_session, show, lmp,
+        download_days_in_past=7,
+        delete_older_episodes=True,
+        include_manually_downloaded_episodes=True,
+    )
+    old_manual = _completed_download(db_session, older, lmp, profile)
+    recent_manual = _completed_download(db_session, newest, lmp, profile)
+    old_manual.download_profile_id = None
+    recent_manual.download_profile_id = None
+    old_id = old_manual.id
+    old_path, recent_path = Path(old_manual.file_path), Path(recent_manual.file_path)
+    db_session.commit()
+
+    assert cleanup_older_episodes(db_session, profile) == 1
+    db_session.commit()
+
+    assert db_session.get(EpisodeMediaDownload, old_id) is None
+    assert not old_path.exists()
+    assert recent_path.exists()
+
+
+def test_manual_retention_never_crosses_show_profile_type_or_owner(db_session):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.workers.download_profile_worker._helpers import cleanup_older_episodes
+
+    show = _make_show(db_session, slug="target-show")
+    season = _make_season(db_session, show)
+    other_show = _make_show(db_session, slug="another-show")
+    other_season = _make_season(db_session, other_show, slug="another-season")
+    lmp = _make_local_media_profile(db_session)
+    other_lmp = _make_local_media_profile(db_session, slug="alternative-audio")
+    now = _now()
+    def episode(target_show, target_season, *, slug, ep_id, index, days_ago=30):
+        return _make_episode(
+            db_session, target_show, target_season,
+            slug=slug, ep_id=ep_id, status="published_final",
+            published_at=now - timedelta(days=days_ago), index=index,
+        )
+    eligible_old = episode(show, season, slug="eligible-old", ep_id="ep.1", index=1)
+    newest = episode(show, season, slug="newest", ep_id="ep.2", index=2, days_ago=0)
+    from_other_show = episode(other_show, other_season, slug="other-show-old", ep_id="ep.1", index=1)
+    from_other_lmp = episode(show, season, slug="other-profile-old", ep_id="ep.3", index=3)
+    different_type = episode(show, season, slug="trailer-old", ep_id="trailer.1", index=4)
+    owned_by_other = episode(show, season, slug="other-owned-old", ep_id="ep.4", index=5)
+    profile = _make_podcast_profile(
+        db_session, show, lmp,
+        download_episode_count=1,
+        delete_older_episodes=True,
+        include_manually_downloaded_episodes=True,
+    )
+    other_profile = _make_podcast_profile(
+        db_session, show, lmp,
+        download_episode_count=1,
+        delete_older_episodes=False,
+    )
+    target = _completed_download(db_session, eligible_old, lmp, profile)
+    recent = _completed_download(db_session, newest, lmp, profile)
+    other_show_manual = _completed_download(db_session, from_other_show, lmp, profile)
+    other_lmp_manual = _completed_download(db_session, from_other_lmp, other_lmp, profile)
+    trailer_manual = _completed_download(db_session, different_type, lmp, profile)
+    other_owned = _completed_download(db_session, owned_by_other, lmp, other_profile)
+    for row in (target, recent, other_show_manual, other_lmp_manual, trailer_manual):
+        row.download_profile_id = None
+    retained = [recent, other_show_manual, other_lmp_manual, trailer_manual, other_owned]
+    target_id, target_path = target.id, Path(target.file_path)
+    retained_ids_and_paths = [(row.id, Path(row.file_path)) for row in retained]
+    db_session.commit()
+
+    assert cleanup_older_episodes(db_session, profile) == 1
+    db_session.commit()
+
+    assert db_session.get(EpisodeMediaDownload, target_id) is None
+    assert not target_path.exists()
+    for row_id, path in retained_ids_and_paths:
+        assert db_session.get(EpisodeMediaDownload, row_id) is not None
+        assert path.exists()
+
+
+def test_manual_retention_waits_for_in_flight_operation(db_session, monkeypatch):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from task_manager.tasks.workers.download_profile_worker import _helpers
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    older = _make_episode(db_session, show, season, slug="in-flight", ep_id="ep.1",
+                          status="published_final", published_at=_now() - timedelta(days=20), index=1)
+    _make_episode(db_session, show, season, slug="latest", ep_id="ep.2",
+                  status="published_final", published_at=_now(), index=2)
+    profile = _make_podcast_profile(
+        db_session, show, lmp,
+        download_episode_count=1,
+        delete_older_episodes=True,
+        include_manually_downloaded_episodes=True,
+    )
+    manual = _completed_download(db_session, older, lmp, profile)
+    manual.download_profile_id = None
+    manual_id, manual_path = manual.id, Path(manual.file_path)
+    db_session.commit()
+
+    monkeypatch.setattr(_helpers, "_active_media_download_ids", lambda _session: {manual_id})
+    assert _helpers.cleanup_older_episodes(db_session, profile) == 0
+    db_session.commit()
+    assert manual_path.exists()
+    assert db_session.get(EpisodeMediaDownload, manual_id) is not None
+
+    monkeypatch.setattr(_helpers, "_active_media_download_ids", lambda _session: set())
+    assert _helpers.cleanup_older_episodes(db_session, profile) == 1
+    db_session.commit()
+    assert not manual_path.exists()
+    assert db_session.get(EpisodeMediaDownload, manual_id) is None
+
+
+@pytest.mark.parametrize(
+    "delete_older, count, days",
+    [(False, 1, 0), (False, 0, 7), (True, 0, 0)],
+)
+def test_manual_retention_api_rejects_disabled_deletion_or_no_rolling_limit(delete_older, count, days):
+    from pydantic import ValidationError
+    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreate
+
+    kwargs = dict(
+        show_id=1,
+        local_media_profile_id=1,
+        enable_profile=True,
+        ep_id_type_list=["ep"],
+        download_with_countdown=False,
+        redownload_final=False,
+        download_days_in_past=days,
+        download_episode_count=count,
+        delete_older_episodes=delete_older,
+        include_manually_downloaded_episodes=True,
+    )
+    with pytest.raises(ValidationError, match="Include manually downloaded episodes requires"):
+        PodcastDownloadProfileAPICreate(**kwargs)
+
+
+def test_manual_retention_api_default_is_disabled():
+    from backend.api.models.podcast_download_profile import PodcastDownloadProfileAPICreate
+
+    profile = PodcastDownloadProfileAPICreate(
+        show_id=1,
+        local_media_profile_id=1,
+        enable_profile=True,
+        ep_id_type_list=["ep"],
+        download_with_countdown=False,
+        redownload_final=False,
+        download_days_in_past=0,
+        download_episode_count=10,
+        delete_older_episodes=True,
+    )
+    assert profile.include_manually_downloaded_episodes is False

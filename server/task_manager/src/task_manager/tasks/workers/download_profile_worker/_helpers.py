@@ -5,7 +5,7 @@ from datetime import datetime, time, timedelta, timezone
 from typing import Optional, Sequence
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session, selectin_polymorphic, selectinload
 
 from backend.db.models import DownloadProfileBase, Episode, PodcastDownloadProfile, Season, SeriesDownloadProfile
@@ -18,7 +18,10 @@ from backend.services.media_download_history import record_media_download_histor
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
+from task_manager.scheduler.db import TaskOperation
+from task_manager.scheduler.types import OperationStatus
 from task_manager.tasks.media_download_operations import (
+    MEDIA_DOWNLOAD_OPERATION_KIND,
     dispatch_queued_media_download_operations,
     get_active_media_download_operation,
     prepare_media_download_artifact,
@@ -302,19 +305,66 @@ def trigger_next_pending_downloads(s: Session, *, budget: Optional[int] = None) 
     return dispatch_queued_media_download_operations(s, budget=budget)
 
 
-def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
-    """Remove downloads that have fallen outside a podcast retention limit."""
-    if profile.download_episode_count > 0:
-        kept_episode_ids = {
-            episode.id
-            for episode in get_download_profile_episodes(
-                s,
-                profile,
+def _active_media_download_ids(s: Session) -> set[int]:
+    """Load active download identities once, rather than querying each old file."""
+    return {
+        int(download_id)
+        for download_id in s.scalars(
+            select(TaskOperation.resource_id).where(
+                TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
+                TaskOperation.resource_type == "media_download",
+                TaskOperation.status.in_((
+                    OperationStatus.QUEUED.value,
+                    OperationStatus.RUNNING.value,
+                    OperationStatus.WAITING.value,
+                )),
             )
-        }
-        stmt = select(EpisodeMediaDownload).where(
-            EpisodeMediaDownload.download_profile_id == profile.id,
         )
+        if download_id is not None
+    }
+
+
+def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
+    """Remove downloads outside the rolling window, optionally including manual ones."""
+    count_limit = profile.download_episode_count > 0
+    date_limit = profile.download_days_in_past > 0
+    if not count_limit and not date_limit:
+        return 0
+    if date_limit and not profile.delete_older_episodes:
+        return 0
+
+    include_manual = (
+        profile.delete_older_episodes
+        and profile.include_manually_downloaded_episodes
+    )
+    # A manually downloaded episode has no owning Download Profile. Restrict the
+    # opt-in to this show's eligible episode types and Local Media Profile, so a
+    # different profile using the same format cannot lose its downloads.
+    ownership = EpisodeMediaDownload.download_profile_id == profile.id
+    if include_manual:
+        eligible_statuses = [EpisodePublishStatus.PUBLISHED_FINAL]
+        if profile.download_with_countdown:
+            eligible_statuses.append(EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN)
+        ownership = or_(
+            ownership,
+            and_(
+                EpisodeMediaDownload.download_profile_id.is_(None),
+                EpisodeMediaDownload.local_media_profile_id == profile.local_media_profile_id,
+                Episode.show_id == profile.show_id,
+                episode_identifier_type_predicate(Episode.episode_identifier, set(profile.ep_id_type_list)),
+                Episode.publish_status.in_(eligible_statuses),
+            ),
+        )
+
+    stmt = select(EpisodeMediaDownload).where(ownership)
+    if include_manual or date_limit:
+        stmt = stmt.join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+    if count_limit:
+        # Use exactly the same eligible latest-N set as download selection. A
+        # publication-delay window must not make a recent episode look obsolete.
+        kept_episode_ids = {
+            episode.id for episode in get_download_profile_episodes(s, profile)
+        }
         if kept_episode_ids:
             stmt = stmt.where(
                 EpisodeMediaDownload.media_item_id.notin_(kept_episode_ids)
@@ -325,29 +375,27 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
                 == MediaDownloadArtifactStatus.ABSENT.value
             )
         rows = list(s.scalars(stmt))
-    elif profile.download_days_in_past > 0:
-        if not profile.delete_older_episodes:
-            return 0
-        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
-        rows = list(s.execute(
-            select(EpisodeMediaDownload)
-            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
-            .where(
-                EpisodeMediaDownload.download_profile_id == profile.id,
-                Episode.published_date.is_not(None),
-                Episode.published_date < cutoff,
-            )
-        ).scalars())
     else:
-        return 0
+        cutoff = _utc_now() - timedelta(days=profile.download_days_in_past)
+        rows = list(s.scalars(stmt.where(
+            Episode.published_date.is_not(None),
+            Episode.published_date < cutoff,
+        )))
 
+    active_download_ids = _active_media_download_ids(s) if rows else set()
+    removed = 0
     for row in rows:
+        # Retain downloads that are queued, waiting, or still executing. A later
+        # sweep can remove them once their operation has finished.
+        if row.id in active_download_ids:
+            continue
         if profile.delete_older_episodes:
             prepare_media_download_artifact(s, row)
 
-        # Retention cleanup is the end of this managed download's lifetime.
+        # Retention cleanup is the end of this download's lifetime.
         s.delete(row)
+        removed += 1
 
-    if rows:
+    if removed:
         s.flush()
-    return len(rows)
+    return removed

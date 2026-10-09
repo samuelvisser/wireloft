@@ -42,6 +42,20 @@ When a rolling Date or Number of episodes limit is active, **Delete older episod
 
 Leave it disabled if you only want the limit to control which new episodes are selected while keeping older files already on disk. Planned downloads that never produced a file are still discarded once they fall outside the active Number of episodes window.
 
+### Include Manually Downloaded Episodes
+
+When **Delete older episodes** is enabled, **Include Manually Downloaded Episodes**
+can additionally remove older episodes downloaded manually with the same Local Media Profile.
+This option defaults to **off** so creating a Download Profile does not delete
+preexisting manual downloads outside its retention window.
+
+When enabled, cleanup also considers manual downloads from the same show and the
+episode types selected by this Download Profile. Files outside the rolling
+retention limit are removed even if they were manually downloaded before the
+Download Profile existed. Files inside the limit are retained, as are downloads
+owned by other Download Profiles. This option does not apply to **No limits** or
+the fixed **Download starting from** date.
+
 ### Countdown and final versions
 
 Some Daily Wire episodes appear with temporary countdown media before the final episode is ready.

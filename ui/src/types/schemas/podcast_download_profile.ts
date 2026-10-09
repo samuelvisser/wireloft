@@ -15,6 +15,7 @@ const PodcastDownloadProfileBaseSchema = DownloadProfileSchemaRequest.extend({
     downloadEpisodeCount: z.int().min(0).default(0),
     downloadStartingFrom: z.iso.date().nullable().default(null),
     deleteOlderEpisodes: z.boolean().default(true),
+    includeManuallyDownloadedEpisodes: z.boolean().default(false),
 })
 
 export const PodcastDownloadProfileCreateSchema = PodcastDownloadProfileBaseSchema.extend(
@@ -32,6 +33,15 @@ export const PodcastDownloadProfileCreateSchema = PodcastDownloadProfileBaseSche
             code: 'custom',
             path: ['downloadStartingFrom'],
             message: 'Download starting from can only be used when Limit by is set to No limits',
+        })
+    }
+    if (value.includeManuallyDownloadedEpisodes && (
+        !value.deleteOlderEpisodes || (value.downloadDaysInPast === 0 && value.downloadEpisodeCount === 0)
+    )) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['includeManuallyDownloadedEpisodes'],
+            message: 'Include manually downloaded episodes requires Delete older episodes and a rolling limit',
         })
     }
 })
@@ -56,6 +66,15 @@ export const PodcastDownloadProfileUpdateSchema = PodcastDownloadProfileBaseSche
             message: 'Download starting from can only be used when Limit by is set to No limits',
         })
     }
+    if (value.includeManuallyDownloadedEpisodes && (
+        !value.deleteOlderEpisodes || (value.downloadDaysInPast === 0 && value.downloadEpisodeCount === 0)
+    )) {
+        ctx.addIssue({
+            code: 'custom',
+            path: ['includeManuallyDownloadedEpisodes'],
+            message: 'Include manually downloaded episodes requires Delete older episodes and a rolling limit',
+        })
+    }
 })
 export type PodcastDownloadProfileUpdateIn = z.input<typeof PodcastDownloadProfileUpdateSchema>
 export type PodcastDownloadProfileUpdateOut = z.output<typeof PodcastDownloadProfileUpdateSchema>
@@ -70,5 +89,6 @@ export const PodcastDownloadProfileReadSchema = DownloadProfileSchemaResponse.sa
     downloadEpisodeCount: z.int(),
     downloadStartingFrom: z.iso.date().nullable(),
     deleteOlderEpisodes: z.boolean(),
+    includeManuallyDownloadedEpisodes: z.boolean(),
 })
 export type PodcastDownloadProfileRead = z.infer<typeof PodcastDownloadProfileReadSchema>

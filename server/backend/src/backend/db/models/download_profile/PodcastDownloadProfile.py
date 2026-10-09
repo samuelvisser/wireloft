@@ -20,6 +20,7 @@ class PodcastDownloadProfile(DownloadProfileBase):
     download_episode_count: Mapped[int] = mapped_column(default=0)
     download_starting_from: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     delete_older_episodes: Mapped[bool] = mapped_column(default=True)
+    include_manually_downloaded_episodes: Mapped[bool] = mapped_column(default=False)
 
     def __repr__(self) -> str:
         return f"<PodcastDownloadProfile(id={self.id}, show_id={self.show_id}, enable_profile={self.enable_profile}, download_days_in_past={self.download_days_in_past}, download_episode_count={self.download_episode_count}, download_starting_from={self.download_starting_from}, delete_older_episodes={self.delete_older_episodes}, created_at={self.created_at}, updated_at={self.updated_at})>"

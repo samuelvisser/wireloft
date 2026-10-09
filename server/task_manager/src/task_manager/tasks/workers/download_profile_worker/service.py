@@ -118,7 +118,11 @@ async def run_download_profile_worker(
             created += 1
 
         if isinstance(profile, PodcastDownloadProfile):
-            should_cleanup = only_episode is None or profile.download_episode_count > 0
+            should_cleanup = (
+                only_episode is None
+                or profile.download_episode_count > 0
+                or (profile.delete_older_episodes and profile.include_manually_downloaded_episodes)
+            )
             if should_cleanup:
                 cleanup_older_episodes(s, profile)
 

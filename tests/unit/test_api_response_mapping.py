@@ -67,6 +67,7 @@ def test_download_profile_view_uses_relationship_aliases_and_discriminated_impl(
         download_episode_count=25,
         download_starting_from=None,
         delete_older_episodes=True,
+        include_manually_downloaded_episodes=False,
     )
 
     view = DownloadProfileAPIReadView.model_validate(
@@ -77,6 +78,7 @@ def test_download_profile_view_uses_relationship_aliases_and_discriminated_impl(
     assert view.local_media_profile_name == "Audio"
     assert isinstance(view.download_profile_impl, PodcastDownloadProfileAPIRead)
     assert view.download_profile_impl.download_episode_count == 25
+    assert view.download_profile_impl.include_manually_downloaded_episodes is False
 
 
 def test_stream_profile_view_uses_relationship_aliases():

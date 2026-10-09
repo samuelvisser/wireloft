@@ -1,3 +1,4 @@
+import {useEffect} from 'react'
 import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
@@ -21,6 +22,8 @@ export default function PodcastDownloadProfileForm({form}: Props) {
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
     const withCountdown = watch('downloadWithCountdown')
+    const deleteOlderEpisodes = watch('deleteOlderEpisodes')
+    const includeManuallyDownloadedEpisodes = watch('includeManuallyDownloadedEpisodes')
 
     const watchedDaysRaw = watch('downloadDaysInPast') ?? 0
     const watchedEpisodeCountRaw = watch('downloadEpisodeCount') ?? 0
@@ -34,8 +37,17 @@ export default function PodcastDownloadProfileForm({form}: Props) {
             ? 'date'
             : 'none'
 
+    // Prevent a hidden opt-in from surviving if the retention limit is removed
+    // or deletion is disabled, including when a numeric field is edited directly.
+    useEffect(() => {
+        if ((limitMode === 'none' || !deleteOlderEpisodes) && includeManuallyDownloadedEpisodes) {
+            setValue('includeManuallyDownloadedEpisodes', false, {shouldDirty: true, shouldValidate: true})
+        }
+    }, [deleteOlderEpisodes, includeManuallyDownloadedEpisodes, limitMode, setValue])
+
     const updateLimitMode = (mode: LimitMode) => {
         if (mode === 'none') {
+            setValue('includeManuallyDownloadedEpisodes', false, {shouldDirty: true, shouldValidate: true})
             setValue('downloadDaysInPast', 0, {shouldDirty: true, shouldValidate: true})
             setValue('downloadEpisodeCount', 0, {shouldDirty: true, shouldValidate: true})
             return
@@ -242,7 +254,15 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                             <Switch
                                 id="delete-older"
                                 checked={!!field.value}
-                                onChange={(checked) => field.onChange(checked)}
+                                onChange={(checked) => {
+                                    field.onChange(checked)
+                                    if (!checked) {
+                                        setValue('includeManuallyDownloadedEpisodes', false, {
+                                            shouldDirty: true,
+                                            shouldValidate: true,
+                                        })
+                                    }
+                                }}
                                 onColor="#0ea5e9"
                                 offColor="#d1d5db"
                                 uncheckedIcon={false}
@@ -262,6 +282,45 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                             {limitMode === 'date'
                                 ? 'If enabled, downloaded episodes older than the date shown above will be automatically removed from disk.'
                                 : `If enabled, downloaded episodes outside the latest ${watchedEpisodeCount || 'selected number of'} eligible episodes will be automatically removed from disk.`}
+                        </ReadMore>
+                    </div>
+                </div>
+            )}
+
+            {limitMode !== 'none' && !!deleteOlderEpisodes && (
+                <div className="form-row">
+                    <label htmlFor="include-manually-downloaded">Include Manually Downloaded Episodes</label>
+                    <Controller
+                        control={control}
+                        name="includeManuallyDownloadedEpisodes"
+                        render={({field}) => (
+                            <Switch
+                                id="include-manually-downloaded"
+                                checked={!!field.value}
+                                onChange={(checked) => field.onChange(checked)}
+                                onColor="#0ea5e9"
+                                offColor="#d1d5db"
+                                uncheckedIcon={false}
+                                checkedIcon={false}
+                                aria-invalid={!!errors.includeManuallyDownloadedEpisodes}
+                                aria-describedby={errors.includeManuallyDownloadedEpisodes
+                                    ? 'include-manually-downloaded-errors'
+                                    : 'include-manually-downloaded-help'}
+                            />
+                        )}
+                    />
+                    {errors.includeManuallyDownloadedEpisodes && (
+                        <div id="include-manually-downloaded-errors" className="error" role="alert" aria-live="polite">
+                            {errors.includeManuallyDownloadedEpisodes.message as string}
+                        </div>
+                    )}
+                    <div className="help" id="include-manually-downloaded-help">
+                        <ReadMore summary={<span>Also delete older manually downloaded episodes</span>}>
+                            When enabled, the retention limit also deletes older manually downloaded
+                            episodes from this show that use the same Local Media Profile and selected
+                            episode types, including downloads made before this Download Profile existed.
+                            Downloads inside the retention window and downloads managed by another
+                            Download Profile are kept.
                         </ReadMore>
                     </div>
                 </div>

@@ -20,6 +20,7 @@ class _PodcastDownloadProfileAPIBaseIn(DownloadProfileAPIBaseIn):
     download_episode_count: int = Field(default=0, ge=0)
     download_starting_from: date | None = None
     delete_older_episodes: bool
+    include_manually_downloaded_episodes: bool = False
 
     @model_validator(mode="after")
     def _validate_download_limit(self):
@@ -29,6 +30,14 @@ class _PodcastDownloadProfileAPIBaseIn(DownloadProfileAPIBaseIn):
             self.download_days_in_past > 0 or self.download_episode_count > 0
         ):
             raise ValueError("Download starting from can only be used when Limit by is set to No limits")
+        if self.include_manually_downloaded_episodes and (
+            not self.delete_older_episodes
+            or (self.download_days_in_past == 0 and self.download_episode_count == 0)
+        ):
+            raise ValueError(
+                "Include manually downloaded episodes requires Delete older episodes "
+                "and a rolling download limit"
+            )
         return self
 
 
@@ -59,6 +68,7 @@ class _PodcastDownloadProfileAPIBaseOut(DownloadProfileAPIBaseOut):
     download_episode_count: int
     download_starting_from: date | None
     delete_older_episodes: bool
+    include_manually_downloaded_episodes: bool
 
 
 class PodcastDownloadProfileAPIRead(_PodcastDownloadProfileAPIBaseOut):
