@@ -38,6 +38,7 @@ _PUBLICATION_LOCK_PREFIX = ".wireloft-publish-lock-"
 _PUBLICATION_LOCK_MAGIC = b"WIRELOFT_PUBLICATION_LOCK_V1\0"
 _PORTABLE_PUBLICATION_PREFIX = ".wireloft-publish-"
 _PORTABLE_PUBLICATION_SUFFIX = ".part"
+_REPLACEMENT_STAGING_PREFIX = ".wireloft-replace-"
 _MAX_MARKER_BYTES = 8192
 _STAGING_DIRECTORY_NAME = ".wireloft-staging"
 _STAGING_WORKSPACE_PREFIX = "attempt-"
@@ -473,6 +474,22 @@ def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
     for directory, _subdirs, filenames in os.walk(root, onerror=walk_error, followlinks=False):
         parent = Path(directory)
         for filename in filenames:
+            # A crashed in-place replacement can leave a fully copied hardlink
+            # or sibling file. Its name is internal and uniquely generated; it
+            # is never the only committed copy of an artifact.
+            if filename.startswith(_REPLACEMENT_STAGING_PREFIX) and filename.endswith(".part"):
+                nonce = filename[len(_REPLACEMENT_STAGING_PREFIX):-len(".part")]
+                if len(nonce) == 32 and all(char in "0123456789abcdef" for char in nonce):
+                    staging_file = parent / filename
+                    try:
+                        if stat.S_ISREG(staging_file.lstat().st_mode):
+                            staging_file.unlink()
+                            removed += 1
+                    except FileNotFoundError:
+                        pass
+                    except OSError:
+                        logger.warning("Could not remove abandoned replacement staging '%s'", staging_file, exc_info=True)
+                continue
             if not _is_publication_lock_name(filename):
                 continue
 
@@ -503,7 +520,7 @@ def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
 
     if removed:
         logger.warning(
-            "Removed %s abandoned download publication lock(s) from a previous WireLoft process",
+            "Removed %s abandoned download publication lock(s) or replacement staging file(s)",
             removed,
         )
     return removed

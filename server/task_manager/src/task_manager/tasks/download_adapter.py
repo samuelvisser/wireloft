@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -24,7 +25,12 @@ from config import get_settings
 from dailywire_api.pacing import RequestCancelled, request_context
 from dailywire_downloader import DownloadCancelled
 from dailywire_downloader.capacity import resources
-from dailywire_downloader.coordinator import execute_download_plan
+from dailywire_downloader.coordinator import DownloadExecution, execute_download_plan
+from dailywire_downloader.storage.identity import inspect_artifact
+from dailywire_downloader.storage.replacement import (
+    OwnedFile, PreviousDownload, capture_previous_download,
+    restore_original_filename, retire_superseded_files,
+)
 from dailywire_downloader.lifecycle import (
     DownloadSnapshot,
     DownloadTracker,
@@ -33,10 +39,10 @@ from dailywire_downloader.lifecycle import (
 from dailywire_downloader.transfer_context import transfer_context
 from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.results import TaskResult
-from task_manager.tasks.media_download_operations import (
-    on_media_download_transfer_complete,
-    prepare_media_download_artifact,
-)
+from task_manager.tasks.media_download_operations import on_media_download_transfer_complete
+
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadProgressReporter:
@@ -82,6 +88,79 @@ class DownloadProgressReporter:
             self.progress.set(percent, message, meta=metadata)
 
 
+def _finish_replacement(
+    session: Session,
+    media_download_id: int,
+    previous: PreviousDownload,
+    execution: DownloadExecution,
+    requested_destination: str,
+) -> None:
+    """Retire the previous artifact only after the replacement is committed.
+
+    A separate database commit permits restoring the original filename with
+    atomic same-directory renames without ever making the only committed
+    replacement unavailable if that commit fails.
+    """
+    new_media = execution.result.path
+    new_assets = tuple(asset.path for asset in execution.assets)
+    retained = frozenset((new_media, *new_assets))
+
+    normalized = restore_original_filename(
+        new_media, new_assets,
+        previous=previous, requested_destination=requested_destination,
+    )
+    if normalized is not None:
+        normalized_media, normalized_assets = normalized
+        try:
+            session.rollback()
+            download = session.get(MediaDownloadBase, media_download_id)
+            if download is None or download.file_path != new_media:
+                raise RuntimeError("Download changed while restoring its original filename")
+            identity = inspect_artifact(normalized_media)
+            if (identity.size_bytes, identity.fingerprint) != (
+                execution.identity.size_bytes, execution.identity.fingerprint
+            ):
+                raise RuntimeError("Restored media does not match the completed download")
+            asset_paths = {
+                source.id: target
+                for source, target in zip(execution.assets, normalized_assets, strict=True)
+            }
+            download.file_path = normalized_media
+            download.artifact_stat_dev = identity.stat_dev
+            download.artifact_stat_ino = identity.stat_ino
+            for asset in download.assets:
+                path = asset_paths[asset.asset_key]
+                new_identity = inspect_artifact(path)
+                asset.path = path
+                asset.suffix = Path(path).name[len(Path(normalized_media).stem):]
+                asset.size_bytes = new_identity.size_bytes
+                asset.fingerprint = new_identity.fingerprint
+            record_media_download_history(
+                session, media_download_id, MediaDownloadHistoryAction.ARTIFACT_RENAMED,
+                metadata={"old_path": new_media, "new_path": normalized_media},
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.warning(
+                "Replacement is available at '%s', but could not commit the original filename",
+                new_media, exc_info=True,
+            )
+        else:
+            # The new artifact remains linked at its original published path
+            # until the database's filename change is durable.
+            duplicate = PreviousDownload(
+                OwnedFile(Path(new_media), execution.identity),
+                tuple(OwnedFile(Path(asset.path), asset.identity) for asset in execution.assets),
+            )
+            retire_superseded_files(
+                duplicate, retained_paths=frozenset((normalized_media, *normalized_assets)),
+            )
+            retained = frozenset((normalized_media, *normalized_assets))
+
+    retire_superseded_files(previous, retained_paths=retained)
+
+
 def run_download(
     session: Session, *, media_download_id: int, is_redownload: bool = False,
     prepare_existing_artifact: bool = False, progress=None,
@@ -105,17 +184,36 @@ def run_download(
     reporter = DownloadProgressReporter(progress)
     tracker = DownloadTracker(reporter, progress if callable(progress) else None)
     execution = None
+    previous: PreviousDownload | None = None
+    preserving_artifact = False
     committed = False
     resources.media.configure(get_settings().download_settings.max_concurrent_downloads)
     try:
         with tracker:
-            if prepare_existing_artifact:
+            if prepare_existing_artifact or download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
                 tracker.ensure_active()
                 tracker.preparing("prepare_existing_artifact")
                 current = session.get(MediaDownloadBase, media_download_id)
                 if current is None:
                     raise DownloadCancelled("Media download was deleted before replacement preparation")
-                prepare_media_download_artifact(session, current)
+                preserving_artifact = (
+                    current.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
+                )
+                if preserving_artifact:
+                    previous = capture_previous_download(
+                        current.file_path,
+                        size_bytes=current.artifact_size_bytes,
+                        fingerprint=current.artifact_fingerprint,
+                        assets=tuple(
+                            (asset.path, asset.size_bytes, asset.fingerprint)
+                            for asset in current.assets
+                        ),
+                    )
+                # An attempt owns none of the previous output paths until a new
+                # artifact is committed. Never delete or reset the old artifact
+                # merely because retry work is starting, including Missing or
+                # Corrupted records that may still have a physical file.
+                current.automatic_retry_suppressed = False
                 session.commit()
                 session.expire_all()
 
@@ -129,8 +227,9 @@ def run_download(
                 current = session.get(MediaDownloadBase, media_download_id)
                 if current is None:
                     raise DownloadCancelled("Download was deleted before reserving its destination")
-                current.file_path = destination
-                session.commit()
+                if not preserving_artifact:
+                    current.file_path = destination
+                    session.commit()
 
             execution = execute_download_plan(
                 plan, tracker=tracker, resources=resources,
@@ -187,6 +286,21 @@ def run_download(
                 progress.complete_transactionally(session, result)
             session.commit()
             committed = True
+            if previous is not None:
+                # The new artifact and task result are already committed. A
+                # failed post-commit filename cleanup must not turn a successful
+                # download into a failed TaskRun or revoke its replacement.
+                try:
+                    _finish_replacement(
+                        session, media_download_id, previous, execution,
+                        plan.requested_destination,
+                    )
+                except Exception:
+                    session.rollback()
+                    logger.exception(
+                        "Replacement was committed, but old-file cleanup failed for download %s",
+                        media_download_id,
+                    )
         return result
     except BaseException as exc:
         tracker.cancel(user_requested=isinstance(exc, (DownloadCancelled, RequestCancelled)))
