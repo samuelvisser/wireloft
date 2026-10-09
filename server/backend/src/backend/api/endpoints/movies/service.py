@@ -3,13 +3,14 @@ from __future__ import annotations
 from typing import Optional
 
 from fastapi import HTTPException
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from backend.api.endpoints.movie_extras.service import create_movie_extra
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.movie import *
 from backend.db.models.media_download import MediaDownloadBase
-from backend.db.models.media_item import Movie
+from backend.db.models.media_item import Movie, MovieExtra
 from backend.integrations.tmdb import lookup_movie_release_metadata
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.types.media_types import MediaType
@@ -55,12 +56,22 @@ def request_movie_redownload(s: Session, movie_slug: str) -> dict[str, bool | in
     if movie is None:
         raise HTTPException(status_code=404, detail="Movie not found")
 
-    media_item_ids = [movie.id, *(extra.id for extra in movie.movie_extras)]
+    movie_extra_ids = select(MovieExtra.id).where(
+        MovieExtra.movie_id == movie.id
+    )
     downloads = tuple(
         s.query(MediaDownloadBase)
         .filter(
-            MediaDownloadBase.media_item_id.in_(media_item_ids),
-            MediaDownloadBase.type.in_((MediaType.MOVIE.value, MediaType.MOVIE_EXTRA.value)),
+            or_(
+                and_(
+                    MediaDownloadBase.type == MediaType.MOVIE.value,
+                    MediaDownloadBase.media_item_id == movie.id,
+                ),
+                and_(
+                    MediaDownloadBase.type == MediaType.MOVIE_EXTRA.value,
+                    MediaDownloadBase.media_item_id.in_(movie_extra_ids),
+                ),
+            ),
             MediaDownloadBase.artifact_status != MediaDownloadArtifactStatus.ABSENT.value,
         )
         .order_by(MediaDownloadBase.id.asc())

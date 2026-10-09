@@ -1,10 +1,17 @@
 from __future__ import annotations
 
-from random import choice
-
-from sqlalchemy import and_, func, literal, or_, select, union_all
+import hashlib
+from sqlalchemy import and_, case, func, literal, or_, select, union_all
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
+from backend.api.pagination import (
+    InvalidCursorError,
+    KeysetField,
+    cursor_key_values,
+    decode_cursor,
+    encode_cursor,
+    keyset_after,
+)
 from backend.api.models.local_media_profile import (
     LocalMediaProfileTemplatePreview,
     LocalMediaProfileTemplatePreviewResult,
@@ -203,14 +210,78 @@ def _show_source_anchor_offset(
     return max(0, position - limit // 2)
 
 
+def _modified_timestamp(model):
+    return func.max(case(
+        (model.updated_at > model.created_at, model.updated_at),
+        else_=None,
+    ))
+
+
+def _show_source_revision(
+    session: Session,
+    show_scope: ShowLocalMediaProfileScope,
+) -> str:
+    episode_changed, show_changed, season_changed = session.execute(
+        select(
+            _modified_timestamp(Episode),
+            _modified_timestamp(Show),
+            _modified_timestamp(Season),
+        )
+        .select_from(Episode)
+        .join(Episode.show)
+        .join(Episode.season)
+        .where(Show.type.in_(_show_type_values(show_scope)))
+    ).one()
+    return "|".join(
+        value.isoformat() if value is not None else ""
+        for value in (episode_changed, show_changed, season_changed)
+    )
+
+
+def _movie_source_revision(session: Session) -> str:
+    movie_changed = session.scalar(
+        select(_modified_timestamp(Movie)).select_from(Movie)
+    )
+    extra_changed = session.scalar(
+        select(_modified_timestamp(MovieExtra)).select_from(MovieExtra)
+    )
+
+    # MovieExtraSource predates the common created/updated timestamp mixin.
+    # Fingerprint only the fields that affect source ordering/search so metadata
+    # edits are still detected. Inserts/deletes may conservatively change this
+    # revision; that restarts from the head rather than risking a mixed order.
+    source_rows = session.execute(
+        select(
+            MovieExtraSource.id,
+            MovieExtraSource.slug,
+            MovieExtraSource.title,
+        ).order_by(MovieExtraSource.id)
+    ).all()
+    source_fingerprint = hashlib.sha256(
+        "\n".join(
+            f"{row.id}\0{row.slug}\0{row.title}"
+            for row in source_rows
+        ).encode("utf-8")
+    ).hexdigest()[:16]
+
+    return "|".join([
+        movie_changed.isoformat() if movie_changed is not None else "",
+        extra_changed.isoformat() if extra_changed is not None else "",
+        source_fingerprint,
+    ])
+
+
 def _show_source_page(
     session: Session,
     show_scope: ShowLocalMediaProfileScope,
     *,
     search: str | None,
-    offset: int,
+    cursor: str | None,
     limit: int,
-) -> tuple[list[LocalMediaProfileTemplateSource], bool]:
+    anchor_offset: int | None = None,
+) -> tuple[list[LocalMediaProfileTemplateSource], str | None, str | None, str]:
+    search_text = (search or "").strip()
+    revision = _show_source_revision(session, show_scope)
     relevance = search_relevance_score(
         search,
         Episode.title,
@@ -222,17 +293,51 @@ def _show_source_page(
         Show.author_name,
         Season.slug,
     )
-    ordering = [
-        func.lower(Show.title),
-        Show.id,
-        Episode.index,
-        Episode.id,
+    relevance_expr = relevance if relevance is not None else literal(0)
+    group_sort = func.lower(Show.title)
+
+    natural_fields = [
+        (relevance_expr, True),
+        (group_sort, False),
+        (Show.id, False),
+        (Episode.index, False),
+        (Episode.id, False),
+    ] if relevance is not None else [
+        (group_sort, False),
+        (Show.id, False),
+        (Episode.index, False),
+        (Episode.id, False),
     ]
-    if relevance is not None:
-        ordering.insert(0, relevance.desc())
+
+    direction = "next"
+    cursor_values: list[object] | None = None
+    cursor_applied = False
+    if cursor:
+        try:
+            values = decode_cursor(cursor)
+            if (
+                values.get("kind") != "template-show"
+                or values.get("scope") != show_scope.value
+                or values.get("search") != search_text
+                or values.get("direction") not in {"next", "previous"}
+            ):
+                raise InvalidCursorError("Cursor does not match this template source collection")
+            if values.get("revision") == revision:
+                cursor_values = cursor_key_values(
+                    values,
+                    length=len(natural_fields),
+                )
+                direction = values["direction"]
+                cursor_applied = True
+        except InvalidCursorError as exc:
+            raise ValueError(str(exc)) from exc
 
     query = (
-        select(Episode)
+        select(
+            Episode,
+            relevance_expr.label("relevance"),
+            group_sort.label("group_sort"),
+        )
         .join(Episode.show)
         .join(Episode.season)
         .options(contains_eager(Episode.show), contains_eager(Episode.season))
@@ -248,14 +353,79 @@ def _show_source_page(
             Season.name,
             Season.slug,
         ))
-        .order_by(*ordering)
-        .offset(offset)
-        .limit(limit + 1)
     )
-    episodes = list(session.scalars(query).unique().all())
-    has_more = len(episodes) > limit
-    episodes = episodes[:limit]
-    return [_show_template_source(episode) for episode in episodes], has_more
+
+    query_fields = natural_fields
+    if direction == "previous":
+        query_fields = [(expr, not descending) for expr, descending in natural_fields]
+
+    if cursor_values is not None:
+        query = query.where(keyset_after([
+            KeysetField(expr, value, descending=descending)
+            for (expr, descending), value in zip(query_fields, cursor_values, strict=True)
+        ]))
+
+    ordering = [
+        expr.desc() if descending else expr.asc()
+        for expr, descending in query_fields
+    ]
+    query = query.order_by(*ordering)
+    if cursor is None and anchor_offset:
+        query = query.offset(anchor_offset)
+
+    raw_rows = session.execute(query.limit(limit + 1)).unique().all()
+    has_extra = len(raw_rows) > limit
+    raw_rows = raw_rows[:limit]
+
+    has_previous = (
+        has_extra if direction == "previous"
+        else cursor_applied or bool(anchor_offset)
+    )
+    has_next = (
+        True if direction == "previous" and cursor_applied
+        else has_extra
+    )
+    if direction == "previous":
+        raw_rows.reverse()
+
+    def row_key(row) -> list[object]:
+        episode = row[0]
+        values: list[object] = []
+        if relevance is not None:
+            values.append(int(row._mapping["relevance"]))
+        values.extend([
+            row._mapping["group_sort"],
+            episode.show_id,
+            episode.index,
+            episode.id,
+        ])
+        return values
+
+    previous_cursor = None
+    next_cursor = None
+    if has_previous and raw_rows:
+        previous_cursor = encode_cursor({
+            "kind": "template-show",
+            "scope": show_scope.value,
+            "search": search_text,
+            "direction": "previous",
+            "revision": revision,
+            "key": row_key(raw_rows[0]),
+        })
+    if has_next and raw_rows:
+        next_cursor = encode_cursor({
+            "kind": "template-show",
+            "scope": show_scope.value,
+            "search": search_text,
+            "direction": "next",
+            "revision": revision,
+            "key": row_key(raw_rows[-1]),
+        })
+
+    return [
+        _show_template_source(row[0])
+        for row in raw_rows
+    ], next_cursor, previous_cursor, revision
 
 
 def get_random_show_template_source(
@@ -263,28 +433,25 @@ def get_random_show_template_source(
     show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
 ) -> LocalMediaProfileTemplateSource | None:
     """Choose an example uniformly by Show, then uniformly within that Show."""
-    show_ids = list(session.scalars(
+    show_id = session.scalar(
         select(Episode.show_id)
         .join(Episode.show)
         .join(Episode.season)
         .where(Show.type.in_(_show_type_values(show_scope)))
-        .distinct()
-        .order_by(Episode.show_id)
-    ).all())
-    if not show_ids:
+        .group_by(Episode.show_id)
+        .order_by(func.random())
+        .limit(1)
+    )
+    if show_id is None:
         return None
 
-    show_id = choice(show_ids)
-    episode_ids = list(session.scalars(
-        select(Episode.id)
+    episode = session.scalar(
+        select(Episode)
         .join(Episode.season)
         .where(Episode.show_id == show_id)
-        .order_by(Episode.id)
-    ).all())
-    if not episode_ids:
-        return None
-
-    episode = session.get(Episode, choice(episode_ids))
+        .order_by(func.random())
+        .limit(1)
+    )
     return _show_template_source(episode) if episode is not None else None
 
 
@@ -292,9 +459,11 @@ def _movie_source_page(
     session: Session,
     *,
     search: str | None,
-    offset: int,
+    cursor: str | None,
     limit: int,
-) -> tuple[list[LocalMediaProfileTemplateSource], bool]:
+) -> tuple[list[LocalMediaProfileTemplateSource], str | None, str | None, str]:
+    search_text = (search or "").strip()
+    revision = _movie_source_revision(session)
     movie_relevance = search_relevance_score(
         search,
         Movie.title,
@@ -358,31 +527,109 @@ def _movie_source_page(
         ))
     )
     candidates = union_all(movie_query, extra_query).subquery()
-    ordering = [
-        candidates.c.group_sort,
+
+    natural_fields = [
+        (candidates.c.relevance, True),
+        (candidates.c.group_sort, False),
+        (candidates.c.movie_id, False),
+        (candidates.c.kind_sort, False),
+        (candidates.c.item_sort, False),
+        (candidates.c.item_id, False),
+    ] if search_text else [
+        (candidates.c.group_sort, False),
+        (candidates.c.movie_id, False),
+        (candidates.c.kind_sort, False),
+        (candidates.c.item_sort, False),
+        (candidates.c.item_id, False),
+    ]
+
+    direction = "next"
+    cursor_values: list[object] | None = None
+    cursor_applied = False
+    if cursor:
+        try:
+            values = decode_cursor(cursor)
+            if (
+                values.get("kind") != "template-movie"
+                or values.get("search") != search_text
+                or values.get("direction") not in {"next", "previous"}
+            ):
+                raise InvalidCursorError("Cursor does not match this template source collection")
+            if values.get("revision") == revision:
+                cursor_values = cursor_key_values(
+                    values,
+                    length=len(natural_fields),
+                )
+                direction = values["direction"]
+                cursor_applied = True
+        except InvalidCursorError as exc:
+            raise ValueError(str(exc)) from exc
+
+    query_fields = natural_fields
+    if direction == "previous":
+        query_fields = [(expr, not descending) for expr, descending in natural_fields]
+
+    stmt = select(
+        candidates.c.kind,
+        candidates.c.item_id,
         candidates.c.movie_id,
+        candidates.c.relevance,
+        candidates.c.group_sort,
         candidates.c.kind_sort,
         candidates.c.item_sort,
-        candidates.c.item_id,
-    ]
-    if (search or "").strip():
-        ordering.insert(0, candidates.c.relevance.desc())
+    )
+    if cursor_values is not None:
+        stmt = stmt.where(keyset_after([
+            KeysetField(expr, value, descending=descending)
+            for (expr, descending), value in zip(query_fields, cursor_values, strict=True)
+        ]))
+    stmt = stmt.order_by(*[
+        expr.desc() if descending else expr.asc()
+        for expr, descending in query_fields
+    ])
 
-    rows = session.execute(
-        select(
-            candidates.c.kind,
-            candidates.c.item_id,
-            candidates.c.movie_id,
-        )
-        .order_by(*ordering)
-        .offset(offset)
-        .limit(limit + 1)
-    ).all()
-    has_more = len(rows) > limit
-    rows = rows[:limit]
+    raw_rows = session.execute(stmt.limit(limit + 1)).all()
+    has_extra = len(raw_rows) > limit
+    raw_rows = raw_rows[:limit]
+    has_previous = has_extra if direction == "previous" else cursor_applied
+    has_next = True if direction == "previous" and cursor_applied else has_extra
+    if direction == "previous":
+        raw_rows.reverse()
 
-    movie_ids = {row.movie_id for row in rows}
-    extra_ids = {row.item_id for row in rows if row.kind == "movie-extra"}
+    def row_key(row) -> list[object]:
+        values: list[object] = []
+        if search_text:
+            values.append(int(row.relevance))
+        values.extend([
+            row.group_sort,
+            row.movie_id,
+            row.kind_sort,
+            row.item_sort,
+            row.item_id,
+        ])
+        return values
+
+    previous_cursor = None
+    next_cursor = None
+    if has_previous and raw_rows:
+        previous_cursor = encode_cursor({
+            "kind": "template-movie",
+            "search": search_text,
+            "direction": "previous",
+            "revision": revision,
+            "key": row_key(raw_rows[0]),
+        })
+    if has_next and raw_rows:
+        next_cursor = encode_cursor({
+            "kind": "template-movie",
+            "search": search_text,
+            "direction": "next",
+            "revision": revision,
+            "key": row_key(raw_rows[-1]),
+        })
+
+    movie_ids = {row.movie_id for row in raw_rows}
+    extra_ids = {row.item_id for row in raw_rows if row.kind == "movie-extra"}
     movies = {
         movie.id: movie
         for movie in session.scalars(
@@ -399,7 +646,7 @@ def _movie_source_page(
     } if extra_ids else {}
 
     sources: list[LocalMediaProfileTemplateSource] = []
-    for row in rows:
+    for row in raw_rows:
         movie = movies.get(row.movie_id)
         if movie is None:
             continue
@@ -420,7 +667,7 @@ def _movie_source_page(
             values=movie_output_template_values(movie, extra),
         ))
 
-    return sources, has_more
+    return sources, next_cursor, previous_cursor, revision
 
 
 def get_output_template_source_page(
@@ -429,35 +676,35 @@ def get_output_template_source_page(
     show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH,
     *,
     search: str | None = None,
-    offset: int = 0,
+    cursor: str | None = None,
     limit: int = 30,
     anchor_source_id: str | None = None,
 ) -> LocalMediaProfileTemplateSourcePage:
-    """Search every locally stored media item applicable to a Local Media Profile."""
+    """Search locally stored media with stable bidirectional cursor pagination."""
     if profile_type == LocalMediaProfileType.SHOW:
-        if anchor_source_id and not (search or "").strip():
+        anchor_offset = None
+        if cursor is None and anchor_source_id and not (search or "").strip():
             anchor_offset = _show_source_anchor_offset(
                 session,
                 show_scope,
                 anchor_source_id,
                 limit=limit,
             )
-            if anchor_offset is not None:
-                offset = anchor_offset
-        sources, has_more = _show_source_page(
+        sources, next_cursor, previous_cursor, revision = _show_source_page(
             session,
             show_scope,
             search=search,
-            offset=offset,
+            cursor=cursor,
             limit=limit,
+            anchor_offset=anchor_offset,
         )
         fallback_values = _EXAMPLE_SHOW_VALUES
         fallback_label = "Example show episode"
     elif profile_type == LocalMediaProfileType.MOVIE:
-        sources, has_more = _movie_source_page(
+        sources, next_cursor, previous_cursor, revision = _movie_source_page(
             session,
             search=search,
-            offset=offset,
+            cursor=cursor,
             limit=limit,
         )
         fallback_values = _EXAMPLE_MOVIE_VALUES
@@ -465,7 +712,7 @@ def get_output_template_source_page(
     else:
         raise ValueError("Template examples are only available for Show and Movie profiles")
 
-    if not sources and offset == 0 and not (search or "").strip():
+    if not sources and cursor is None and not (search or "").strip():
         sources = [LocalMediaProfileTemplateSource(
             id=f"example:{profile_type.value}",
             label=fallback_label,
@@ -475,9 +722,10 @@ def get_output_template_source_page(
 
     return LocalMediaProfileTemplateSourcePage(
         items=sources,
-        offset=offset,
         limit=limit,
-        has_more=has_more,
+        next_cursor=next_cursor,
+        previous_cursor=previous_cursor,
+        revision=revision,
     )
 
 

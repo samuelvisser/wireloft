@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from backend.db.models import DownloadProfileBase, LocalMediaProfileBase, MediaDownloadBase
@@ -36,17 +36,15 @@ def request_local_media_profile_download_delete(
 
     disabled_download_profiles = 0
     if download_ids:
-        download_profiles = list(
-            s.query(DownloadProfileBase)
-            .filter(
+        result = s.execute(
+            update(DownloadProfileBase)
+            .where(
                 DownloadProfileBase.local_media_profile_id == profile.id,
                 DownloadProfileBase.enable_profile.is_(True),
             )
-            .all()
+            .values(enable_profile=False)
         )
-        for download_profile in download_profiles:
-            download_profile.enable_profile = False
-        disabled_download_profiles = len(download_profiles)
+        disabled_download_profiles = int(result.rowcount or 0)
 
     operation = create_operation(
         s,

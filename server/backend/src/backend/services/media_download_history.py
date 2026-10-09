@@ -95,18 +95,18 @@ def record_media_download_operation_history_once(
     action_value = action.value if isinstance(action, MediaDownloadHistoryAction) else str(action)
     task_run_id = _history_task_run_id(metadata)
     if task_run_id is not None:
-        recent = session.scalars(
+        existing = session.scalar(
             select(MediaDownloadHistory)
             .where(
                 MediaDownloadHistory.media_download_id == media_download_id,
                 MediaDownloadHistory.action == action_value,
+                MediaDownloadHistory.event_metadata["task_run_id"].as_integer() == task_run_id,
             )
             .order_by(MediaDownloadHistory.id.desc())
-            .limit(25)
+            .limit(1)
         )
-        for entry in recent:
-            if _history_task_run_id(entry.event_metadata) == task_run_id:
-                return entry
+        if existing is not None:
+            return existing
 
     merged_metadata = dict(metadata or {})
     if correlated_ids and not _history_operation_ids(merged_metadata):

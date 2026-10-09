@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 from fastapi import HTTPException
@@ -14,11 +15,20 @@ from sqlalchemy.orm import (
     with_polymorphic,
 )
 
+from backend.api.pagination import (
+    InvalidCursorError,
+    KeysetField,
+    cursor_key_values,
+    decode_cursor,
+    encode_cursor,
+    keyset_after,
+)
 from backend.api.models.media_download import (
     EpisodeDownloadAPICreate,
     MediaDownloadAPIRead,
     MediaDownloadAPIReadView,
     MediaDownloadAPIUpdate,
+    MediaDownloadPageRead,
     MovieDownloadAPICreate,
 )
 from backend.db.model_mapping import update_database_fields
@@ -43,20 +53,21 @@ from backend.types.local_media_profile_types import LocalMediaProfileType
 from backend.types.media_types import MediaType
 from dailywire_downloader.storage.artifacts import remove_download_artifacts
 from backend.services.episode_download_delay import episode_download_delay_passed
+from backend.services.media_download_collection import (
+    MediaDownloadCollectionQuery,
+    latest_download_runs,
+    media_download_collection_revision,
+    media_download_queue_positions,
+)
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from dailywire_api.records import DwMovieRecord
-from task_manager.scheduler.db import TaskDefinition, TaskRun
-from task_manager.scheduler.types import ResourceType
+from task_manager.scheduler.db import TaskRun
 from task_manager.tasks.media_download_operations import (
     get_active_media_download_operation,
-    get_media_download_queue_positions,
     prepare_media_download_artifact,
 )
 from task_manager.tasks.workers.file_watcher.service import resolve_media_download_file
-
-
-_DOWNLOAD_TASK_KEYS = ("download_episode", "download_movie")
 
 
 def _resolve_episode_download_path(
@@ -76,27 +87,6 @@ def _resolve_episode_download_path(
 def get_media_downloads_list(s: Session) -> list[MediaDownloadAPIRead]:
     items = s.query(MediaDownloadBase).order_by(MediaDownloadBase.id).all()
     return [MediaDownloadAPIRead.model_validate(it) for it in items]
-
-
-def _latest_download_runs(s: Session, media_download_ids: list[int]) -> dict[int, TaskRun]:
-    if not media_download_ids:
-        return {}
-
-    rows = s.scalars(
-        select(TaskRun)
-        .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
-        .where(
-            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
-            TaskRun.resource_id.in_(media_download_ids),
-            TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
-        )
-        .order_by(TaskRun.id.desc())
-    )
-    latest: dict[int, TaskRun] = {}
-    for run in rows:
-        if run.resource_id is not None:
-            latest.setdefault(run.resource_id, run)
-    return latest
 
 
 @dataclass(frozen=True)
@@ -250,6 +240,7 @@ def _media_download_view_statement(
         show_slug: Optional[str],
         statuses: Optional[list[str]],
         limit: Optional[int],
+        ids: Optional[list[int]] = None,
 ):
     """Build the scoped download query while returning complete ORM models."""
     download = with_polymorphic(MediaDownloadBase, "*")
@@ -270,6 +261,9 @@ def _media_download_view_statement(
 
     if statuses:
         stmt = stmt.where(download.artifact_status.in_(statuses))
+
+    if ids is not None:
+        stmt = stmt.where(download.id.in_(ids))
 
     if episode_slug is not None:
         episode_ids = select(Episode.id).where(Episode.slug == episode_slug)
@@ -299,6 +293,36 @@ def _media_download_view_statement(
     return stmt
 
 
+def _build_media_download_views(
+        s: Session,
+        downloads: list[MediaDownloadBase],
+        *,
+        latest_runs: dict[int, TaskRun] | None = None,
+        queue_positions: dict[int, int] | None = None,
+) -> list[MediaDownloadAPIReadView]:
+    media_by_id = _load_media_items_for_view(s, downloads)
+    if latest_runs is None:
+        latest_runs = latest_download_runs(s, [download.id for download in downloads])
+    queue_positions = (
+        queue_positions
+        if queue_positions is not None
+        else media_download_queue_positions(s,
+            [download.id for download in downloads],
+        )
+    )
+    return [
+        MediaDownloadAPIReadView.model_validate(
+            _MediaDownloadViewSource(
+                download=download,
+                media=media_by_id.get(download.media_item_id),
+                latest_run=latest_runs.get(download.id),
+                queue_position=queue_positions.get(download.id),
+            )
+        )
+        for download in downloads
+    ]
+
+
 def get_media_downloads_view(
         s: Session,
         *,
@@ -316,20 +340,176 @@ def get_media_downloads_view(
         statuses=statuses,
         limit=limit,
     )))
-    media_by_id = _load_media_items_for_view(s, downloads)
-    latest_runs = _latest_download_runs(s, [download.id for download in downloads])
-    queue_positions = get_media_download_queue_positions(s)
+    return _build_media_download_views(s, downloads)
 
+
+def get_media_downloads_page(
+        s: Session,
+        *,
+        statuses: Optional[list[str]] = None,
+        order: str = "workflow",
+        cursor: str | None = None,
+        limit: int = 50,
+) -> MediaDownloadPageRead:
+    """Return one SQL-filtered cursor page in the requested UI ordering."""
+    collection = MediaDownloadCollectionQuery.build()
+    source = collection.source
+    requested_statuses = sorted(set(statuses or []))
+    revision = media_download_collection_revision(
+        s, collection=collection, statuses=requested_statuses, order=order,
+    )
+
+    after = None
+    cursor_id: int | None = None
+    if cursor:
+        try:
+            values = decode_cursor(cursor)
+            if (
+                values.get("kind") != "media-download"
+                or values.get("order") != order
+                or values.get("statuses") != requested_statuses
+            ):
+                raise InvalidCursorError("Cursor does not match this download collection")
+            if values.get("revision") == revision:
+                cursor_value = cursor_key_values(values, length=1)[0]
+                if isinstance(cursor_value, int) and not isinstance(cursor_value, bool):
+                    cursor_id = cursor_value
+                else:
+                    raise InvalidCursorError("Invalid download cursor key")
+        except InvalidCursorError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    if cursor_id is not None:
+        # The revision checks membership and relative order, not timestamps.
+        # Resolve the boundary's *current* sort keys so continuation stays
+        # correct when a timestamp changes without moving the row.
+        anchor = s.execute(collection.cursor_anchor_statement(
+            media_download_id=cursor_id,
+            statuses=requested_statuses,
+            order=order,
+        )).mappings().first()
+        if anchor is None:
+            raise HTTPException(status_code=422, detail="Invalid download cursor key")
+        if order == "recent":
+            after = keyset_after([
+                KeysetField(source.c.recent_at, anchor["recent_at"], descending=True),
+                KeysetField(source.c.id, cursor_id, descending=True),
+            ])
+        else:
+            after = keyset_after([
+                KeysetField(source.c.workflow_bucket, anchor["workflow_bucket"]),
+                KeysetField(source.c.workflow_queue, anchor["workflow_queue"]),
+                KeysetField(source.c.workflow_active_started_at, anchor["workflow_active_started_at"]),
+                KeysetField(
+                    source.c.workflow_terminal_at,
+                    anchor["workflow_terminal_at"],
+                    descending=True,
+                ),
+                KeysetField(source.c.id, cursor_id, descending=True),
+            ])
+
+    page_rows = list(s.execute(
+        collection.page_statement(
+            statuses=requested_statuses,
+            order=order,
+            after=after,
+            limit=limit,
+        )
+    ).mappings())
+    has_more = len(page_rows) > limit
+    page_rows = page_rows[:limit]
+    selected_ids = [int(row["id"]) for row in page_rows]
+
+    status_counts = {
+        str(status): int(count)
+        for status, count in s.execute(collection.facets_statement())
+    }
+
+    total, retry_count, cancel_count, delete_count = s.execute(
+        collection.summary_statement(statuses=requested_statuses)
+    ).one()
+    action_counts = {
+        "retry": int(retry_count),
+        "cancel": int(cancel_count),
+        "delete-unavailable": int(delete_count),
+    }
+
+    if selected_ids:
+        selected_downloads_by_id = {
+            download.id: download
+            for download in s.scalars(
+                _media_download_view_statement(
+                    episode_slug=None,
+                    movie_slug=None,
+                    show_slug=None,
+                    statuses=None,
+                    limit=None,
+                    ids=selected_ids,
+                )
+            )
+        }
+        selected_downloads = [
+            selected_downloads_by_id[media_download_id]
+            for media_download_id in selected_ids
+            if media_download_id in selected_downloads_by_id
+        ]
+        latest_runs = latest_download_runs(s, selected_ids)
+        queue_positions = {
+            int(row["id"]): int(row["queue_position"])
+            for row in page_rows
+            if row["queue_position"] is not None
+        }
+    else:
+        selected_downloads = []
+        latest_runs = {}
+        queue_positions = {}
+
+    next_cursor = None
+    if has_more and page_rows:
+        last = page_rows[-1]
+        # Re-evaluate ordering keys on continuation, so store only the row ID.
+        cursor_key = [int(last["id"])]
+        next_cursor = encode_cursor({
+            "kind": "media-download",
+            "order": order,
+            "statuses": requested_statuses,
+            "revision": revision,
+            "key": cursor_key,
+        })
+
+    return MediaDownloadPageRead(
+        items=_build_media_download_views(
+            s,
+            selected_downloads,
+            latest_runs=latest_runs,
+            queue_positions=queue_positions,
+        ),
+        total=int(total),
+        limit=limit,
+        next_cursor=next_cursor,
+        revision=revision,
+        facets=status_counts,
+        actions=action_counts,
+    )
+
+
+def get_media_download_bulk_action_ids(
+        s: Session,
+        *,
+        statuses: Optional[list[str]],
+        action: str,
+) -> list[int]:
+    """Return every row in the filtered collection that supports one bulk action"""
+    requested_statuses = sorted(set(statuses or []))
+    collection = MediaDownloadCollectionQuery.build()
     return [
-        MediaDownloadAPIReadView.model_validate(
-            _MediaDownloadViewSource(
-                download=download,
-                media=media_by_id.get(download.media_item_id),
-                latest_run=latest_runs.get(download.id),
-                queue_position=queue_positions.get(download.id),
+        int(media_download_id)
+        for media_download_id in s.scalars(
+            collection.bulk_action_ids_statement(
+                statuses=requested_statuses,
+                action=action,
             )
         )
-        for download in downloads
     ]
 
 

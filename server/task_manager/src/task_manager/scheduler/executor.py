@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.exc import OperationalError
 
 from backend.db.core import begin_write_transaction, get_session
@@ -578,10 +578,26 @@ def _execution_request_priority(operation_ids: tuple[str, ...]):
         return "background"
     session = get_session()
     try:
-        operations = list(session.scalars(select(TaskOperation).where(TaskOperation.id.in_(operation_ids))))
-        if any((item.context or {}).get("request_priority") == "bulk" or "bulk" in item.kind or "redownload" in item.kind for item in operations):
+        bulk_priority = or_(
+            TaskOperation.context["request_priority"].as_string() == "bulk",
+            TaskOperation.kind.contains("bulk"),
+            TaskOperation.kind.contains("redownload"),
+        )
+        bulk, interactive = session.execute(
+            select(
+                func.coalesce(
+                    func.max(case((bulk_priority, 1), else_=0)),
+                    0,
+                ),
+                func.coalesce(
+                    func.max(case((TaskOperation.source == "UI", 1), else_=0)),
+                    0,
+                ),
+            ).where(TaskOperation.id.in_(operation_ids))
+        ).one()
+        if bulk:
             return "bulk"
-        return "interactive" if any(item.source == "UI" for item in operations) else "background"
+        return "interactive" if interactive else "background"
     finally:
         session.close()
 

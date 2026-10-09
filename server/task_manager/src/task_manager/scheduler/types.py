@@ -1,7 +1,7 @@
 from enum import Enum, StrEnum
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     SCHEDULED = "SCHEDULED"
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
@@ -11,7 +11,7 @@ class TaskStatus(str, Enum):
     RETRY_SCHEDULED = "RETRY_SCHEDULED"
 
 
-class OperationStatus(str, Enum):
+class OperationStatus(StrEnum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
     WAITING = "WAITING"
@@ -27,7 +27,7 @@ class OperationSource(StrEnum):
     SYSTEM = "SYSTEM"
 
 
-class ResourceType(str, Enum):
+class ResourceType(StrEnum):
     SYSTEM = "system"
     SHOW = "show"
     SEASON = "season"
@@ -40,6 +40,6 @@ class ResourceType(str, Enum):
     LOCAL_MEDIA_PROFILE = "local_media_profile"
 
 
-class OperationDependencyCancelPolicy(str, Enum):
+class OperationDependencyCancelPolicy(StrEnum):
     DETACH = "detach"
     CANCEL_IF_EXCLUSIVE = "cancel_if_exclusive"

@@ -18,12 +18,15 @@ from .metadata import ensure_utc
 
 
 def pending_episodes_for_show(s: Session, show_id: int) -> list[Episode]:
+    """Load at most enough rows to decide whether one pending episode exists."""
     return list(
         s.scalars(
-            select(Episode).where(
+            select(Episode)
+            .where(
                 Episode.show_id == show_id,
                 Episode.publish_status.in_(PENDING_EPISODE_PUBLISH_STATUSES),
             )
+            .limit(2)
         )
     )
 
@@ -96,9 +99,13 @@ def reconcile_single_pending_episode_slug(
     if any(record.slug == local.slug for record in remote_records):
         return None
 
-    known_slugs = set(
-        s.scalars(select(Episode.slug).where(Episode.show_id == show.id))
-    )
+    candidate_slugs = {record.slug for record in remote_records}
+    known_slugs = set(s.scalars(
+        select(Episode.slug).where(
+            Episode.show_id == show.id,
+            Episode.slug.in_(candidate_slugs),
+        )
+    ))
     matches = [
         record
         for record in remote_records

@@ -6,18 +6,16 @@ from backend.db.models import Show, Season, Episode
 
 
 def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
-    # In case we're only interested in one show, get it from the database
-    show: Optional[Show] = None
+    """Resolve an explicit Show scope, selecting only what we need"""
     if show_slug:
-        show = s.execute(select(Show).where(Show.slug == show_slug)).scalar_one_or_none()
-    elif show_id is not None:
-        show = s.get(Show, show_id)
+        show = s.scalar(select(Show).where(Show.slug == show_slug))
+        return [show] if show is not None else []
 
-    if show is not None:
-        shows: Sequence[Show] = [show]
-    else:
-        shows: Sequence[Show] = s.execute(select(Show)).scalars().all()
-    return shows
+    if show_id is not None:
+        show = s.get(Show, show_id)
+        return [show] if show is not None else []
+
+    return s.scalars(select(Show)).all()
 
 
 def get_season_from_list_by_id(season_list: list[Season], season_id: int) -> Optional[Season]:

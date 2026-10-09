@@ -58,6 +58,7 @@ def disable_download_profiles_for_episode_scope(
     statement = select(DownloadProfileBase).where(
         DownloadProfileBase.show_id == scope.show.id,
         DownloadProfileBase.local_media_profile_id.in_(local_media_profile_ids),
+        DownloadProfileBase.enable_profile.is_(True),
     )
     if s.get_bind().dialect.name == "sqlite":
         # SQLite has a database-wide writer lock. Acquire it before selecting the
@@ -74,8 +75,6 @@ def disable_download_profiles_for_episode_scope(
     ))
     disabled = 0
     for profile in profiles:
-        if not profile.enable_profile:
-            continue
         profile.enable_profile = False
         disabled += 1
         queue_event(s, "download_profile.updated", {

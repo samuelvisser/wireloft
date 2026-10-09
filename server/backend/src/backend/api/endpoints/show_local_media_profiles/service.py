@@ -19,7 +19,7 @@ from backend.db.models import CustomIndexState, Show, ShowLocalMediaProfile
 from backend.services.show_assets import request_profile_show_assets
 from backend.services.custom_indexes import (
     compare_custom_index_assignments,
-    profile_applies_to_show,
+    profile_show_scope_filter,
     profile_uses_custom_indexes,
     remove_profile_custom_index_state,
     request_custom_index_reconciliation,
@@ -44,10 +44,9 @@ def _queue_custom_index_management(
     existing = set(s.scalars(select(CustomIndexState.show_id).where(
         CustomIndexState.local_media_profile_id == profile.id,
     )))
-    show_ids = tuple(sorted(existing | {
-        show.id for show in s.scalars(select(Show))
-        if profile_applies_to_show(profile, show)
-    }))
+    show_ids = tuple(sorted(existing | set(s.scalars(
+        select(Show.id).where(profile_show_scope_filter(profile))
+    ))))
     if not show_ids:
         if rename_files:
             from backend.api.endpoints.local_media_profiles.file_rename import request_show_local_media_profile_file_rename

@@ -13,7 +13,7 @@ import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgr
 import ProgressButton from '../components/common/ProgressButton'
 import {frontendOperationDefinitions} from '../lib/operationDefinitions'
 import {useControlOperation, useStartOperation} from '../lib/operations'
-import {useMediaDownloadsView} from '../lib/queries'
+import {applyMediaDownloadQueuePositions, useMediaDownloadsCollection} from '../lib/queries'
 import {useFilterChipPress} from '../lib/useFilterChipPress'
 import {faIcon} from '../icons/faIcon'
 import {
@@ -22,6 +22,7 @@ import {
     DownloadStatusFilterOption,
     downloadStatusFilterFromSearchParams,
     downloadStatusFiltersToSearchParams,
+    downloadStatusesForApi,
 } from '../lib/downloadStatusFilters'
 import {MediaDownloadStatusReg} from '../types/media_download'
 import {MediaDownloadViewRead} from '../types/schemas/media_download'
@@ -92,40 +93,12 @@ function isDeletableDownload(row: MediaDownloadViewRead): boolean {
     return row.artifactStatus === 'absent' || row.artifactStatus === 'missing'
 }
 
-function defaultDownloadOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
-    const leftStatus = String(left.downloadStatus)
-    const rightStatus = String(right.downloadStatus)
-    const leftActive = left.presentation.active && leftStatus !== 'pending'
-    const rightActive = right.presentation.active && rightStatus !== 'pending'
-    if (leftActive !== rightActive) return leftActive ? -1 : 1
-
-    const leftQueued = leftStatus === 'pending'
-    const rightQueued = rightStatus === 'pending'
-    if (leftQueued !== rightQueued) return leftQueued ? -1 : 1
-
-    if (leftQueued && rightQueued) {
-        const leftPosition = left.queuePosition
-        const rightPosition = right.queuePosition
-
-        // A QUEUED operation with no queue position has already claimed a download
-        // slot and is waiting for its worker, so it is ahead of the dispatcher queue.
-        if (leftPosition == null && rightPosition != null) return -1
-        if (leftPosition != null && rightPosition == null) return 1
-        if (leftPosition != null && rightPosition != null) return leftPosition - rightPosition
-    }
-
-    // Preserve the existing newest-first order within all other groups.
-    return 0
-}
-
 export default function DownloadsPage() {
     const navigate = useNavigate()
     const [searchParams, setSearchParams] = useSearchParams()
     const qc = useQueryClient()
     const startOperation = useStartOperation()
     const controlOperation = useControlOperation()
-    const {data: downloads, error} = useMediaDownloadsView()
-    const loadingDownloads = downloads === undefined && !error
     const filterPress = useFilterChipPress()
     const loadMoreRef = useRef<HTMLDivElement | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
@@ -137,7 +110,20 @@ export default function DownloadsPage() {
     )
     const [bulkActionStarting, setBulkActionStarting] = useState<BulkAction | null>(null)
     const [bulkControlBusy, setBulkControlBusy] = useState<string | null>(null)
-    const [visibleLimit, setVisibleLimit] = useState(DOWNLOAD_PAGE_SIZE)
+    const selectedStatuses = useMemo(
+        () => downloadStatusesForApi(statusFilter),
+        [statusFilter],
+    )
+    const downloadsQuery = useMediaDownloadsCollection({
+        statuses: selectedStatuses,
+        order: 'workflow',
+        initialCount: DOWNLOAD_PAGE_SIZE,
+        batchSize: DOWNLOAD_PAGE_SIZE,
+        enabled: statusFilter.size > 0,
+    })
+    const downloads = downloadsQuery.data
+    const error = downloadsQuery.error
+    const loadingDownloads = downloads.length === 0 && downloadsQuery.isPending
 
     const retryAllOperation = useActiveOperation('media_download.bulk_retry', 'media_download')
     const cancelAllOperation = useActiveOperation('media_download.bulk_cancel', 'media_download')
@@ -166,54 +152,34 @@ export default function DownloadsPage() {
         )
     }
 
-    const filteredDownloads = useMemo(
-        () => (downloads ?? [])
-            .filter((row) => statusFilter.has(String(row.downloadStatus)))
-            .sort(defaultDownloadOrder),
-        [downloads, statusFilter],
-    )
-    const visibleDownloads = useMemo(
-        () => filteredDownloads.slice(0, visibleLimit),
-        [filteredDownloads, visibleLimit],
-    )
-
     useEffect(() => {
         const next = downloadStatusFilterFromSearchParams(searchParams)
         setStatusFilter((current) => setsEqual(current, next) ? current : next)
     }, [searchParams])
 
     useEffect(() => {
-        setVisibleLimit(DOWNLOAD_PAGE_SIZE)
-    }, [statusFilter])
-
-    useEffect(() => {
         const element = loadMoreRef.current
-        if (!element || visibleLimit >= filteredDownloads.length) return
+        if (!element || !downloadsQuery.hasNextPage) return
 
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries.some((entry) => entry.isIntersecting)) {
-                    setVisibleLimit((current) => Math.min(current + DOWNLOAD_PAGE_SIZE, filteredDownloads.length))
+                if (entries.some((entry) => entry.isIntersecting) && !downloadsQuery.isFetching) {
+                    void downloadsQuery.fetchNextPage()
                 }
             },
             {rootMargin: '400px 0px'},
         )
         observer.observe(element)
         return () => observer.disconnect()
-    }, [filteredDownloads.length, visibleLimit])
+    }, [
+        downloadsQuery.fetchNextPage,
+        downloadsQuery.hasNextPage,
+        downloadsQuery.isFetching,
+    ])
 
-    const retryableDownloads = useMemo(
-        () => filteredDownloads.filter((row) => isRetryableDownload(row) || isRedownloadableDownload(row)),
-        [filteredDownloads],
-    )
-    const cancellableDownloads = useMemo(
-        () => filteredDownloads.filter(isCancellableDownload),
-        [filteredDownloads],
-    )
-    const deletableDownloads = useMemo(
-        () => filteredDownloads.filter(isDeletableDownload),
-        [filteredDownloads],
-    )
+    const retryableCount = downloadsQuery.actions.retry ?? 0
+    const cancellableCount = downloadsQuery.actions.cancel ?? 0
+    const deletableCount = downloadsQuery.actions['delete-unavailable'] ?? 0
 
     const bulkOperationActive = Boolean(
         retryAllOperation
@@ -222,9 +188,9 @@ export default function DownloadsPage() {
         || bulkActionStarting,
     )
     const showActionRow = Boolean(
-        retryableDownloads.length
-        || cancellableDownloads.length
-        || deletableDownloads.length
+        retryableCount
+        || cancellableCount
+        || deletableCount
         || retryAllOperation
         || cancelAllOperation
         || deleteUnavailableOperation,
@@ -241,11 +207,14 @@ export default function DownloadsPage() {
                 const {error: message} = await getErrorMessageFromResponse(r)
                 toast.error(message || 'Could not prioritize the download')
             } else {
+                const result = await r.json() as {queuePositions?: Record<number, number>}
+                if (result.queuePositions) applyMediaDownloadQueuePositions(qc, result.queuePositions)
                 toast.success('Download prioritized')
             }
         } catch {
             toast.error('Could not prioritize the download')
         }
+        await qc.invalidateQueries({queryKey: ['mediaDownloads']})
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
@@ -272,6 +241,7 @@ export default function DownloadsPage() {
     const retry = async (row: MediaDownloadViewRead) => {
         const message = await retryRequest(row)
         if (message) toast.error(message)
+        await qc.invalidateQueries({queryKey: ['mediaDownloads']})
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
@@ -289,6 +259,7 @@ export default function DownloadsPage() {
         } catch {
             toast.error('Could not cancel the download')
         }
+        await qc.invalidateQueries({queryKey: ['mediaDownloads']})
         await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
         if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
         if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
@@ -312,6 +283,7 @@ export default function DownloadsPage() {
 
             const row = deleteRow
             setDeleteRow(null)
+            await qc.invalidateQueries({queryKey: ['mediaDownloads']})
             await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
             if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
             if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
@@ -322,15 +294,34 @@ export default function DownloadsPage() {
         }
     }
 
-    const startBulkAction = async (action: BulkAction, rows: MediaDownloadViewRead[]) => {
-        if (!rows.length || bulkOperationActive) return
+    const startBulkAction = async (action: BulkAction) => {
+        const expectedCount = action === 'retry'
+            ? retryableCount
+            : action === 'cancel'
+                ? cancellableCount
+                : deletableCount
+        if (!expectedCount || bulkOperationActive) return
+
         setBulkActionStarting(action)
         try {
             const base = (window as any).appConfig?.API_URL || '/api'
+            const params = new URLSearchParams({action})
+            for (const status of selectedStatuses ?? []) params.append('status', status)
+            const idsResponse = await fetch(
+                `${base}/media-downloads/as-view/action-ids?${params}`,
+                {credentials: 'include'},
+            )
+            if (!idsResponse.ok) {
+                const {error: message} = await getErrorMessageFromResponse(idsResponse)
+                throw new Error(message || 'Could not resolve the filtered downloads')
+            }
+            const mediaDownloadIds = await idsResponse.json() as number[]
+            if (!mediaDownloadIds.length) return
+
             await startOperation(`${base}/media-downloads/bulk/${action}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({mediaDownloadIds: rows.map((row) => row.id)}),
+                body: JSON.stringify({mediaDownloadIds}),
             })
         } catch (actionError) {
             const fallback = action === 'retry'
@@ -452,44 +443,44 @@ export default function DownloadsPage() {
                     )}
                 </div>
                 <strong className="downloads-view-count">
-                    {filteredDownloads.length.toLocaleString()} {filteredDownloads.length === 1 ? 'download' : 'downloads'}
+                    {downloadsQuery.total.toLocaleString()} {downloadsQuery.total === 1 ? 'download' : 'downloads'}
                 </strong>
             </div>
             {showActionRow && (
-                <div className="downloads-action-row" role="group" aria-label="Actions for visible downloads">
-                    {(retryableDownloads.length > 0 || retryAllOperation || bulkActionStarting === 'retry') && (
+                <div className="downloads-action-row" role="group" aria-label="Actions for filtered downloads">
+                    {(retryableCount > 0 || retryAllOperation || bulkActionStarting === 'retry') && (
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_retry']}
                             label="Retry all"
                             icon={faIcon('fas', 'rotate-right')}
-                            onClick={() => void startBulkAction('retry', retryableDownloads)}
+                            onClick={() => void startBulkAction('retry')}
                             disabled={bulkOperationActive && !retryAllOperation && bulkActionStarting !== 'retry'}
                             primary={false}
                             starting={bulkActionStarting === 'retry'}
                             active={retryAllOperation !== undefined}
-                            ariaLabel={`Retry ${retryableDownloads.length} visible retryable downloads`}
+                            ariaLabel={`Retry ${retryableCount} filtered retryable downloads`}
                             onCancel={retryAllOperation ? () => void cancelBulkOperation(retryAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === retryAllOperation?.id}
                             cancelLabel="Cancel retry all"
                         />
                     )}
-                    {(cancellableDownloads.length > 0 || cancelAllOperation || bulkActionStarting === 'cancel') && (
+                    {(cancellableCount > 0 || cancelAllOperation || bulkActionStarting === 'cancel') && (
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_cancel']}
                             label="Cancel all"
                             icon={faIcon('fas', 'ban')}
-                            onClick={() => void startBulkAction('cancel', cancellableDownloads)}
+                            onClick={() => void startBulkAction('cancel')}
                             disabled={bulkOperationActive && !cancelAllOperation && bulkActionStarting !== 'cancel'}
                             primary={false}
                             starting={bulkActionStarting === 'cancel'}
                             active={cancelAllOperation !== undefined}
-                            ariaLabel={`Cancel ${cancellableDownloads.length} visible active downloads`}
+                            ariaLabel={`Cancel ${cancellableCount} filtered active downloads`}
                             onCancel={cancelAllOperation ? () => void cancelBulkOperation(cancelAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === cancelAllOperation?.id}
                             cancelLabel="Stop cancel all"
                         />
                     )}
-                    {(deletableDownloads.length > 0 || deleteUnavailableOperation || bulkActionStarting === 'delete-unavailable') && (
+                    {(deletableCount > 0 || deleteUnavailableOperation || bulkActionStarting === 'delete-unavailable') && (
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_delete_unavailable']}
                             label="Delete unavailable"
@@ -499,7 +490,7 @@ export default function DownloadsPage() {
                             primary={false}
                             starting={bulkActionStarting === 'delete-unavailable'}
                             active={deleteUnavailableOperation !== undefined}
-                            ariaLabel={`Delete ${deletableDownloads.length} visible unavailable download records`}
+                            ariaLabel={`Delete ${deletableCount} filtered unavailable download records`}
                             onCancel={deleteUnavailableOperation ? () => void cancelBulkOperation(deleteUnavailableOperation) : undefined}
                             cancelDisabled={bulkControlBusy === deleteUnavailableOperation?.id}
                             cancelLabel="Stop deleting unavailable download records"
@@ -511,7 +502,7 @@ export default function DownloadsPage() {
                 <DataTable<MediaDownloadViewRead>
                     ariaLabel="Media downloads"
                     columns={columns}
-                    data={visibleDownloads}
+                    data={downloads}
                     className="table downloads-table"
                     wrapperClassName="table-wrapper downloads-table-wrapper"
                     loading={loadingDownloads}
@@ -522,7 +513,7 @@ export default function DownloadsPage() {
                     }
                     error={error}
                     emptyMessage={
-                        downloads && downloads.length > 0
+                        downloads.length > 0
                             ? 'No downloads match the selected filters.'
                             : "No downloads yet. Start one from an episode or movie page."
                     }
@@ -596,10 +587,14 @@ export default function DownloadsPage() {
                     }}
                 />
                 <div ref={loadMoreRef} className="infinite-scroll-sentinel" aria-hidden="true"/>
-                {visibleDownloads.length < filteredDownloads.length && (
+                {downloadsQuery.hasNextPage && (
                     <div className="downloads-table-loading" role="status">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fas', 'spinner')}/>
-                        Loading more downloads...
+                        <FontAwesomeIcon
+                            className="wl-progress-icon"
+                            icon={faIcon('fas', 'spinner')}
+                            spin={downloadsQuery.isFetchingNextPage}
+                        />
+                        {downloadsQuery.isFetchingNextPage ? 'Loading more downloads...' : 'More downloads available'}
                     </div>
                 )}
             </div>
@@ -614,13 +609,13 @@ export default function DownloadsPage() {
                     label: 'Delete',
                     onClick: async () => {
                         setBulkDeleteConfirmOpen(false)
-                        await startBulkAction('delete-unavailable', deletableDownloads)
+                        await startBulkAction('delete-unavailable')
                     },
                     className: 'btn btn-danger',
                 }}
             >
                 <p>
-                    Delete {deletableDownloads.length} visible {deletableDownloads.length === 1 ? 'record' : 'records'} whose artifact is Absent or Missing?
+                    Delete {deletableCount} filtered {deletableCount === 1 ? 'record' : 'records'} whose artifact is Absent or Missing?
                     WireLoft will verify that no artifact is available before deleting each download record.
                     Records with an available artifact will be kept.
                 </p>

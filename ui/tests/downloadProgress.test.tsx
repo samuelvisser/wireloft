@@ -1,5 +1,5 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
+import {strict as assert} from 'node:assert'
+import {test} from 'node:test'
 import {renderToStaticMarkup} from 'react-dom/server'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@fortawesome/free-solid-svg-icons'
@@ -161,7 +161,7 @@ test('application version remains readable from a future incompatible pull paylo
     assert.throws(()=>FrontendPullReadSchema.parse(incompatible))
 })
 test('stale sequence is rejected but newer attempt and removals win',()=>{
-    const previous={mode:'fast' as const,data:{operations:[active()]}}
+    const previous={appVersion:'1.0.0',mode:'fast' as const,data:{operations:[active()]}}
     const stale=active();(stale.progressMeta!.download as any).sequence=2
     assert.equal(reconcileOperationSnapshots(previous,{...previous,data:{operations:[stale]}}).data.operations[0],previous.data.operations[0])
     const next=active();Object.assign(next.progressMeta!.download as any,{attempt_id:'attempt-2',started_at:5,sequence:1})

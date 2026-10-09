@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import blake2b
 from typing import Literal, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
+from backend.api.pagination import InvalidCursorError, decode_cursor, encode_cursor
 from backend.api.models.tasks import (
     TaskDefinitionRead,
     TaskLedgerEntryRead,
@@ -127,6 +129,59 @@ def list_runs(
         s.close()
 
 
+def _task_ledger_cursor_filter(
+    order_column,
+    *,
+    value: datetime | None,
+    run_id: int,
+    descending: bool,
+):
+    if value is None:
+        return and_(
+            order_column.is_(None),
+            TaskRun.id < run_id if descending else TaskRun.id > run_id,
+        )
+
+    value_comparison = order_column < value if descending else order_column > value
+    id_comparison = TaskRun.id < run_id if descending else TaskRun.id > run_id
+    return or_(
+        value_comparison,
+        and_(order_column == value, id_comparison),
+        order_column.is_(None),
+    )
+
+
+def _task_ledger_collection_revision(
+    session: Session,
+    *,
+    filters: list,
+    definition_key: str | None,
+    ordering,
+    tie_breaker,
+) -> tuple[str, int]:
+    """Fingerprint only the ordered task IDs matching these filters.
+
+    Progress and other changes to a TaskRun do not invalidate a cursor unless
+    they change its membership or its position in this particular collection.
+    The ordered ID stream also provides the exact total without a second count
+    query, and does not hydrate task objects into memory.
+    """
+    statement = select(TaskRun.id).where(*filters)
+    if definition_key is not None:
+        statement = statement.join(
+            TaskDefinition,
+            TaskDefinition.id == TaskRun.definition_id,
+        )
+    digest = blake2b(digest_size=16)
+    total = 0
+    for run_id in session.scalars(
+        statement.order_by(ordering, tie_breaker)
+    ).yield_per(512):
+        digest.update(f"{run_id},".encode("ascii"))
+        total += 1
+    return digest.hexdigest(), total
+
+
 def query_ledger(
     s: Session,
     *,
@@ -137,10 +192,10 @@ def query_ledger(
     started_after: datetime | None = None,
     order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
     order: Literal["asc", "desc"] = "desc",
-    offset: int = 0,
+    cursor: str | None = None,
     limit: int = 50,
 ) -> TaskLedgerPageRead:
-    """Query paginated TaskRun history using a caller-owned database session."""
+    """Query cursor-paginated TaskRun history using a caller-owned database session."""
     filters = []
     if definition_key is not None:
         filters.append(TaskDefinition.key == definition_key)
@@ -153,21 +208,70 @@ def query_ledger(
     if started_after is not None:
         filters.append(TaskRun.started_at >= started_after)
 
-    count_stmt = select(func.count(TaskRun.id))
-    if definition_key is not None:
-        count_stmt = count_stmt.join(
-            TaskDefinition,
-            TaskDefinition.id == TaskRun.definition_id,
-        )
-    total = int(s.execute(count_stmt.where(*filters)).scalar_one())
+    cursor_scope = {
+        "definition_key": definition_key,
+        "resource_type": resource_type,
+        "resource_ids": sorted(resource_ids or []),
+        "statuses": sorted(statuses or []),
+        "started_after": started_after.isoformat() if started_after is not None else None,
+    }
 
     order_column = {
         "started_at": TaskRun.started_at,
         "finished_at": TaskRun.finished_at,
         "created_at": TaskRun.created_at,
     }[order_by]
-    ordering = order_column.asc() if order == "asc" else order_column.desc()
-    tie_breaker = TaskRun.id.asc() if order == "asc" else TaskRun.id.desc()
+    descending = order == "desc"
+    ordering = (
+        order_column.desc().nulls_last()
+        if descending
+        else order_column.asc().nulls_last()
+    )
+    tie_breaker = TaskRun.id.desc() if descending else TaskRun.id.asc()
+
+    revision, total = _task_ledger_collection_revision(
+        s,
+        filters=filters,
+        definition_key=definition_key,
+        ordering=ordering,
+        tie_breaker=tie_breaker,
+    )
+
+    if cursor:
+        try:
+            values = decode_cursor(cursor)
+            if (
+                values.get("kind") != "task-ledger"
+                or values.get("order_by") != order_by
+                or values.get("order") != order
+                or values.get("scope") != cursor_scope
+            ):
+                raise InvalidCursorError("Cursor does not match this task ledger")
+            cursor_id = values.get("id")
+            if not isinstance(cursor_id, int) or isinstance(cursor_id, bool):
+                raise InvalidCursorError("Invalid task ledger cursor id")
+            if values.get("revision") == revision:
+                # Resolve the cursor row's current sort key to avoid skips when its
+                # timestamp moves without changing its relative rank.
+                anchor_stmt = select(order_column).where(TaskRun.id == cursor_id, *filters)
+                if definition_key is not None:
+                    anchor_stmt = anchor_stmt.join(
+                        TaskDefinition,
+                        TaskDefinition.id == TaskRun.definition_id,
+                    )
+                anchor = s.execute(anchor_stmt).first()
+                if anchor is None:
+                    raise InvalidCursorError("Invalid task ledger cursor id")
+                filters.append(_task_ledger_cursor_filter(
+                    order_column,
+                    value=anchor[0],
+                    run_id=cursor_id,
+                    descending=descending,
+                ))
+            # Otherwise restart at the first page. The shared lazy collection
+            # reconciles mismatched page revisions using the authoritative head.
+        except (InvalidCursorError, ValueError) as exc:
+            raise ValueError(str(exc)) from exc
 
     run_stmt = (
         select(TaskRun)
@@ -180,20 +284,33 @@ def query_ledger(
             TaskDefinition.id == TaskRun.definition_id,
         )
 
-    runs = s.scalars(
+    runs = list(s.scalars(
         run_stmt
         .order_by(ordering, tie_breaker)
-        .offset(offset)
-        .limit(limit)
-    ).all()
+        .limit(limit + 1)
+    ).all())
+    has_more = len(runs) > limit
+    runs = runs[:limit]
+
+    next_cursor = None
+    if has_more and runs:
+        last = runs[-1]
+        next_cursor = encode_cursor({
+            "kind": "task-ledger",
+            "order_by": order_by,
+            "order": order,
+            "scope": cursor_scope,
+            "revision": revision,
+            "id": last.id,
+        })
 
     items = [TaskLedgerEntryRead.model_validate(run) for run in runs]
     return TaskLedgerPageRead(
         items=items,
         total=total,
-        offset=offset,
         limit=limit,
-        has_more=offset + len(items) < total,
+        next_cursor=next_cursor,
+        revision=revision,
     )
 
 
@@ -206,7 +323,7 @@ def list_ledger(
     started_after: datetime | None = None,
     order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
     order: Literal["asc", "desc"] = "desc",
-    offset: int = 0,
+    cursor: str | None = None,
     limit: int = 50,
 ) -> TaskLedgerPageRead:
     s = get_session()
@@ -220,7 +337,7 @@ def list_ledger(
             started_after=started_after,
             order_by=order_by,
             order=order,
-            offset=offset,
+            cursor=cursor,
             limit=limit,
         )
     finally:

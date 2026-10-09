@@ -5,8 +5,8 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import case, event, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import case, event, exists, func, select
+from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
 from backend.db.models import Episode, Movie, MovieExtra
@@ -257,10 +257,9 @@ def prioritize_media_download_operation(
 ) -> TaskOperation:
     """Move one queued media download ahead of the ordinary FIFO queue.
 
-    Priority itself remains FIFO: each click records a fresh UTC timestamp, so
-    downloads prioritized earlier are selected before downloads prioritized
-    later. Re-prioritizing the same download deliberately moves it to the end of
-    the prioritized group.
+    Prioritized downloads are handled newest-first: each click records a fresh
+    UTC timestamp, moving the download to the front of the prioritized group,
+    including when a previously prioritized download is prioritized again.
     """
     operation = get_active_media_download_operation(session, media_download_id)
     if operation is None or operation.status != OperationStatus.QUEUED.value:
@@ -770,16 +769,19 @@ def remaining_media_download_budget(session: Session) -> int:
     cannot be mistaken for free capacity merely because a worker has not started.
     """
     max_concurrent = get_settings().download_settings.max_concurrent_downloads
-    active = session.scalars(
-        select(TaskRun)
+    primary_transfer_complete = (
+        TaskRun.meta["_progress_meta"]["download"]["primary_transfer_complete"].as_boolean()
+    )
+    in_flight = session.scalar(
+        select(func.count(TaskRun.id))
         .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
-        .where(TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS), TaskRun.status.in_(_ACTIVE_RUN_STATUSES))
-    )
-    in_flight = sum(
-        1 for run in active
-        if not ((run.meta or {}).get("_progress_meta", {}).get("download", {}).get("primary_transfer_complete") is True)
-    )
-    return max(0, int(max_concurrent) - in_flight)
+        .where(
+            TaskDefinition.key.in_(_DOWNLOAD_TASK_KEYS),
+            TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
+            func.coalesce(primary_transfer_complete, False).is_(False),
+        )
+    ) or 0
+    return max(0, int(max_concurrent) - int(in_flight))
 
 
 def _has_active_media_download_run(
@@ -921,20 +923,39 @@ def _ordered_queued_media_download_operations(
     *,
     limit: int | None = None,
 ) -> list[TaskOperation]:
-    """Return queued downloads in the exact order used by the dispatcher."""
+    """Return only dispatchable queued downloads in exact dispatcher order."""
+    target_has_run = exists(
+        select(TaskOperationRun.task_run_id).where(
+            TaskOperationRun.operation_id == TaskOperation.id,
+            TaskOperationRun.target_id == TaskOperationTarget.id,
+        )
+    )
+    resource_has_active_run = exists(
+        select(TaskRun.id).where(
+            TaskRun.resource_type == ResourceType.MEDIA_DOWNLOAD,
+            TaskRun.resource_id == TaskOperationTarget.resource_id,
+            TaskRun.status.in_(_ACTIVE_RUN_STATUSES),
+        )
+    )
     stmt = (
         select(TaskOperation)
         .join(
             TaskOperationTarget,
             TaskOperationTarget.operation_id == TaskOperation.id,
         )
+        .options(selectinload(TaskOperation.targets))
         .where(
             TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
             TaskOperation.status == OperationStatus.QUEUED.value,
+            TaskOperationTarget.resource_type
+            == ResourceType.MEDIA_DOWNLOAD.value,
+            TaskOperationTarget.resource_id.is_not(None),
+            ~target_has_run,
+            ~resource_has_active_run,
         )
         .order_by(
             case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
-            TaskOperation.prioritized_at.asc(),
+            TaskOperation.prioritized_at.desc(),
             TaskOperation.created_at.asc(),
             # Bulk dependency creation can insert many media.download operations
             # inside one transaction. SQLite's server timestamp has only
@@ -950,24 +971,52 @@ def _ordered_queued_media_download_operations(
     return list(session.scalars(stmt))
 
 
-def get_media_download_queue_positions(session: Session) -> dict[int, int]:
-    """Return 1-based positions for downloads still waiting to claim a slot.
+def media_download_queue_position_subquery():
+    """Return a SQL subquery mapping unreserved queued downloads to 1-based positions."""
+    queue_order = (
+        case((TaskOperation.prioritized_at.is_not(None), 0), else_=1),
+        TaskOperation.prioritized_at.desc(),
+        TaskOperation.created_at.asc(),
+        TaskOperationTarget.id.asc(),
+        TaskOperation.id.asc(),
+    )
+    has_run = exists(
+        select(TaskOperationRun.task_run_id).where(
+            TaskOperationRun.operation_id == TaskOperation.id,
+        )
+    )
+    return (
+        select(
+            TaskOperation.resource_id.label("media_download_id"),
+            func.row_number().over(order_by=queue_order).label("queue_position"),
+        )
+        .join(
+            TaskOperationTarget,
+            TaskOperationTarget.operation_id == TaskOperation.id,
+        )
+        .where(
+            TaskOperation.kind == MEDIA_DOWNLOAD_OPERATION_KIND,
+            TaskOperation.status == OperationStatus.QUEUED.value,
+            TaskOperation.resource_type == ResourceType.MEDIA_DOWNLOAD.value,
+            TaskOperation.resource_id.is_not(None),
+            TaskOperationTarget.resource_type == ResourceType.MEDIA_DOWNLOAD.value,
+            TaskOperationTarget.resource_id == TaskOperation.resource_id,
+            ~has_run,
+        )
+        .subquery()
+    )
 
-    Operations that already own a SCHEDULED/active TaskRun are omitted because
-    they are no longer candidates for the next dispatcher slot, even if their
-    aggregate operation is briefly still presented as QUEUED.
-    """
-    positions: dict[int, int] = {}
-    for operation in _ordered_queued_media_download_operations(session):
-        if not operation.targets:
-            continue
-        target = operation.targets[0]
-        if not operation_target_needs_dispatch(session, operation.id, target.slot_key):
-            continue
-        if operation.resource_id is None:
-            continue
-        positions[int(operation.resource_id)] = len(positions) + 1
-    return positions
+
+def get_media_download_queue_positions(session: Session) -> dict[int, int]:
+    """Return 1-based positions for downloads still waiting to claim a slot."""
+    queue = media_download_queue_position_subquery()
+    return {
+        int(media_download_id): int(queue_position)
+        for media_download_id, queue_position in session.execute(
+            select(queue.c.media_download_id, queue.c.queue_position)
+            .order_by(queue.c.queue_position)
+        )
+    }
 
 
 def _schedule_delayed_media_download_dispatch(
@@ -1036,13 +1085,11 @@ def dispatch_queued_media_download_operations(
     if effective_budget <= 0:
         return 0
 
-    # Fetch beyond the budget because an older QUEUED operation may already have
-    # a committed SCHEDULED reservation. Those operations still count as active
-    # in the UI but should not prevent a later truly-unreserved operation from
-    # consuming another free slot.
+    # Reservation/link filters are part of the SQL candidate query, so the
+    # dispatcher only materializes operations that can actually claim a slot.
     operations = _ordered_queued_media_download_operations(
         session,
-        limit=max(25, effective_budget * 4),
+        limit=effective_budget,
     )
 
     dispatched = 0

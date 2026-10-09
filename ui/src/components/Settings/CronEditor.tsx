@@ -9,7 +9,7 @@ import {faIcon} from '../../icons/faIcon'
 import ProgressButton from '../common/ProgressButton'
 import {useActiveOperation} from '../OperationNotifier/OperationNotifier'
 import CronTaskLedgerModal from './CronTaskLedgerModal'
-import type {TaskLedgerPageQuery} from '../../lib/taskLedger'
+import type {TaskLedgerCollectionQuery} from '../../lib/taskLedger'
 import type {FrontendOperationDefinition} from '../../lib/operationDefinitions'
 import {createSelectRegistry} from '../../utils/selectRegistry'
 import {
@@ -35,7 +35,7 @@ type CronEditorProps = {
     runNow?: {
         definition: FrontendOperationDefinition
         job: string
-        ledger: Omit<TaskLedgerPageQuery, 'offset' | 'limit' | 'enabled'>
+        ledger: Omit<TaskLedgerCollectionQuery, 'limit' | 'enabled'>
     }
 }
 

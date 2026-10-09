@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
 
@@ -139,3 +139,85 @@ def test_episode_download_scope_resolves_single_episode_and_all_profiles():
     finally:
         session.close()
         engine.dispose()
+
+def test_show_scope_selection_uses_one_query_on_the_success_path():
+    from backend.api.endpoints.shows.service import (
+        _select_show_episode_download_scope,
+    )
+
+    session, engine = _session()
+    try:
+        (
+            show,
+            _episode,
+            audio_profile,
+            _video_profile,
+            audio_download,
+            _video_download,
+        ) = _library(session)
+        session.refresh(show)
+        session.refresh(audio_profile)
+        session.refresh(audio_download)
+        audio_profile_id = audio_profile.id
+        audio_download_id = audio_download.id
+
+        statements: list[str] = []
+
+        def record_statement(
+            _connection,
+            _cursor,
+            statement,
+            _parameters,
+            _context,
+            _executemany,
+        ):
+            statements.append(statement)
+
+        event.listen(engine, "before_cursor_execute", record_statement)
+        try:
+            scope = _select_show_episode_download_scope(
+                session,
+                show,
+                local_media_profile_id=audio_profile_id,
+            )
+        finally:
+            event.remove(engine, "before_cursor_execute", record_statement)
+
+        assert [download.id for download in scope.downloads] == [
+            audio_download_id
+        ]
+        assert len(statements) == 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_show_scope_artifact_filter_can_legitimately_select_nothing():
+    from backend.api.endpoints.shows.service import (
+        _select_show_episode_download_scope,
+    )
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+
+    session, engine = _session()
+    try:
+        (
+            show,
+            _episode,
+            audio_profile,
+            _video_profile,
+            _audio_download,
+            _video_download,
+        ) = _library(session)
+
+        scope = _select_show_episode_download_scope(
+            session,
+            show,
+            local_media_profile_id=audio_profile.id,
+            artifact_statuses=(MediaDownloadArtifactStatus.CORRUPTED.value,),
+        )
+
+        assert scope.downloads == ()
+    finally:
+        session.close()
+        engine.dispose()
+

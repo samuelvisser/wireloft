@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
@@ -126,33 +126,30 @@ async def run_refresh_episode_metadata(
 
 
 def _queue_startup_recovery(s: Session) -> None:
-    episodes = list(s.scalars(select(Episode).where(
-        Episode.metadata_is_final.is_(False),
-        Episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value,
-    )))
-    for episode in episodes:
-        if _has_active_operation_target(s, episode.id):
-            continue
-        trigger_now(
-            def_key=_TASK_KEY,
-            resource_type="episode",
-            resource_id=episode.id,
-            refresh=True,
-        )
-
-
-def _has_active_operation_target(s: Session, episode_id: int) -> bool:
-    return s.scalar(
+    active_target = exists(
         select(TaskOperationTarget.id)
         .join(TaskOperation, TaskOperation.id == TaskOperationTarget.operation_id)
         .where(
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
             TaskOperationTarget.task_key == _TASK_KEY,
             TaskOperationTarget.resource_type == "episode",
-            TaskOperationTarget.resource_id == episode_id,
+            TaskOperationTarget.resource_id == Episode.id,
         )
-        .limit(1)
-    ) is not None
+    )
+    episode_ids = s.scalars(
+        select(Episode.id).where(
+            Episode.metadata_is_final.is_(False),
+            Episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL.value,
+            ~active_target,
+        )
+    )
+    for episode_id in episode_ids:
+        trigger_now(
+            def_key=_TASK_KEY,
+            resource_type="episode",
+            resource_id=int(episode_id),
+            refresh=True,
+        )
 
 
 def _no_usable_reason(detail, observed_status: EpisodePublishStatus) -> NoUsableMediaReason:

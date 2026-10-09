@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import Integer, cast, func, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from backend.db.models import Episode
 from backend.db.models.Metadata import Metadata
@@ -29,17 +29,22 @@ def _rollback_date_head(s: Session, episode: Episode, previous_identifier: str) 
     timestamp = _utc_timestamp(episode.published_date)
     if int(show.get_meta("ep_id.latest_ep_date") or 0) != timestamp:
         return
-    remaining = list(
-        s.scalars(
-            select(Episode.published_date).where(
-                Episode.show_id == episode.show_id,
-                Episode.id != episode.id,
-                Episode.episode_identifier.startswith("ep."),
-                Episode.published_date.is_not(None),
-            )
+    latest_remaining = s.scalar(
+        select(Episode.published_date)
+        .where(
+            Episode.show_id == episode.show_id,
+            Episode.id != episode.id,
+            Episode.episode_identifier.startswith("ep."),
+            Episode.published_date.is_not(None),
         )
+        .order_by(Episode.published_date.desc())
+        .limit(1)
     )
-    new_head = max((_utc_timestamp(value) for value in remaining), default=0)
+    new_head = (
+        _utc_timestamp(latest_remaining)
+        if latest_remaining is not None
+        else 0
+    )
     show.set_meta("ep_id.latest_ep_date", str(new_head))
 
 
@@ -97,22 +102,40 @@ def vacated_canonical_identifiers_for_show(s: Session, show_id: int) -> set[str]
     and keep the occupied-identifier check scalar.
     """
     episodes = list(s.scalars(
-        select(Episode).where(
+        select(Episode)
+        .where(
             Episode.show_id == show_id,
             Episode.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA,
         )
+        .options(joinedload(Episode.show))
     ))
     if not episodes:
         return set()
 
-    occupied = set(s.scalars(
-        select(Episode.episode_identifier).where(Episode.show_id == show_id)
-    ))
+    previous_by_episode = {
+        episode.id: episode.get_meta(PREVIOUS_IDENTIFIER_META_KEY)
+        for episode in episodes
+    }
+    candidate_identifiers = {
+        previous
+        for previous in previous_by_episode.values()
+        if previous
+    }
+    occupied = (
+        set(s.scalars(
+            select(Episode.episode_identifier).where(
+                Episode.show_id == show_id,
+                Episode.episode_identifier.in_(candidate_identifiers),
+            )
+        ))
+        if candidate_identifiers
+        else set()
+    )
     show_identifier_type = EpisodeIdentifier(episodes[0].show.episode_identifier)
 
     vacated: set[str] = set()
     for episode in episodes:
-        previous = episode.get_meta(PREVIOUS_IDENTIFIER_META_KEY)
+        previous = previous_by_episode[episode.id]
         if not previous or previous in occupied:
             continue
         try:

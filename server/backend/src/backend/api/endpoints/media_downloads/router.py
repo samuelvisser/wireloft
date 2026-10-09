@@ -23,6 +23,7 @@ from backend.app import db_session
 from task_manager.tasks.media_download_operations import (
     dispatch_queued_media_download_operations,
     prioritize_media_download_operation,
+    get_media_download_queue_positions
 )
 
 router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
@@ -32,6 +33,36 @@ router = APIRouter(prefix="/media-downloads", tags=["Media Downloads"])
 def media_downloads_list():
     with db_session() as s:
         return get_media_downloads_list(s)
+
+
+@router.get("/as-view/action-ids", response_model=list[int])
+def media_download_bulk_action_ids(
+        action: str = Query(pattern="^(retry|cancel|delete-unavailable)$"),
+        status_filter: Optional[list[str]] = Query(default=None, alias="status"),
+):
+    with db_session() as s:
+        return get_media_download_bulk_action_ids(
+            s,
+            statuses=status_filter,
+            action=action,
+        )
+
+
+@router.get("/as-view/page", response_model=MediaDownloadPageRead)
+def media_downloads_page(
+        status_filter: Optional[list[str]] = Query(default=None, alias="status"),
+        order: str = Query(default="workflow", pattern="^(workflow|recent)$"),
+        cursor: str | None = Query(default=None, max_length=2048),
+        limit: int = Query(default=50, ge=1, le=200),
+):
+    with db_session() as s:
+        return get_media_downloads_page(
+            s,
+            statuses=status_filter,
+            order=order,
+            cursor=cursor,
+            limit=limit,
+        )
 
 
 @router.get("/as-view", response_model=list[MediaDownloadAPIReadView])
@@ -146,6 +177,7 @@ def media_downloads_prioritize(media_download_id: int):
             dispatch_queued_media_download_operations(s)
             operation_id = operation.id
             s.commit()
+            queue_positions = get_media_download_queue_positions(s)
         except ValueError as exc:
             s.rollback()
             raise HTTPException(status_code=409, detail=str(exc)) from exc
@@ -153,11 +185,12 @@ def media_downloads_prioritize(media_download_id: int):
             s.rollback()
             raise
 
-    return {
-        "queued": True,
-        "operation_id": operation_id,
-        "media_download_id": media_download_id,
-    }
+        return {
+            "queued": True,
+            "operation_id": operation_id,
+            "media_download_id": media_download_id,
+            "queue_positions": queue_positions,
+        }
 
 
 @router.post("/{media_download_id}/cancel", response_model=MediaDownloadAPIRead)

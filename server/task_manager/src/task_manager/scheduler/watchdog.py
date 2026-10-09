@@ -6,11 +6,15 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from apscheduler.triggers.interval import IntervalTrigger
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from backend.db.core import get_session
 from config import get_settings
 from task_manager.scheduler.db import TaskOperation, TaskOperationRun, TaskRun
+from task_manager.scheduler.db.TaskRun import (
+    TASK_RUN_PROGRESS_META_KEY,
+    TASK_RUN_WAIT_STATE_META_KEY,
+)
 from task_manager.scheduler.operation_control import cancel_operation, cancel_task_run
 from task_manager.scheduler.types import OperationStatus, TaskStatus
 
@@ -158,23 +162,42 @@ def monitor_stalled_work(
                 .where(TaskOperation.status.in_(_OWNED_OPERATION_STATUSES))
             )
         )
+        wait_reason = (
+            TaskRun.meta[TASK_RUN_WAIT_STATE_META_KEY]["reason"].as_string()
+        )
+        download_heartbeat = (
+            TaskRun.meta[TASK_RUN_PROGRESS_META_KEY]["download"]["heartbeat_at"].as_float()
+        )
+        batch_heartbeat = (
+            TaskRun.meta[TASK_RUN_PROGRESS_META_KEY]["batch"]["heartbeat_at"].as_float()
+        )
+        structured_progress = or_(
+            download_heartbeat.is_not(None),
+            batch_heartbeat.is_not(None),
+        )
         current_tasks = {
-            run.id: _percent(run.progress)
-            for run in session.scalars(
-                select(TaskRun).where(
+            int(run_id): _percent(progress)
+            for run_id, progress in session.execute(
+                select(TaskRun.id, TaskRun.progress).where(
                     TaskRun.status.in_(_ACTIVE_TASK_STATUSES),
                     TaskRun.id.not_in(active_operation_run_ids),
+                    wait_reason.is_(None),
+                    ~structured_progress,
                 )
             )
-            if run.wait_state is None
         }
-        # Structured download runs are not monitored a second time through the
-        # generic integer percentage of their operation or their parent batch.
+        # Structured download/batch runs are selected by their persisted report
+        # shape instead of loading every RUNNING TaskRun and discarding generic
+        # workers in Python.
         structured_stalled = set()
         structured_runs = set()
-        for run in session.scalars(select(TaskRun).where(TaskRun.status == TaskStatus.RUNNING)):
-            if run.wait_state is not None:
-                continue
+        for run in session.scalars(
+            select(TaskRun).where(
+                TaskRun.status == TaskStatus.RUNNING,
+                wait_reason.is_(None),
+                structured_progress,
+            )
+        ):
             report = run.progress_metadata or {}
             download = report.get("download")
             batch = report.get("batch")

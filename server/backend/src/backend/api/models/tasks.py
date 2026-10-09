@@ -6,6 +6,7 @@ from typing import Any, Optional, Literal
 from pydantic import AliasPath, Field
 
 from backend.api.models.base import ResponseBase, RequestBase
+from backend.api.models.pagination import CursorPageRead
 
 
 class TaskDefinitionRead(ResponseBase):
@@ -90,12 +91,8 @@ class TaskLedgerEntryRead(ResponseBase):
     updated_at: datetime
 
 
-class TaskLedgerPageRead(ResponseBase):
-    items: list[TaskLedgerEntryRead]
+class TaskLedgerPageRead(CursorPageRead[TaskLedgerEntryRead]):
     total: int
-    offset: int
-    limit: int
-    has_more: bool
 
 
 class TaskTriggerRead(ResponseBase):

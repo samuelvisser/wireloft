@@ -1,7 +1,7 @@
 import {useEffect, useState} from 'react'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useShow} from '../../lib/queries'
-import {useTaskLedgerPage} from '../../lib/taskLedger'
+import {useTaskLedgerInfinite} from '../../lib/taskLedger'
 import {TaskLedgerEntryRead} from '../../types/schemas/task'
 import './ShowSyncLogModal.css'
 import {faIcon} from '../../icons/faIcon'
@@ -67,24 +67,39 @@ export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, on
     if (open) setPage(1)
   }, [open, showSlug])
 
-  const ledger = useTaskLedgerPage({
+  const ledger = useTaskLedgerInfinite({
     definitionKey: 'fetch_new_episodes',
     resourceType: 'show',
     resourceId: showId === undefined ? undefined : [0, showId],
     status: TERMINAL_STATUSES,
     startedAfter: show?.createdAt,
-    offset: (page - 1) * PAGE_SIZE,
+    orderBy: 'created_at',
+    order: 'desc',
     limit: PAGE_SIZE,
     enabled: open && showId !== undefined,
   })
 
-  const total = ledger.data?.total ?? 0
+  const total = ledger.total
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const entries = ledger.data?.items ?? []
+  const totalIsProvisional = ledger.isTotalProvisional
+  const pageStart = (page - 1) * PAGE_SIZE
+  const entries = ledger.items.slice(pageStart, pageStart + PAGE_SIZE)
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages)
   }, [page, totalPages])
+
+  const showNextPage = async () => {
+    if (page >= totalPages || ledger.isFetching) return
+
+    const nextPage = page + 1
+    const requiredRows = nextPage * PAGE_SIZE
+    if (ledger.items.length < requiredRows && ledger.hasNextPage) {
+      const result = await ledger.fetchNextPage()
+      if (result.isError) return
+    }
+    setPage(nextPage)
+  }
 
   if (!open) return null
 
@@ -146,13 +161,13 @@ export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, on
               Previous
             </button>
             <span className="show-sync-log-page-label" aria-live="polite">
-              Page {page} of {totalPages}
+              {totalIsProvisional ? `Page ${page}` : `Page ${page} of ${totalPages}`}
             </span>
             <button
               type="button"
               className="btn"
               disabled={page >= totalPages || ledger.isFetching}
-              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              onClick={() => void showNextPage()}
             >
               Next
             </button>

@@ -342,7 +342,21 @@ async def _fetch_show(
             )):
                 monitor_requests[episode.id] = _monitor_request_for_db_episode(show, episode)
 
-    known_episode_slugs = set(s.scalars(select(Episode.slug).where(Episode.show_id == show_id)))
+    candidate_remote_slugs = {
+        record.slug
+        for records in prefetched.values()
+        for record in records
+    }
+    known_episode_slugs = (
+        set(s.scalars(
+            select(Episode.slug).where(
+                Episode.show_id == show_id,
+                Episode.slug.in_(candidate_remote_slugs),
+            )
+        ))
+        if candidate_remote_slugs
+        else set()
+    )
     occupied_identifiers = set(
         s.scalars(select(Episode.episode_identifier).where(Episode.show_id == show_id))
     )

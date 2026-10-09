@@ -73,7 +73,7 @@ def episode_views_by_show_list(show_slug: str, limit: int | None = None):
 @router.get("/as-view/by-show-slug/{show_slug}/page", response_model=EpisodeAPIReadViewPage)
 def episode_views_by_show_page(
         show_slug: str,
-        offset: int = Query(default=0, ge=0),
+        cursor: str | None = Query(default=None, max_length=2048),
         limit: int = Query(default=25, ge=1, le=100),
         season_id: int | None = Query(default=None, ge=1),
 ):
@@ -82,7 +82,7 @@ def episode_views_by_show_page(
         return get_episode_views_by_show_page(
             s,
             show_slug,
-            offset=offset,
+            cursor=cursor,
             limit=limit,
             season_id=season_id,
         )

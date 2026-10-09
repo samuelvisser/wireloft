@@ -63,6 +63,7 @@ export function EpisodeDownloadRow({
     const invalidate = () =>
         Promise.all([
             qc.invalidateQueries({queryKey: ['episodeDownloads', episodeSlug]}),
+            qc.invalidateQueries({queryKey: ['mediaDownloads']}),
             qc.invalidateQueries({queryKey: ['mediaDownloadsView']}),
         ])
 

@@ -2,6 +2,7 @@ import {Controller, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
+import DateInput from '../common/DateInput'
 import SimpleSelect from '../common/SimpleSelect'
 
 type Props = {
@@ -17,7 +18,7 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
 type LimitMode = (typeof LimitModeReg)['values'][number]
 
 export default function PodcastDownloadProfileForm({form}: Props) {
-    const {control, register, watch, setValue, formState: {errors}} = form
+    const {control, register, watch, setValue, clearErrors, formState: {errors}} = form
 
     // If countdown is disabled, redownload final becomes irrelevant and is hidden
     const withCountdown = watch('downloadWithCountdown')
@@ -151,17 +152,16 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                         control={control}
                         name="downloadStartingFrom"
                         render={({field}) => (
-                            <input
+                            <DateInput
+                                {...field}
                                 id="download-starting-from"
-                                className="input"
-                                type="date"
-                                name={field.name}
-                                value={field.value ?? ''}
-                                onChange={(event) => field.onChange(event.target.value || null)}
-                                onBlur={field.onBlur}
-                                ref={field.ref}
                                 aria-invalid={!!errors.downloadStartingFrom}
                                 aria-describedby={errors.downloadStartingFrom ? 'download-starting-from-errors' : 'download-starting-from-help'}
+                                clearButtonLabel="Clear download starting from date"
+                                onClear={() => {
+                                    setValue('downloadStartingFrom', null, {shouldDirty: true, shouldValidate: true})
+                                    clearErrors('downloadStartingFrom')
+                                }}
                             />
                         )}
                     />

@@ -64,8 +64,11 @@ export type TaskLedgerEntryRead = z.infer<typeof TaskLedgerEntryReadSchema>;
 export const TaskLedgerPageReadSchema = z.looseObject({
   items: z.array(TaskLedgerEntryReadSchema),
   total: z.int(),
-  offset: z.int(),
   limit: z.int(),
+  nextCursor: z.string().nullable().optional(),
+  previousCursor: z.string().nullable().optional(),
   hasMore: z.boolean(),
+  hasPrevious: z.boolean().optional(),
+  revision: z.string().nullable().optional(),
 });
 export type TaskLedgerPageRead = z.infer<typeof TaskLedgerPageReadSchema>;

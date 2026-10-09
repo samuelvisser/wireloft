@@ -103,14 +103,14 @@ def test_show_sources_page_through_every_episode_in_scope(db_session):
         db_session,
         LocalMediaProfileType.SHOW,
         ShowLocalMediaProfileScope.PODCAST,
-        offset=0,
+        cursor=None,
         limit=2,
     )
     second = get_output_template_source_page(
         db_session,
         LocalMediaProfileType.SHOW,
         ShowLocalMediaProfileScope.PODCAST,
-        offset=2,
+        cursor=first.next_cursor,
         limit=2,
     )
 
@@ -248,12 +248,13 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
     all_sources = get_output_template_source_page(
         db_session,
         LocalMediaProfileType.MOVIE,
+        cursor=None,
         limit=2,
     )
     last_source = get_output_template_source_page(
         db_session,
         LocalMediaProfileType.MOVIE,
-        offset=2,
+        cursor=all_sources.next_cursor,
         limit=2,
     )
     trailer_search = get_output_template_source_page(
@@ -351,6 +352,7 @@ def test_empty_library_uses_fallback_but_empty_search_does_not(db_session):
 
 def test_random_show_source_weights_shows_equally_before_episodes(db_session, monkeypatch):
     from backend.api.endpoints.local_media_profiles import output_template
+    from backend.db.models import Episode
     from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
     from backend.types.show_types import ShowType
 
@@ -366,29 +368,26 @@ def test_random_show_source_weights_shows_equally_before_episodes(db_session, mo
     )
     for index in range(1, 11):
         _add_episode(db_session, crowded, index=index)
-    small_episode = _add_episode(db_session, small, index=1)
+    _add_episode(db_session, small, index=1)
 
-    choices = []
-
-    def choose_last(values):
-        values = list(values)
-        choices.append(values)
-        return values[-1]
-
-    monkeypatch.setattr(output_template, "choice", choose_last)
+    # Make the SQL random ordering deterministic. Ordering the grouped show rows
+    # by show id proves the first draw is over shows, not over all episode rows.
+    monkeypatch.setattr(
+        output_template.func,
+        "random",
+        lambda: Episode.show_id.desc(),
+    )
     source = output_template.get_random_show_template_source(
         db_session,
         ShowLocalMediaProfileScope.PODCAST,
     )
 
-    assert choices[0] == [crowded.id, small.id]
-    assert choices[1] == [small_episode.id]
     assert source is not None
     assert source.values["show_title"] == "Small Podcast"
     assert source.values["episode_title"] == "Episode 1"
 
 
-def test_random_show_source_respects_profile_scope(db_session, monkeypatch):
+def test_random_show_source_respects_profile_scope(db_session):
     from backend.api.endpoints.local_media_profiles import output_template
     from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
     from backend.types.show_types import ShowType
@@ -396,22 +395,13 @@ def test_random_show_source_respects_profile_scope(db_session, monkeypatch):
     podcast = _make_show(db_session, slug="podcast", show_type=ShowType.PODCAST.value)
     series = _make_show(db_session, slug="series", show_type=ShowType.SERIES.value)
     _add_episode(db_session, podcast, index=1)
-    series_episode = _add_episode(db_session, series, index=1)
+    _add_episode(db_session, series, index=1)
 
-    seen = []
-
-    def choose_only(values):
-        values = list(values)
-        seen.append(values)
-        return values[0]
-
-    monkeypatch.setattr(output_template, "choice", choose_only)
     source = output_template.get_random_show_template_source(
         db_session,
         ShowLocalMediaProfileScope.SERIES,
     )
 
-    assert seen == [[series.id], [series_episode.id]]
     assert source is not None
     assert source.values["show_title"] == "Series"
 
@@ -444,7 +434,8 @@ def test_show_source_anchor_opens_at_selected_episode_in_natural_order(db_sessio
         anchor_source_id=f"episode:{selected.id}",
     )
 
-    assert page.offset == 22
+    assert page.previous_cursor is not None
+    assert page.next_cursor is not None
     assert [source.values["episode_number"] for source in page.items] == [
         "18", "19", "20", "21", "22",
     ]
@@ -470,5 +461,59 @@ def test_show_source_anchor_does_not_override_search_order(db_session):
         anchor_source_id=f"episode:{first.id}",
     )
 
-    assert page.offset == 0
+    assert page.previous_cursor is None
     assert [source.values["episode_title"] for source in page.items] == ["Ordinary episode"]
+
+
+
+def test_show_source_cursor_survives_changes_before_boundary(db_session):
+    from backend.api.endpoints.local_media_profiles.output_template import (
+        get_output_template_source_page,
+    )
+    from backend.types.local_media_profile_types import (
+        LocalMediaProfileType,
+        ShowLocalMediaProfileScope,
+    )
+    from backend.types.show_types import ShowType
+
+    show = _make_show(db_session, slug="cursor-show", show_type=ShowType.PODCAST.value)
+    episodes = [
+        _add_episode(db_session, show, index=index)
+        for index in range(1, 6)
+    ]
+    db_session.commit()
+
+    first = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        ShowLocalMediaProfileScope.PODCAST,
+        cursor=None,
+        limit=2,
+    )
+    assert [source.values["episode_number"] for source in first.items] == ["1", "2"]
+    assert first.next_cursor is not None
+
+    # Remove and insert rows before the saved boundary. A cursor based on the
+    # boundary's sort values must still resume at episode 3.
+    db_session.delete(episodes[0])
+    _add_episode(db_session, show, index=0, title="Inserted before cursor")
+    db_session.commit()
+
+    second = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        ShowLocalMediaProfileScope.PODCAST,
+        cursor=first.next_cursor,
+        limit=2,
+    )
+    assert [source.values["episode_number"] for source in second.items] == ["3", "4"]
+    assert second.previous_cursor is not None
+
+    previous = get_output_template_source_page(
+        db_session,
+        LocalMediaProfileType.SHOW,
+        ShowLocalMediaProfileScope.PODCAST,
+        cursor=second.previous_cursor,
+        limit=2,
+    )
+    assert [source.values["episode_number"] for source in previous.items] == ["0", "2"]

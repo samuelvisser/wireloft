@@ -56,8 +56,8 @@
    the Actions column claim enough horizontal space for every icon instead. */
 .downloads-table th:last-child,
 .downloads-table td:last-child {
-    width: 7.25rem !important;
-    min-width: 7.25rem;
+    width: 8.25rem !important;
+    min-width: 8.25rem;
     white-space: nowrap;
 }
 

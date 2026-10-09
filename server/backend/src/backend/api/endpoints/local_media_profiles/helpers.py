@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.api.models.local_media_profile import LocalMediaProfileAPIBaseIn
@@ -22,9 +23,25 @@ def ensure_unique_profile_settings(
     *,
     exclude_id: int | None = None,
 ) -> None:
+    duplicate_stmt = select(profile_model.id).where(
+        profile_model.output_template == body.output_template,
+        profile_model.preferred_format == body.preferred_format,
+    )
+    if exclude_id is not None:
+        duplicate_stmt = duplicate_stmt.where(profile_model.id != exclude_id)
+    if s.scalar(duplicate_stmt.limit(1)) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=[{
+                "loc": ["body", "outputTemplate"],
+                "msg": "A Local Media Profile with this output path template and preferred format already exists",
+                "type": "unique_violation",
+            }],
+        )
+
     query = s.query(profile_model)
     if exclude_id is not None:
-        query = query.filter(LocalMediaProfileBase.id != exclude_id)
+        query = query.filter(profile_model.id != exclude_id)
 
     environment = create_output_template_environment()
     environment.finalize = _sanitize_emitted_output_value
@@ -32,20 +49,9 @@ def ensure_unique_profile_settings(
         body.output_template, body.type, body.preferred_format,
         environment=environment, namespace="candidate",
     )
-    for existing in query.all():
-        if (
-            existing.output_template == body.output_template
-            and existing.preferred_format == body.preferred_format
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail=[{
-                    "loc": ["body", "outputTemplate"],
-                    "msg": "A Local Media Profile with this output path template and preferred format already exists",
-                    "type": "unique_violation",
-                }],
-            )
 
+    # Stream candidates to speed up the process; only ask more if we need it
+    for existing in query.yield_per(50):
         previous = analyze_profile_outputs(
             existing.output_template, existing.type, existing.preferred_format,
             environment=environment, namespace=f"profile:{existing.id}",

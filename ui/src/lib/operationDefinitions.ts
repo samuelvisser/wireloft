@@ -139,7 +139,10 @@ function invalidateShowFiles(
   invalidations: InvalidationCollector,
 ) {
   const showSlug = contextString(operation, 'show_slug')
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+  )
   if (showSlug) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['showDownloads', showSlug]}))
   }
@@ -194,7 +197,10 @@ function invalidateMovieFiles(
 ) {
   invalidateMovie(queryClient, operation, invalidations)
   const movieSlug = contextString(operation, 'movie_slug')
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+  )
   if (movieSlug) {
     invalidations.push(queryClient.invalidateQueries({queryKey: ['movieDownloads', movieSlug]}))
   }
@@ -206,6 +212,7 @@ function invalidateLocalMediaProfileFiles(
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
     queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
     queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
@@ -238,7 +245,10 @@ function invalidateMediaDownload(
   const showSlug = contextString(operation, 'show_slug')
   const movieSlug = contextString(operation, 'movie_slug')
 
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+  )
   if (operation.resourceId != null) {
     invalidations.push(
       queryClient.invalidateQueries({queryKey: ['mediaDownloadHistory', operation.resourceId]}),
@@ -268,6 +278,7 @@ function invalidateMediaDownloadCollection(
   invalidations: InvalidationCollector,
 ) {
   invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
     queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
     queryClient.invalidateQueries({queryKey: ['episodeDownloads']}),
     queryClient.invalidateQueries({queryKey: ['movieDownloads']}),
@@ -281,7 +292,10 @@ function invalidateTaskLedgerDefinition(
   definitionKey: string,
   invalidations: InvalidationCollector,
 ) {
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['taskLedger', definitionKey]}))
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['taskLedger', definitionKey]}),
+    queryClient.invalidateQueries({queryKey: ['taskLedger', 'list', definitionKey]}),
+  )
 }
 
 function invalidateEpisodeCronJob(
@@ -303,7 +317,10 @@ function invalidateEpisodeAndDownloadCronJob(
   invalidations: InvalidationCollector,
 ) {
   invalidateEpisodeCronJob(queryClient, operation, invalidations)
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+  )
 }
 
 function invalidateDownloadCronJob(
@@ -311,7 +328,10 @@ function invalidateDownloadCronJob(
   _operation: TaskOperationRead,
   invalidations: InvalidationCollector,
 ) {
-  invalidations.push(queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}))
+  invalidations.push(
+    queryClient.invalidateQueries({queryKey: ['mediaDownloads']}),
+    queryClient.invalidateQueries({queryKey: ['mediaDownloadsView']}),
+  )
 }
 
 function invalidateFindEpisodesCron(
@@ -660,11 +680,20 @@ function taskLedgerQueryMatchesOperation(
 ): boolean {
   if (queryKey[0] !== 'taskLedger') return false
 
-  const resourceType = queryKey[2]
-  if (resourceType !== undefined && resourceType !== operation.resourceType) return false
+  const lazyCollection = queryKey[1] === 'list'
+  const resourceType = lazyCollection ? queryKey[3] : queryKey[2]
+  if (
+    resourceType !== undefined
+    && resourceType !== null
+    && resourceType !== operation.resourceType
+  ) {
+    return false
+  }
 
-  const resourceFilter = queryKey[3]
-  if (resourceFilter === undefined || operation.resourceId == null) return true
+  const resourceFilter = lazyCollection ? queryKey[4] : queryKey[3]
+  if (resourceFilter === undefined || resourceFilter === null || operation.resourceId == null) {
+    return true
+  }
   if (typeof resourceFilter === 'number') return resourceFilter === operation.resourceId
   return Array.isArray(resourceFilter) && resourceFilter.includes(operation.resourceId)
 }

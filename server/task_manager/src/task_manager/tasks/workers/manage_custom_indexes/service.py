@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import CustomIndexState, Episode, Show, ShowLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
 from backend.services.custom_indexes import (
-    profile_applies_to_show, reconcile_show_profile_custom_indexes,
+    profile_show_scope_filter, reconcile_show_profile_custom_indexes,
 )
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from task_manager.scheduler.operations import (
@@ -46,17 +46,21 @@ def _queue_targeted_rename(
 
 
 def _queue_profile_rename(session: Session, profile: ShowLocalMediaProfile) -> bool:
-    show_ids = tuple(sorted({
-        show.id for show in session.scalars(select(Show)
-            .join(Episode, Episode.show_id == Show.id)
-            .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
-            .where(EpisodeMediaDownload.local_media_profile_id == profile.id,
-                   EpisodeMediaDownload.artifact_status.in_((
-                       MediaDownloadArtifactStatus.AVAILABLE.value,
-                       MediaDownloadArtifactStatus.CORRUPTED.value,
-                   ))))
-        if profile_applies_to_show(profile, show)
-    }))
+    show_ids = tuple(session.scalars(
+        select(Show.id)
+        .join(Episode, Episode.show_id == Show.id)
+        .join(EpisodeMediaDownload, EpisodeMediaDownload.media_item_id == Episode.id)
+        .where(
+            EpisodeMediaDownload.local_media_profile_id == profile.id,
+            EpisodeMediaDownload.artifact_status.in_((
+                MediaDownloadArtifactStatus.AVAILABLE.value,
+                MediaDownloadArtifactStatus.CORRUPTED.value,
+            )),
+            profile_show_scope_filter(profile),
+        )
+        .distinct()
+        .order_by(Show.id)
+    ))
     if not show_ids:
         return False
     targets = [

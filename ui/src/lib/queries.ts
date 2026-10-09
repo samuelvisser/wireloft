@@ -1,8 +1,24 @@
 import {presentDownloadProgress} from './downloadProgress'
-import {keepPreviousData, QueryClient, useInfiniteQuery, useQuery, useQueryClient} from '@tanstack/react-query'
-import {useEffect, useMemo} from 'react'
+import {
+    type InfiniteData,
+    keepPreviousData,
+    QueryClient,
+    useInfiniteQuery,
+    useQuery,
+    useQueryClient,
+} from '@tanstack/react-query'
+import {useEffect, useMemo, useRef} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
+import {
+    type LazyCollectionPage,
+    type LazyCollectionPageRequest,
+    contiguousLazyCollectionItems,
+    lazyCollectionQueryKey,
+    updateLazyCollectionEntities,
+    useLazyCollection,
+} from './lazyCollection'
 import {useFrontendPuller} from './puller'
+import {downloadStatusesForApi} from './downloadStatusFilters'
 import {
     episodeQueryKeys,
     fetchEpisodePage,
@@ -28,17 +44,19 @@ import {
     EpisodeIndexedActivityReadSchema,
     EpisodeRead,
     EpisodeReadSchema,
+    EpisodeReadView,
+    EpisodeReadViewPage,
 } from "../types/schemas/episode";
 import {RssStreamProfileRead, RssStreamProfileReadSchema} from "../types/schemas/rss_stream_profile";
 import {DailywireUserInfoRead, DailywireUserInfoReadSchema} from "../types/schemas/dailywire_user_info";
 import {DailywireShowRead} from "../types/schemas/dailywire_show";
 import {
     MediaDownloadDomainViewRead,
+    MediaDownloadPageReadSchema,
     MediaDownloadViewRead,
     MediaDownloadViewReadSchema,
 } from "../types/schemas/media_download";
 import {TaskOperationRead} from "../types/schemas/operation";
-import {TaskLedgerPageReadSchema} from "../types/schemas/task";
 import {MovieRead, MovieReadSchema} from "../types/schemas/movie";
 import {
     DailywireCatalogRead,
@@ -296,25 +314,21 @@ export function useEpisodePages(
 ) {
     const pageSize = opts?.pageSize ?? 36
     const seasonId = opts?.seasonId
-    const result = useInfiniteQuery({
-        queryKey: episodeQueryKeys.pages(showSlug, seasonId ?? null, pageSize),
+    const result = useLazyCollection<EpisodeReadView, EpisodeReadViewPage>({
+        collectionPrefix: episodeQueryKeys.forShow(showSlug),
+        queryKey: ['pages', seasonId ?? null] as const,
+        initialCount: pageSize,
+        batchSize: pageSize,
         enabled: !!showSlug && seasonId !== null && (opts?.enabled ?? true),
-        initialPageParam: 0,
-        queryFn: ({pageParam, signal}) => fetchEpisodePage(
+        fetchPage: ({cursor, limit}, signal) => fetchEpisodePage(
             showSlug!,
             {
-                offset: pageParam,
-                limit: pageSize,
+                cursor,
+                limit,
                 seasonId: seasonId ?? undefined,
             },
             signal,
         ),
-        getNextPageParam: (lastPage) => (
-            lastPage.hasMore
-                ? lastPage.offset + lastPage.items.length
-                : undefined
-        ),
-        refetchOnMount: 'always',
     })
 
     const firstPage = result.data?.pages[0]
@@ -669,50 +683,365 @@ export function useMediaDownloadsView() {
     return useMediaDownloadPresentation({kind: 'all'})
 }
 
-type TaskLedgerQuery = {
-    definitionKey: string
-    resourceType?: string
-    resourceId?: number
-    orderBy?: 'started_at' | 'finished_at' | 'created_at'
-    order?: 'asc' | 'desc'
-    limit?: number
+
+export type MediaDownloadCollectionOrder = 'workflow' | 'recent'
+
+export type MediaDownloadCollectionQuery = {
+    statuses?: readonly string[]
+    order?: MediaDownloadCollectionOrder
+    initialCount?: number
+    batchSize?: number
     enabled?: boolean
 }
 
-export function useTaskLedger({
-    definitionKey,
-    resourceType,
-    resourceId,
-    orderBy = 'started_at',
-    order = 'desc',
-    limit = 50,
+const MEDIA_DOWNLOAD_COLLECTION_PREFIX = ['mediaDownloads'] as const
+
+// Temporary experiment: leave download ordering to backend-paginated results.
+// Set back to true to restore local reorder/optimistic insertion behavior.
+const ENABLE_FRONTEND_DOWNLOAD_REORDERING = false
+const ACTIVE_OR_QUEUED_DOWNLOAD_STATUSES = new Set([
+    'pending', 'downloading', 'preparing', 'waiting', 'canceling', 'local_processing',
+])
+
+export function compareMediaDownloadWorkflowOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
+    const leftStatus = String(left.downloadStatus)
+    const rightStatus = String(right.downloadStatus)
+    const activeStatuses = new Set(['downloading', 'preparing', 'waiting', 'canceling', 'local_processing'])
+    const leftActive = activeStatuses.has(leftStatus)
+    const rightActive = activeStatuses.has(rightStatus)
+    if (leftActive !== rightActive) return leftActive ? -1 : 1
+
+    const leftQueued = leftStatus === 'pending'
+    const rightQueued = rightStatus === 'pending'
+    if (leftQueued !== rightQueued) return leftQueued ? -1 : 1
+
+    if (leftQueued && rightQueued) {
+        if (left.queuePosition == null && right.queuePosition != null) return -1
+        if (left.queuePosition != null && right.queuePosition == null) return 1
+        if (left.queuePosition != null && right.queuePosition != null) {
+            const byPosition = left.queuePosition - right.queuePosition
+            if (byPosition !== 0) return byPosition
+        }
+    }
+
+    if (leftActive && rightActive) {
+        // Match the backend: the current execution's start takes precedence
+        // over the original download record's creation time.
+        const activeStart = (download: MediaDownloadViewRead): number => (
+            (download.latestTaskStatus === 'RUNNING' ? download.latestTaskStartedAt : null)
+            ?? download.startedAt
+            ?? operationDate(download.operation?.createdAt)
+            ?? download.createdAt
+        ).getTime()
+        const byStart = activeStart(left) - activeStart(right)
+        if (byStart !== 0) return byStart
+    }
+
+    // Completed downloads use their last successful download time, while other terminal statuses use ID ordering
+    const leftCompletedAt = leftStatus === 'downloaded' || leftStatus === 'redownloaded'
+        ? (left.downloadedAt ?? left.createdAt).getTime()
+        : 0
+    const rightCompletedAt = rightStatus === 'downloaded' || rightStatus === 'redownloaded'
+        ? (right.downloadedAt ?? right.createdAt).getTime()
+        : 0
+    const byDownloadedAt = rightCompletedAt - leftCompletedAt
+    return byDownloadedAt || right.id - left.id
+}
+
+function mediaDownloadRecentOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
+    const leftAt = left.finishedAt ?? left.downloadedAt ?? left.createdAt
+    const rightAt = right.finishedAt ?? right.downloadedAt ?? right.createdAt
+    const byTime = rightAt.getTime() - leftAt.getTime()
+    return byTime || right.id - left.id
+}
+
+function mediaDownloadStatusFilterContains(
+    source: unknown,
+    target: readonly string[],
+): boolean {
+    if (source === null) return true
+    if (!Array.isArray(source)) return false
+    const sourceStatuses = new Set(
+        source.filter((value): value is string => typeof value === 'string'),
+    )
+    return target.every((status) => sourceStatuses.has(status))
+}
+
+export function deriveMediaDownloadCollectionPlaceholder(
+    queryClient: QueryClient,
+    {
+        statuses,
+        order,
+        initialCount,
+        operations = [],
+    }: {
+        statuses: readonly string[] | undefined
+        order: MediaDownloadCollectionOrder
+        initialCount: number
+        operations?: TaskOperationRead[]
+    },
+): InfiniteData<
+    LazyCollectionPage<MediaDownloadDomainViewRead>,
+    LazyCollectionPageRequest
+> | undefined {
+    if (statuses === undefined) return undefined
+
+    const targetStatuses = [...new Set(statuses)].sort()
+    const targetStatusSet = new Set(targetStatuses)
+    const candidates = queryClient.getQueryCache().findAll({
+        queryKey: [...MEDIA_DOWNLOAD_COLLECTION_PREFIX, 'list'],
+    })
+
+    let best: {
+        data: InfiniteData<
+            LazyCollectionPage<MediaDownloadDomainViewRead>,
+            LazyCollectionPageRequest
+        >
+        matchCount: number
+        updatedAt: number
+    } | undefined
+
+    for (const query of candidates) {
+        const key = query.queryKey
+        if (
+            key[0] !== MEDIA_DOWNLOAD_COLLECTION_PREFIX[0]
+            || key[1] !== 'list'
+            || key[3] !== order
+            || !mediaDownloadStatusFilterContains(key[2], targetStatuses)
+        ) {
+            continue
+        }
+
+        const sourceStatuses = key[2]
+        if (
+            Array.isArray(sourceStatuses)
+            && sourceStatuses.length === targetStatuses.length
+            && targetStatuses.every((status, index) => sourceStatuses[index] === status)
+        ) {
+            continue
+        }
+
+        const source = query.state.data as InfiniteData<
+            LazyCollectionPage<MediaDownloadDomainViewRead>,
+            LazyCollectionPageRequest
+        > | undefined
+        if (!source?.pages.length) continue
+
+        const contiguous = contiguousLazyCollectionItems(source.pages)
+        if (!contiguous) continue
+
+        const firstPage = source.pages[0]
+        const facets = firstPage.facets
+        const targetTotal = facets
+            ? targetStatuses.reduce((total, status) => total + (facets[status] ?? 0), 0)
+            : contiguous.complete
+                ? undefined
+                : null
+        if (targetTotal === null) continue
+
+        const byId = new Map<number, MediaDownloadDomainViewRead>()
+        for (const download of contiguous.items) byId.set(download.id, download)
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            for (const operation of operations) {
+                if (operation.resourceId == null || byId.has(operation.resourceId)) continue
+                const synthetic = syntheticDownload(operation)
+                if (synthetic) byId.set(synthetic.id, synthetic)
+            }
+        }
+
+        const matching = [...byId.values()]
+            .map((download) => ({
+                download,
+                presented: presentDownload(
+                    download,
+                    operationForDownload(operations, download.id),
+                ),
+            }))
+            .filter(({presented}) => targetStatusSet.has(String(presented.downloadStatus)))
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            matching.sort((left, right) => (
+                order === 'recent'
+                    ? mediaDownloadRecentOrder(left.presented, right.presented)
+                    : compareMediaDownloadWorkflowOrder(left.presented, right.presented)
+            ))
+        }
+
+        const total = targetTotal ?? matching.length
+        const items = matching.slice(0, Math.min(initialCount, total))
+            .map(({download}) => download)
+
+        if (items.length === 0 && total > 0) continue
+
+        const placeholder: InfiniteData<
+            LazyCollectionPage<MediaDownloadDomainViewRead>,
+            LazyCollectionPageRequest
+        > = {
+            pages: [{
+                items,
+                total,
+                limit: initialCount,
+                nextCursor: null,
+                previousCursor: null,
+                revision: firstPage.revision,
+                facets: firstPage.facets,
+                // Bulk-action counts depend on the exact filtered collection and
+                // are intentionally left for the authoritative backend response.
+                actions: {},
+            }],
+            pageParams: [{cursor: null, limit: initialCount}],
+        }
+
+        const score = items.length
+        if (
+            best === undefined
+            || score > best.matchCount
+            || (score === best.matchCount && query.state.dataUpdatedAt > best.updatedAt)
+        ) {
+            best = {
+                data: placeholder,
+                matchCount: score,
+                updatedAt: query.state.dataUpdatedAt,
+            }
+        }
+    }
+
+    return best?.data
+}
+
+export function useMediaDownloadsCollection({
+    statuses,
+    order = 'workflow',
+    initialCount = 50,
+    batchSize = 50,
     enabled = true,
-}: TaskLedgerQuery) {
-    return useInfiniteQuery({
-        queryKey: ['taskLedger', definitionKey, resourceType, resourceId, orderBy, order, limit] as const,
-        enabled: enabled && definitionKey.length > 0,
-        initialPageParam: 0,
-        queryFn: async ({pageParam, signal}) => {
-            const params = new URLSearchParams({
-                definition_key: definitionKey,
-                order_by: orderBy,
+}: MediaDownloadCollectionQuery = {}) {
+    const normalizedStatuses = useMemo(
+        () => downloadStatusesForApi(statuses),
+        [statuses],
+    )
+    const {data: pullData} = useFrontendPuller()
+    const operations = (pullData?.operations ?? []).filter(
+        (operation) => operation.kind === 'media.download',
+    )
+    const queryClient = useQueryClient()
+    const lastActiveOrderSignature = useRef<string | null>(null)
+    const activeOrderSignature = operations
+        .filter((operation) => ACTIVE_OPERATION_STATUSES.has(operation.status))
+        .map((operation) => `${operation.id}:${operation.status}:${operation.startedAt ?? ''}`)
+        .sort()
+        .join('|')
+
+    // With local reordering disabled, fetch authoritative backend positions
+    // when operations enter/leave the active queue. Progress-only pulls do
+    // not change this signature and should not trigger an extra page request.
+    useEffect(() => {
+        if (
+            ENABLE_FRONTEND_DOWNLOAD_REORDERING || !enabled || !pullData
+            || (
+                normalizedStatuses !== undefined
+                && !normalizedStatuses.some((status) => ACTIVE_OR_QUEUED_DOWNLOAD_STATUSES.has(status))
+            )
+        ) return
+        if (lastActiveOrderSignature.current === null) {
+            lastActiveOrderSignature.current = activeOrderSignature
+            return
+        }
+        if (lastActiveOrderSignature.current === activeOrderSignature) return
+        lastActiveOrderSignature.current = activeOrderSignature
+        void queryClient.invalidateQueries({
+            queryKey: lazyCollectionQueryKey(
+                MEDIA_DOWNLOAD_COLLECTION_PREFIX,
+                [normalizedStatuses ?? null, order],
+                initialCount,
+                batchSize,
+            ),
+            exact: true,
+            refetchType: 'active',
+        })
+    }, [
+        activeOrderSignature, enabled, pullData, queryClient,
+        normalizedStatuses, order, initialCount, batchSize,
+    ])
+
+    const collection = useLazyCollection<MediaDownloadDomainViewRead>({
+        collectionPrefix: MEDIA_DOWNLOAD_COLLECTION_PREFIX,
+        queryKey: [normalizedStatuses ?? null, order] as const,
+        initialCount,
+        batchSize,
+        enabled,
+        // Refetch cached filter variants when selected while keeping their rows visible.
+        // This leaves TanStack Query's normal sequential infinite-page refresh intact.
+        staleTime: 0,
+        derivePlaceholderData: (queryClient) => deriveMediaDownloadCollectionPlaceholder(
+            queryClient,
+            {
+                statuses: normalizedStatuses,
                 order,
-                offset: String(pageParam),
+                initialCount,
+                operations,
+            },
+        ),
+        fetchPage: async ({cursor, limit}, signal) => {
+            const params = new URLSearchParams({
+                order,
                 limit: String(limit),
             })
-            if (resourceType) params.set('resource_type', resourceType)
-            if (resourceId !== undefined) params.set('resource_id', String(resourceId))
-            const value = await fetchJSON<unknown>(
-                `${(window as any).appConfig.API_URL}/tasks/ledger?${params}`,
+            if (cursor) params.set('cursor', cursor)
+            for (const status of normalizedStatuses ?? []) params.append('status', status)
+            return MediaDownloadPageReadSchema.parse(await fetchJSON<unknown>(
+                `${(window as any).appConfig.API_URL}/media-downloads/as-view/page?${params}`,
                 signal,
-            )
-            return TaskLedgerPageReadSchema.parse(value)
+            ))
         },
-        getNextPageParam: (lastPage) => lastPage.hasMore
-            ? lastPage.offset + lastPage.items.length
-            : undefined,
-        refetchOnMount: 'always',
     })
+
+    const data = useMemo(() => {
+        const downloads = new Map<number, MediaDownloadDomainViewRead>()
+        for (const download of collection.items) downloads.set(download.id, download)
+
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            for (const operation of operations) {
+                if (operation.resourceId == null || downloads.has(operation.resourceId)) continue
+                const synthetic = syntheticDownload(operation)
+                if (synthetic) downloads.set(synthetic.id, synthetic)
+            }
+        }
+
+        const presented = [...downloads.values()]
+            .map((download) => presentDownload(
+                download,
+                operationForDownload(operations, download.id),
+            ))
+            .filter((download) => (
+                normalizedStatuses === undefined
+                || normalizedStatuses.includes(String(download.downloadStatus))
+            ))
+
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            presented.sort(order === 'recent' ? mediaDownloadRecentOrder : compareMediaDownloadWorkflowOrder)
+        }
+        return presented
+    }, [collection.items, normalizedStatuses, operations, order])
+
+    return {
+        ...collection,
+        data,
+    }
+}
+
+export function applyMediaDownloadQueuePositions(
+    queryClient: QueryClient,
+    positions: Record<number, number>,
+) {
+    updateLazyCollectionEntities<MediaDownloadDomainViewRead>(
+        queryClient,
+        MEDIA_DOWNLOAD_COLLECTION_PREFIX,
+        (download) => {
+            const queuePosition = positions[download.id] ?? null
+            if ((download.queuePosition ?? null) === queuePosition) return download
+            return {...download, queuePosition}
+        },
+    )
 }
 
 // Prefetch core data to warm the cache on app start

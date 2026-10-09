@@ -6,7 +6,7 @@ from math import isfinite
 from typing import Any, Iterable, Sequence
 from uuid import uuid4
 
-from sqlalchemy import select
+from sqlalchemy import exists, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.db.core import get_session
@@ -18,13 +18,19 @@ from task_manager.scheduler.db import (
     TaskOperationTarget,
     TaskRun,
 )
-from task_manager.scheduler.operation_control import operation_cancel_requested, run_cancel_requested
+from task_manager.scheduler.operation_control import (
+    OPERATION_CANCEL_REQUESTED_CONTEXT_KEY,
+    RUN_CANCEL_REQUESTED_META_KEY,
+    operation_cancel_requested,
+    run_cancel_requested,
+)
 from task_manager.scheduler.registry import task_tracks_progress
 from task_manager.scheduler.transactional import queue_task_after_commit
 from task_manager.scheduler.types import (
     OperationDependencyCancelPolicy,
     OperationSource,
     OperationStatus,
+    ResourceType,
     TaskStatus,
 )
 
@@ -373,13 +379,15 @@ def _operation_depends_on(
         if possible_descendant_id in frontier:
             return True
         visited.update(frontier)
-        children = set(session.scalars(
-            select(TaskOperationDependency.child_operation_id).where(
-                TaskOperationDependency.parent_operation_id.in_(frontier),
-                TaskOperationDependency.child_operation_id.is_not(None),
+        child_stmt = select(TaskOperationDependency.child_operation_id).where(
+            TaskOperationDependency.parent_operation_id.in_(frontier),
+            TaskOperationDependency.child_operation_id.is_not(None),
+        )
+        if visited:
+            child_stmt = child_stmt.where(
+                TaskOperationDependency.child_operation_id.not_in(visited)
             )
-        ))
-        frontier = {child_id for child_id in children if child_id and child_id not in visited}
+        frontier = set(session.scalars(child_stmt))
     return False
 
 
@@ -444,19 +452,22 @@ def link_run_to_operations(
             if _run_matches_target_inputs(run, target):
                 targets[target.id] = target
 
+    cancel_requested = func.coalesce(
+        TaskOperation.context[OPERATION_CANCEL_REQUESTED_CONTEXT_KEY].as_boolean(),
+        False,
+    )
     auto_statement = (
         select(TaskOperationTarget, TaskOperation)
         .join(TaskOperation, TaskOperation.id == TaskOperationTarget.operation_id)
         .where(
             TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+            cancel_requested.is_(False),
             TaskOperationTarget.task_key == task_key,
             TaskOperationTarget.resource_type == _resource_type_value(run.resource_type),
             TaskOperationTarget.resource_id == run.resource_id,
         )
     )
     for target, operation in session.execute(auto_statement):
-        if operation_cancel_requested(operation):
-            continue
         if _run_matches_target_inputs(run, target):
             targets[target.id] = target
 
@@ -509,12 +520,16 @@ def _refresh_operation_tree(
         refreshed[operation_id] = _refresh_loaded_operation(operation)
         session.flush()
 
-        parent_ids = session.scalars(
-            select(TaskOperationDependency.parent_operation_id).where(
-                TaskOperationDependency.child_operation_id == operation_id
-            )
+        parent_stmt = select(
+            TaskOperationDependency.parent_operation_id
+        ).where(
+            TaskOperationDependency.child_operation_id == operation_id
         )
-        queue.extend(parent_id for parent_id in parent_ids if parent_id not in visited)
+        if visited:
+            parent_stmt = parent_stmt.where(
+                TaskOperationDependency.parent_operation_id.not_in(visited)
+            )
+        queue.extend(session.scalars(parent_stmt))
 
     return refreshed
 
@@ -914,39 +929,60 @@ def mark_interrupted_operations_for_recovery(
 def recover_pending_operations() -> int:
     """Requeue incomplete recoverable targets after a process restart.
 
-    Task targets persist the worker key, resource and validated worker inputs, so
-    recovery does not need action-specific code or IDs embedded in worker params.
+    Candidate selection stays in SQL: terminal targets, non-recoverable targets,
+    and operations with an authoritative cancellation marker are never hydrated.
     """
     session = get_session()
     try:
-        operations = list(
-            session.scalars(
-                select(TaskOperation)
-                .where(TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES))
-                .options(*_operation_run_graph())
+        cancel_requested = func.coalesce(
+            TaskOperation.context[
+                OPERATION_CANCEL_REQUESTED_CONTEXT_KEY
+            ].as_boolean(),
+            False,
+        )
+        successful_run = exists(
+            select(TaskOperationRun.task_run_id)
+            .join(TaskRun, TaskRun.id == TaskOperationRun.task_run_id)
+            .where(
+                TaskOperationRun.operation_id == TaskOperation.id,
+                TaskOperationRun.target_id == TaskOperationTarget.id,
+                TaskRun.status == TaskStatus.SUCCEEDED,
             )
         )
-        recoveries: list[tuple[str, str, str, int | None, str, dict[str, Any]]] = []
-        for operation in operations:
-            if operation_cancel_requested(operation):
+        rows = session.execute(
+            select(TaskOperation, TaskOperationTarget)
+            .join(
+                TaskOperationTarget,
+                TaskOperationTarget.operation_id == TaskOperation.id,
+            )
+            .where(
+                TaskOperation.status.in_(_ACTIVE_OPERATION_STATUSES),
+                cancel_requested.is_(False),
+                TaskOperationTarget.recover_on_restart.is_(True),
+                ~successful_run,
+            )
+            .order_by(TaskOperation.created_at, TaskOperationTarget.id)
+        )
+
+        recoveries: list[
+            tuple[str, str, str, int | None, str, dict[str, Any]]
+        ] = []
+        queued_operation_ids: set[str] = set()
+        for operation, target in rows:
+            recoveries.append((
+                operation.id,
+                target.task_key,
+                target.resource_type,
+                target.resource_id,
+                target.slot_key,
+                dict(target.task_kwargs or {}),
+            ))
+            if operation.id in queued_operation_ids:
                 continue
-            for target in operation.targets:
-                if not target.recover_on_restart:
-                    continue
-                effective = _effective_run_for_target(target)
-                if effective is not None and _task_status(effective.status) == TaskStatus.SUCCEEDED:
-                    continue
-                recoveries.append((
-                    operation.id,
-                    target.task_key,
-                    target.resource_type,
-                    target.resource_id,
-                    target.slot_key,
-                    dict(target.task_kwargs or {}),
-                ))
-                operation.status = OperationStatus.QUEUED.value
-                operation.message = "Queued for recovery"
-                operation.finished_at = None
+            queued_operation_ids.add(operation.id)
+            operation.status = OperationStatus.QUEUED.value
+            operation.message = "Queued for recovery"
+            operation.finished_at = None
         session.commit()
     finally:
         session.close()
@@ -956,7 +992,14 @@ def recover_pending_operations() -> int:
 
     from task_manager.scheduler.scheduler import trigger_now
 
-    for operation_id, task_key, resource_type, resource_id, slot_key, task_kwargs in recoveries:
+    for (
+        operation_id,
+        task_key,
+        resource_type,
+        resource_id,
+        slot_key,
+        task_kwargs,
+    ) in recoveries:
         trigger_now(
             def_key=task_key,
             resource_type=resource_type,
@@ -1138,23 +1181,28 @@ def _load_target_with_runs(
 
 
 def _matching_active_run(session: Session, target: TaskOperationTarget) -> TaskRun | None:
+    try:
+        resource_type = ResourceType(target.resource_type)
+    except ValueError:
+        return None
+
+    cancel_requested = func.coalesce(
+        TaskRun.meta[RUN_CANCEL_REQUESTED_META_KEY].as_boolean(),
+        False,
+    )
     statement = (
         select(TaskRun)
         .join(TaskDefinition, TaskDefinition.id == TaskRun.definition_id)
         .where(
             TaskDefinition.key == target.task_key,
+            TaskRun.resource_type == resource_type,
             TaskRun.resource_id == target.resource_id,
             TaskRun.status.in_(_ACTIVE_TASK_STATUSES),
+            cancel_requested.is_(False),
         )
         .order_by(TaskRun.id.desc())
     )
     for run in session.scalars(statement):
-        # A running worker can remain active while cooperative cancellation is
-        # propagating. It cannot satisfy new work because it is guaranteed to exit.
-        if run_cancel_requested(run):
-            continue
-        if _resource_type_value(run.resource_type) != target.resource_type:
-            continue
         if _run_matches_target_inputs(run, target):
             return run
     return None

@@ -7,7 +7,7 @@ from pydantic import Field, computed_field, field_validator
 
 from backend.api.models.base import RequestBase, ResponseBase
 from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
-from backend.api.models.pagination import OffsetPageRead
+from backend.api.models.pagination import CursorPageRead
 from backend.types.local_media_profile_types import (
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
@@ -71,8 +71,8 @@ class LocalMediaProfileTemplateSource(ResponseBase):
     fallback: bool = False
 
 
-class LocalMediaProfileTemplateSourcePage(OffsetPageRead[LocalMediaProfileTemplateSource]):
-    pass
+class LocalMediaProfileTemplateSourcePage(CursorPageRead[LocalMediaProfileTemplateSource]):
+    revision: str
 
 
 class LocalMediaProfileTemplatePreview(RequestBase):

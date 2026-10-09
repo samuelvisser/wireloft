@@ -13,6 +13,7 @@ class TaskOperationAccepted(ResponseBase):
 
 class MediaDownloadOperationAccepted(TaskOperationAccepted):
     media_download_id: int
+    queue_positions: dict[int, int] | None = None
 
 
 class MediaDownloadBulkOperationAccepted(TaskOperationAccepted):

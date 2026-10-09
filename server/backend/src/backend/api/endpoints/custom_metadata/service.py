@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from backend.db.models import Show
@@ -8,9 +8,10 @@ from backend.db.models.Metadata import Metadata
 from backend.db.models.media_item import Movie
 from backend.utils.custom_metadata import (
     CUSTOM_METADATA_DB_PREFIX,
+    CUSTOM_METADATA_KEY_MAX_LENGTH,
+    CUSTOM_METADATA_KEY_PATTERN,
     CustomMetadataScope,
     custom_metadata_storage_key,
-    is_valid_custom_metadata_key,
 )
 
 
@@ -26,22 +27,27 @@ def get_custom_metadata_fields(
 ) -> list[str]:
     """Return every valid shared custom metadata field for one media scope."""
     parent_table = _PARENT_TABLE_BY_SCOPE[scope]
-    rows = session.scalars(
-        select(Metadata.key)
-        .where(
-            Metadata.parent_table == parent_table,
-            Metadata.key.like(f"{CUSTOM_METADATA_DB_PREFIX}%"),
+    custom_key = func.substr(
+        Metadata.key,
+        len(CUSTOM_METADATA_DB_PREFIX) + 1,
+    )
+    return [
+        str(key)
+        for key in session.scalars(
+            select(custom_key)
+            .where(
+                Metadata.parent_table == parent_table,
+                Metadata.key.like(f"{CUSTOM_METADATA_DB_PREFIX}%"),
+                func.length(custom_key).between(
+                    1,
+                    CUSTOM_METADATA_KEY_MAX_LENGTH,
+                ),
+                custom_key.regexp_match(CUSTOM_METADATA_KEY_PATTERN.pattern),
+            )
+            .distinct()
+            .order_by(custom_key)
         )
-        .distinct()
-        .order_by(Metadata.key)
-    ).all()
-
-    fields: list[str] = []
-    for storage_key in rows:
-        key = storage_key[len(CUSTOM_METADATA_DB_PREFIX):]
-        if is_valid_custom_metadata_key(key):
-            fields.append(key)
-    return fields
+    ]
 
 
 def remove_shared_custom_metadata_fields(

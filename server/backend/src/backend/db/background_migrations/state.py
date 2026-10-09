@@ -18,6 +18,7 @@ def get_current_background_migration_revision() -> str | None:
         values = list(
             session.scalars(
                 select(Settings.background_migration_version).order_by(Settings.id)
+                .limit(2)
             )
         )
     finally:

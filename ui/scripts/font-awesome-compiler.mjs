@@ -323,12 +323,6 @@ async function compileFontAwesome({proIcons, files}) {
     }
   }
 
-  const mode = proIcons ? 'pro' : 'free'
-  const fallbackSummary = proIcons ? '' : `, ${fallbackCount} fallback(s)`
-  console.log(
-    `[font-awesome] ${mode}: ${references.size} referenced icon(s), ${definitions.length} bundled definition(s)${fallbackSummary}.`,
-  )
-
   return [
     `export const icons = ${JSON.stringify(definitions)}`,
     `export const proIcons = ${JSON.stringify(proIcons)}`,
