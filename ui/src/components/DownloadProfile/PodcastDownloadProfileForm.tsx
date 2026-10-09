@@ -1,5 +1,6 @@
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
-import {Controller, UseFormReturn} from 'react-hook-form'
+import {useRef, useState} from 'react'
+import {Controller, ControllerRenderProps, UseFormReturn} from 'react-hook-form'
 import Switch from 'react-switch'
 import ReadMore from '../../utils/ReadMore'
 import {faIcon} from '../../icons/faIcon'
@@ -18,6 +19,69 @@ const LimitModeReg = createSelectRegistry('DownloadLimitMode', {
     episodes: {label: 'Number of episodes'},
 })
 type LimitMode = (typeof LimitModeReg)['values'][number]
+
+type DownloadStartDateInputProps = {
+    field: ControllerRenderProps<any, 'downloadStartingFrom'>
+    invalid: boolean
+}
+
+function DownloadStartDateInput({field, invalid}: DownloadStartDateInputProps) {
+    const [hasIncompleteInput, setHasIncompleteInput] = useState(false)
+    const inputRef = useRef<HTMLInputElement | null>(null)
+
+    const updateIncompleteInput = (input: HTMLInputElement) => {
+        // Native date fields can display partial segments while their value is still empty.
+        // Chromium does not always emit input/change events for these edits.
+        setHasIncompleteInput(input.validity.badInput)
+    }
+
+    const clearDate = () => {
+        // React's controlled value may already be empty for a partially entered date.
+        // Reset the native control as well, so its visible date segments are cleared.
+        if (inputRef.current) inputRef.current.value = ''
+        setHasIncompleteInput(false)
+        field.onChange(null)
+    }
+
+    return (
+        <div className="input podcast-download-start-date" data-invalid={invalid ? 'true' : undefined}>
+            <input
+                id="download-starting-from"
+                className="podcast-download-start-date__input"
+                type="date"
+                name={field.name}
+                value={field.value ?? ''}
+                onChange={(event) => {
+                    updateIncompleteInput(event.currentTarget)
+                    field.onChange(event.currentTarget.value || null)
+                }}
+                onInput={(event) => updateIncompleteInput(event.currentTarget)}
+                onKeyUp={(event) => updateIncompleteInput(event.currentTarget)}
+                onBlur={(event) => {
+                    updateIncompleteInput(event.currentTarget)
+                    field.onBlur()
+                }}
+                ref={(node) => {
+                    inputRef.current = node
+                    field.ref(node)
+                }}
+                aria-invalid={invalid}
+                aria-describedby={invalid ? 'download-starting-from-errors' : 'download-starting-from-help'}
+            />
+            {(field.value || hasIncompleteInput) && (
+                <button
+                    type="button"
+                    className="podcast-download-start-date__clear"
+                    onClick={clearDate}
+                    aria-label="Clear download starting from date"
+                    title="Clear date"
+                >
+                    <FontAwesomeIcon icon={faIcon('fas', 'xmark')}/>
+                </button>
+            )}
+        </div>
+    )
+}
 
 export default function PodcastDownloadProfileForm({form}: Props) {
     const {control, register, watch, setValue, formState: {errors}} = form
@@ -154,34 +218,7 @@ export default function PodcastDownloadProfileForm({form}: Props) {
                         control={control}
                         name="downloadStartingFrom"
                         render={({field}) => (
-                            <div
-                                className="input podcast-download-start-date"
-                                data-invalid={errors.downloadStartingFrom ? 'true' : undefined}
-                            >
-                                <input
-                                    id="download-starting-from"
-                                    className="podcast-download-start-date__input"
-                                    type="date"
-                                    name={field.name}
-                                    value={field.value ?? ''}
-                                    onChange={(event) => field.onChange(event.target.value || null)}
-                                    onBlur={field.onBlur}
-                                    ref={field.ref}
-                                    aria-invalid={!!errors.downloadStartingFrom}
-                                    aria-describedby={errors.downloadStartingFrom ? 'download-starting-from-errors' : 'download-starting-from-help'}
-                                />
-                                {field.value && (
-                                    <button
-                                        type="button"
-                                        className="podcast-download-start-date__clear"
-                                        onClick={() => field.onChange(null)}
-                                        aria-label="Clear download starting from date"
-                                        title="Clear date"
-                                    >
-                                        <FontAwesomeIcon icon={faIcon('fas', 'xmark')}/>
-                                    </button>
-                                )}
-                            </div>
+                            <DownloadStartDateInput field={field} invalid={!!errors.downloadStartingFrom}/>
                         )}
                     />
                     {errors.downloadStartingFrom && (
