@@ -7,12 +7,13 @@ import {
     useQuery,
     useQueryClient,
 } from '@tanstack/react-query'
-import {useEffect, useMemo} from 'react'
+import {useEffect, useMemo, useRef} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {
     type LazyCollectionPage,
     type LazyCollectionPageRequest,
     contiguousLazyCollectionItems,
+    lazyCollectionQueryKey,
     updateLazyCollectionEntities,
     useLazyCollection,
 } from './lazyCollection'
@@ -695,6 +696,13 @@ export type MediaDownloadCollectionQuery = {
 
 const MEDIA_DOWNLOAD_COLLECTION_PREFIX = ['mediaDownloads'] as const
 
+// Temporary experiment: leave download ordering to backend-paginated results.
+// Set back to true to restore local reorder/optimistic insertion behavior.
+const ENABLE_FRONTEND_DOWNLOAD_REORDERING = false
+const ACTIVE_OR_QUEUED_DOWNLOAD_STATUSES = new Set([
+    'pending', 'downloading', 'preparing', 'waiting', 'canceling', 'local_processing',
+])
+
 export function compareMediaDownloadWorkflowOrder(left: MediaDownloadViewRead, right: MediaDownloadViewRead): number {
     const leftStatus = String(left.downloadStatus)
     const rightStatus = String(right.downloadStatus)
@@ -833,10 +841,12 @@ export function deriveMediaDownloadCollectionPlaceholder(
 
         const byId = new Map<number, MediaDownloadDomainViewRead>()
         for (const download of contiguous.items) byId.set(download.id, download)
-        for (const operation of operations) {
-            if (operation.resourceId == null || byId.has(operation.resourceId)) continue
-            const synthetic = syntheticDownload(operation)
-            if (synthetic) byId.set(synthetic.id, synthetic)
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            for (const operation of operations) {
+                if (operation.resourceId == null || byId.has(operation.resourceId)) continue
+                const synthetic = syntheticDownload(operation)
+                if (synthetic) byId.set(synthetic.id, synthetic)
+            }
         }
 
         const matching = [...byId.values()]
@@ -848,11 +858,13 @@ export function deriveMediaDownloadCollectionPlaceholder(
                 ),
             }))
             .filter(({presented}) => targetStatusSet.has(String(presented.downloadStatus)))
-            .sort((left, right) => (
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            matching.sort((left, right) => (
                 order === 'recent'
                     ? mediaDownloadRecentOrder(left.presented, right.presented)
                     : compareMediaDownloadWorkflowOrder(left.presented, right.presented)
             ))
+        }
 
         const total = targetTotal ?? matching.length
         const items = matching.slice(0, Math.min(initialCount, total))
@@ -911,6 +923,46 @@ export function useMediaDownloadsCollection({
     const operations = (pullData?.operations ?? []).filter(
         (operation) => operation.kind === 'media.download',
     )
+    const queryClient = useQueryClient()
+    const lastActiveOrderSignature = useRef<string | null>(null)
+    const activeOrderSignature = operations
+        .filter((operation) => ACTIVE_OPERATION_STATUSES.has(operation.status))
+        .map((operation) => `${operation.id}:${operation.status}:${operation.startedAt ?? ''}`)
+        .sort()
+        .join('|')
+
+    // With local reordering disabled, fetch authoritative backend positions
+    // when operations enter/leave the active queue. Progress-only pulls do
+    // not change this signature and should not trigger an extra page request.
+    useEffect(() => {
+        if (
+            ENABLE_FRONTEND_DOWNLOAD_REORDERING || !enabled || !pullData
+            || (
+                normalizedStatuses !== undefined
+                && !normalizedStatuses.some((status) => ACTIVE_OR_QUEUED_DOWNLOAD_STATUSES.has(status))
+            )
+        ) return
+        if (lastActiveOrderSignature.current === null) {
+            lastActiveOrderSignature.current = activeOrderSignature
+            return
+        }
+        if (lastActiveOrderSignature.current === activeOrderSignature) return
+        lastActiveOrderSignature.current = activeOrderSignature
+        void queryClient.invalidateQueries({
+            queryKey: lazyCollectionQueryKey(
+                MEDIA_DOWNLOAD_COLLECTION_PREFIX,
+                [normalizedStatuses ?? null, order],
+                initialCount,
+                batchSize,
+            ),
+            exact: true,
+            refetchType: 'active',
+        })
+    }, [
+        activeOrderSignature, enabled, pullData, queryClient,
+        normalizedStatuses, order, initialCount, batchSize,
+    ])
+
     const collection = useLazyCollection<MediaDownloadDomainViewRead>({
         collectionPrefix: MEDIA_DOWNLOAD_COLLECTION_PREFIX,
         queryKey: [normalizedStatuses ?? null, order] as const,
@@ -944,10 +996,12 @@ export function useMediaDownloadsCollection({
         const downloads = new Map<number, MediaDownloadDomainViewRead>()
         for (const download of collection.items) downloads.set(download.id, download)
 
-        for (const operation of operations) {
-            if (operation.resourceId == null || downloads.has(operation.resourceId)) continue
-            const synthetic = syntheticDownload(operation)
-            if (synthetic) downloads.set(synthetic.id, synthetic)
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            for (const operation of operations) {
+                if (operation.resourceId == null || downloads.has(operation.resourceId)) continue
+                const synthetic = syntheticDownload(operation)
+                if (synthetic) downloads.set(synthetic.id, synthetic)
+            }
         }
 
         const presented = [...downloads.values()]
@@ -960,7 +1014,9 @@ export function useMediaDownloadsCollection({
                 || normalizedStatuses.includes(String(download.downloadStatus))
             ))
 
-        presented.sort(order === 'recent' ? mediaDownloadRecentOrder : compareMediaDownloadWorkflowOrder)
+        if (ENABLE_FRONTEND_DOWNLOAD_REORDERING) {
+            presented.sort(order === 'recent' ? mediaDownloadRecentOrder : compareMediaDownloadWorkflowOrder)
+        }
         return presented
     }, [collection.items, normalizedStatuses, operations, order])
 
