@@ -1,0 +1,61 @@
+/* Keep the browser's native calendar control while providing a separate clear action. */
+.date-input {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    padding: 0;
+}
+
+.date-input:focus-within {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.25);
+}
+
+.date-input[data-invalid="true"] {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+
+.date-input__input {
+    display: block;
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text);
+    font-family: inherit;
+}
+
+.date-input__input:focus {
+    outline: none;
+}
+
+.date-input__clear {
+    display: inline-flex;
+    flex: 0 0 40px;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    margin-right: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.date-input__clear:hover {
+    background: rgba(148, 163, 184, 0.16);
+    color: var(--text);
+}
+
+.date-input__clear:focus-visible {
+    outline: 2px solid #60a5fa;
+    outline-offset: -3px;
+}
