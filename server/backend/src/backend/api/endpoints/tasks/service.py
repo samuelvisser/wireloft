@@ -251,8 +251,7 @@ def query_ledger(
             if not isinstance(cursor_id, int) or isinstance(cursor_id, bool):
                 raise InvalidCursorError("Invalid task ledger cursor id")
             if values.get("revision") == revision:
-                # The revision measures ID order, not timestamp values. Resolve
-                # the cursor row's current sort key to avoid skips when its
+                # Resolve the cursor row's current sort key to avoid skips when its
                 # timestamp moves without changing its relative rank.
                 anchor_stmt = select(order_column).where(TaskRun.id == cursor_id, *filters)
                 if definition_key is not None:

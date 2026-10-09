@@ -260,8 +260,7 @@ export function useTaskLedgerInfinite({
     initialCount: limit,
     batchSize: limit,
     enabled: pageActive && enabled && (definitionKey === undefined || definitionKey.length > 0),
-    // Revalidate a previously visited filter combination when the user selects it.
-    // Keep the cached pages visible and use TanStack Query's normal page refetch.
+    // This helps refresh backend data when filters change
     staleTime: 0,
     pollIntervalMs: 3000,
     pollWhilePageCountAtMost: 2,
