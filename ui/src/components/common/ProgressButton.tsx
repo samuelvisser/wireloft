@@ -129,7 +129,7 @@ export default function ProgressButton({
                             title={retry.label || `Retry ${definition.label.toLocaleLowerCase()}`}
                             aria-label={retry.label || `Retry ${definition.label.toLocaleLowerCase()}`}
                         >
-                            <FontAwesomeIcon icon={faIcon('fas', 'rotate-right')}/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')}/>
                         </button>
                     )}
                     {showCancel && (
@@ -141,7 +141,7 @@ export default function ProgressButton({
                             title={cancelLabel || `Cancel ${definition.label.toLocaleLowerCase()}`}
                             aria-label={cancelLabel || `Cancel ${definition.label.toLocaleLowerCase()}`}
                         >
-                            <FontAwesomeIcon icon={faIcon('fas', 'xmark')}/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'xmark')}/>
                         </button>
                     )}
                 </span>

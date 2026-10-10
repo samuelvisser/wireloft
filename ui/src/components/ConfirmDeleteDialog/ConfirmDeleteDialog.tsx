@@ -92,7 +92,7 @@ const ConfirmDeleteDialog = forwardRef<ConfirmDeleteDialogRef, ConfirmDeleteDial
             open
             title={title}
             onDismiss={close}
-            icon={faIcon('fas', 'trash')}
+            icon={faIcon('fass', 'trash')}
             iconTone="danger"
             confirmButton={{
                 label: 'Delete',

@@ -355,7 +355,7 @@ export default function CronEditor({
                             definition={runNow.definition}
                             resourceId={0}
                             label="Run now"
-                            icon={faIcon('fas', 'play')}
+                            icon={faIcon('fass', 'play')}
                             onClick={runNowOperation}
                             starting={startingRunNow}
                             primary={false}
@@ -374,7 +374,7 @@ export default function CronEditor({
                             title={`Open ${runNow.definition.label} log`}
                             aria-label={`Open ${runNow.definition.label} log`}
                         >
-                            <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
                         </button>
                     ) : null}
                     <div className="cron-editor__enabled">

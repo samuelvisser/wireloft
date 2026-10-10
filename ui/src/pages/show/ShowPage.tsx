@@ -305,13 +305,13 @@ export default function ShowPage() {
     return [
       ...(restartable ? [{
         label: `Restart ${label}`,
-        icon: faIcon('fas', 'rotate-right'),
+        icon: faIcon('fass', 'rotate-right'),
         disabled: controlsBusy,
         onSelect: () => void controlTaskOperation(operationId, 'restart', label),
       }] : []),
       {
         label: `Cancel ${label}`,
-        icon: faIcon('fas', 'xmark'),
+        icon: faIcon('fass', 'xmark'),
         tone: 'danger' as const,
         disabled: controlsBusy,
         onSelect: () => void controlTaskOperation(operationId, 'cancel', label),
@@ -404,18 +404,18 @@ export default function ShowPage() {
 
           <div className="show-page-actions">
             <button type="button" className="btn" title="Edit show" onClick={onEdit}>
-              <FontAwesomeIcon icon={faIcon('fas', 'pen-to-square')} aria-hidden="true"/>
+              <FontAwesomeIcon icon={faIcon('fass', 'pen-to-square')} aria-hidden="true"/>
               <span>Edit</span>
             </button>
             <button type="button" className="btn btn-danger" onClick={onDelete}>
-              <FontAwesomeIcon icon={faIcon('fas', 'trash')} aria-hidden="true"/>
+              <FontAwesomeIcon icon={faIcon('fass', 'trash')} aria-hidden="true"/>
               <span>Delete</span>
             </button>
             <ActionMenu
               items={[
                 {
                   label: 'Sync now',
-                  icon: faIcon('fas', 'arrows-rotate'),
+                  icon: faIcon('fass', 'arrows-rotate'),
                   disabled: syncBusy,
                   disabledReason: syncDisabledReason,
                   operation: syncOperation,
@@ -424,12 +424,12 @@ export default function ShowPage() {
                 },
                 {
                   label: 'Sync log',
-                  icon: faIcon('fas', 'clock-rotate-left'),
+                  icon: faIcon('fass', 'clock-rotate-left'),
                   onSelect: () => setSyncLogOpen(true),
                 },
                 {
                   label: 'Refresh all metadata',
-                  icon: faIcon('fas', 'clipboard-list'),
+                  icon: faIcon('fass', 'clipboard-list'),
                   disabled: metadataRefreshBusy,
                   disabledReason: metadataRefreshDisabledReason,
                   operation: metadataRefreshOperation,
@@ -438,7 +438,7 @@ export default function ShowPage() {
                 },
                 {
                   label: 'Rename all episode files',
-                  icon: faIcon('fas', 'file-pen'),
+                  icon: faIcon('fass', 'file-pen'),
                   disabled: fileRenameDisabledReason !== undefined,
                   disabledReason: fileRenameDisabledReason,
                   operation: fileRenameOperation,
@@ -447,7 +447,7 @@ export default function ShowPage() {
                 },
                 {
                   label: 'Delete all downloads',
-                  icon: faIcon('fas', 'trash'),
+                  icon: faIcon('fass', 'trash'),
                   tone: 'danger',
                   disabled: deleteDownloadsDisabledReason !== undefined,
                   disabledReason: deleteDownloadsDisabledReason,
@@ -457,7 +457,7 @@ export default function ShowPage() {
                 },
                 {
                   label: 'Delete and re-download all episodes',
-                  icon: faIcon('fas', 'trash'),
+                  icon: faIcon('fass', 'trash'),
                   tone: 'danger',
                   disabled: redownloadDisabledReason !== undefined,
                   disabledReason: redownloadDisabledReason,
@@ -467,13 +467,13 @@ export default function ShowPage() {
                 },
                 {
                   label: 'Create download profile',
-                  icon: faIcon('fas', 'download'),
+                  icon: faIcon('fass', 'download'),
                   separatorBefore: true,
                   onSelect: () => navigate(`/add-download-profile?show=${encodeURIComponent(id)}`),
                 },
                 {
                   label: 'Create stream profile',
-                  icon: faIcon('fas', 'rss'),
+                  icon: faIcon('fass', 'rss'),
                   onSelect: () => navigate(`/add-stream-profile?show=${encodeURIComponent(id)}`),
                 },
               ]}
@@ -492,7 +492,7 @@ export default function ShowPage() {
               {attachedDownloadProfiles.length > 0 && (
                 <div className="show-profile-group">
                   <div className="show-profile-group-label">
-                    <FontAwesomeIcon icon={faIcon('fas', 'download')} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fass', 'download')} aria-hidden="true"/>
                     <span>Download {attachedDownloadProfiles.length === 1 ? 'profile' : 'profiles'}</span>
                   </div>
                   <div className="show-profile-links">
@@ -505,7 +505,7 @@ export default function ShowPage() {
                         title={`Open ${preferredFormatLabel(profile.localMediaProfilePreferredFormat)} download profile`}
                       >
                         <span>{preferredFormatLabel(profile.localMediaProfilePreferredFormat)}</span>
-                        <FontAwesomeIcon icon={faIcon('fas', 'arrow-up-right-from-square')} aria-hidden="true"/>
+                        <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
                       </button>
                     ))}
                   </div>
@@ -515,7 +515,7 @@ export default function ShowPage() {
               {attachedStreamProfiles.length > 0 && (
                 <div className="show-profile-group">
                   <div className="show-profile-group-label">
-                    <FontAwesomeIcon icon={faIcon('fas', 'rss')} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fass', 'rss')} aria-hidden="true"/>
                     <span>Stream {attachedStreamProfiles.length === 1 ? 'profile' : 'profiles'}</span>
                   </div>
                   <div className="show-profile-links">
@@ -532,7 +532,7 @@ export default function ShowPage() {
                             title={`Open ${label}`}
                           >
                             <span>{label}</span>
-                            <FontAwesomeIcon icon={faIcon('fas', 'arrow-up-right-from-square')} aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'arrow-up-right-from-square')} aria-hidden="true"/>
                           </button>
                           {profile.type === 'rss' && feedUrl && (
                             <button
@@ -542,7 +542,7 @@ export default function ShowPage() {
                               aria-label={copied ? 'RSS URL copied' : 'Copy RSS URL'}
                               title={copied ? 'Copied!' : 'Copy RSS URL'}
                             >
-                              <FontAwesomeIcon icon={faIcon('fas', copied ? 'check' : 'copy') as any} aria-hidden="true"/>
+                              <FontAwesomeIcon icon={faIcon('fass', copied ? 'check' : 'copy') as any} aria-hidden="true"/>
                             </button>
                           )}
                         </div>
@@ -615,7 +615,7 @@ export default function ShowPage() {
         resourceLabel={show.title}
         title="Refresh all metadata"
         onDismiss={() => setMetadataRefreshConfirm(false)}
-        icon={faIcon('fas', 'arrows-rotate')}
+        icon={faIcon('fass', 'arrows-rotate')}
         confirmLabel="Refresh metadata"
         disabled={metadataRefreshBusy}
       >
@@ -629,7 +629,7 @@ export default function ShowPage() {
         resourceLabel={show.title}
         title="Rename existing episode files"
         onDismiss={() => setFileRenameConfirm(false)}
-        icon={faIcon('fas', 'file-pen')}
+        icon={faIcon('fass', 'file-pen')}
         confirmLabel="Rename files"
         disabled={fileRenameBusy}
         scope_by_local_media_profile
@@ -647,7 +647,7 @@ export default function ShowPage() {
         resourceLabel={show.title}
         title="Delete all downloads"
         onDismiss={() => setDeleteDownloadsConfirm(false)}
-        icon={faIcon('fas', 'trash')}
+        icon={faIcon('fass', 'trash')}
         iconTone="danger"
         confirmLabel="Delete downloads"
         disabled={deleteDownloadsBusy || redownloadBusy}
@@ -669,7 +669,7 @@ export default function ShowPage() {
         resourceLabel={show.title}
         title="Delete and re-download all episodes"
         onDismiss={() => setRedownloadConfirm(false)}
-        icon={faIcon('fas', 'arrows-rotate')}
+        icon={faIcon('fass', 'arrows-rotate')}
         iconTone="danger"
         confirmLabel="Delete and re-download"
         disabled={deleteDownloadsBusy || redownloadBusy}
@@ -686,7 +686,7 @@ export default function ShowPage() {
         open={confirm}
         title="Delete show"
         onDismiss={closeConfirm}
-        icon={faIcon('fas', 'trash')}
+        icon={faIcon('fass', 'trash')}
         iconTone="danger"
         confirmButton={{
           label: 'Delete',

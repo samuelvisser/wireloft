@@ -93,7 +93,7 @@ const DateInput = forwardRef<HTMLInputElement, DateInputProps>(function DateInpu
                     aria-label={clearButtonLabel}
                     title={clearButtonLabel}
                 >
-                    <FontAwesomeIcon icon={faIcon('fas', 'xmark')}/>
+                    <FontAwesomeIcon icon={faIcon('fass', 'xmark')}/>
                 </button>
             )}
         </div>

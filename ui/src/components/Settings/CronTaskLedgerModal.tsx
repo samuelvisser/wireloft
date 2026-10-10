@@ -139,7 +139,7 @@ export default function CronTaskLedgerModal({
             >
                 <div className="modal-header cron-task-ledger-header">
                     <div className="modal-icon" aria-hidden>
-                        <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
+                        <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
                     </div>
                     <div>
                         <h2 id="cron-task-ledger-title" className="modal-title">{title} log</h2>
@@ -214,7 +214,7 @@ export default function CronTaskLedgerModal({
                             definition={definition}
                             resourceId={0}
                             label="Run now"
-                            icon={faIcon('fas', 'play')}
+                            icon={faIcon('fass', 'play')}
                             onClick={() => void onRunNow()}
                             starting={starting}
                             onCancel={() => void onCancel()}

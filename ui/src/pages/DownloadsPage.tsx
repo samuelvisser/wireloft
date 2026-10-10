@@ -452,7 +452,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_retry']}
                             label="Retry all"
-                            icon={faIcon('fas', 'rotate-right')}
+                            icon={faIcon('fass', 'rotate-right')}
                             onClick={() => void startBulkAction('retry')}
                             disabled={bulkOperationActive && !retryAllOperation && bulkActionStarting !== 'retry'}
                             primary={false}
@@ -468,7 +468,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_cancel']}
                             label="Cancel all"
-                            icon={faIcon('fas', 'ban')}
+                            icon={faIcon('fass', 'ban')}
                             onClick={() => void startBulkAction('cancel')}
                             disabled={bulkOperationActive && !cancelAllOperation && bulkActionStarting !== 'cancel'}
                             primary={false}
@@ -484,7 +484,7 @@ export default function DownloadsPage() {
                         <ProgressButton
                             definition={frontendOperationDefinitions['media_download.bulk_delete_unavailable']}
                             label="Delete unavailable"
-                            icon={faIcon('fas', 'trash')}
+                            icon={faIcon('fass', 'trash')}
                             onClick={() => setBulkDeleteConfirmOpen(true)}
                             disabled={bulkOperationActive && !deleteUnavailableOperation && bulkActionStarting !== 'delete-unavailable'}
                             primary={false}
@@ -508,7 +508,7 @@ export default function DownloadsPage() {
                     loading={loadingDownloads}
                     loadingMessage={
                         <span className="downloads-table-loading" role="status" aria-label="Loading downloads">
-                            <FontAwesomeIcon icon={faIcon('fas', 'spinner')} spin aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'spinner')} spin aria-hidden="true"/>
                         </span>
                     }
                     error={error}
@@ -540,7 +540,7 @@ export default function DownloadsPage() {
                         const actions: DataTableAction<MediaDownloadViewRead>[] = [
                             {
                                 onClick: (r) => setLogRow(r),
-                                icon: faIcon('fas', 'file-lines'),
+                                icon: faIcon('fass', 'file-lines'),
                                 text: 'View log',
                                 classes: 'btn',
                             },
@@ -548,21 +548,21 @@ export default function DownloadsPage() {
                         if (status === 'not_downloaded') {
                             actions.push({
                                 onClick: () => void retry(row),
-                                icon: faIcon('fas', 'download'),
+                                icon: faIcon('fass', 'download'),
                                 text: 'Download',
                                 classes: 'btn',
                             })
                         } else if (status === 'pending') {
                             actions.push({
                                 onClick: () => void prioritize(row),
-                                icon: faIcon('fas', 'arrow-up'),
+                                icon: faIcon('fass', 'arrow-up'),
                                 text: 'Prioritize',
                                 classes: 'btn',
                             })
                         } else if (isRetryableDownload(row) || isRedownloadableDownload(row)) {
                             actions.push({
                                 onClick: () => void retry(row),
-                                icon: faIcon('fas', 'rotate-right'),
+                                icon: faIcon('fass', 'rotate-right'),
                                 text: isRedownloadableDownload(row) ? 'Re-download' : 'Retry',
                                 classes: 'btn',
                             })
@@ -570,7 +570,7 @@ export default function DownloadsPage() {
                         if (isCancellableDownload(row)) {
                             actions.push({
                                 onClick: () => void cancel(row),
-                                icon: faIcon('fas', 'ban'),
+                                icon: faIcon('fass', 'ban'),
                                 text: 'Cancel',
                                 classes: 'btn',
                             })
@@ -578,7 +578,7 @@ export default function DownloadsPage() {
                         if (isDeletableDownload(row)) {
                             actions.push({
                                 onClick: () => setDeleteRow(row),
-                                icon: faIcon('fas', 'trash'),
+                                icon: faIcon('fass', 'trash'),
                                 text: 'Delete',
                                 classes: 'btn btn-danger',
                             })
@@ -591,7 +591,7 @@ export default function DownloadsPage() {
                     <div className="downloads-table-loading" role="status">
                         <FontAwesomeIcon
                             className="wl-progress-icon"
-                            icon={faIcon('fas', 'spinner')}
+                            icon={faIcon('fass', 'spinner')}
                             spin={downloadsQuery.isFetchingNextPage}
                         />
                         {downloadsQuery.isFetchingNextPage ? 'Loading more downloads...' : 'More downloads available'}
@@ -603,7 +603,7 @@ export default function DownloadsPage() {
                 open={bulkDeleteConfirmOpen}
                 title="Delete download records"
                 onDismiss={() => setBulkDeleteConfirmOpen(false)}
-                icon={faIcon('fas', 'trash')}
+                icon={faIcon('fass', 'trash')}
                 iconTone="danger"
                 confirmButton={{
                     label: 'Delete',
@@ -626,14 +626,14 @@ export default function DownloadsPage() {
                 onDismiss={() => {
                     if (!deleteBusy) setDeleteRow(null)
                 }}
-                icon={faIcon('fas', 'trash')}
+                icon={faIcon('fass', 'trash')}
                 iconTone="danger"
                 confirmButton={{
                     label: deleteBusy ? 'Deleting…' : 'Delete',
                     onClick: deleteUnavailable,
                     className: 'btn btn-danger',
                     disabled: deleteBusy,
-                    icon: deleteBusy ? faIcon('fas', 'spinner') : undefined,
+                    icon: deleteBusy ? faIcon('fass', 'spinner') : undefined,
                     iconSpin: deleteBusy,
                 }}
                 cancelButton={{disabled: deleteBusy}}

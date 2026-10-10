@@ -29,8 +29,8 @@ function getAvailableForLabel(profile: LocalMediaProfileRead) {
 export default function LocalMediaProfilesPage() {
     const navigate = useNavigate()
     const onAdd = useCallback(() => navigate('/add-local-media-profile'), [navigate])
-    const editIcon: IconProp = faIcon('fas', 'pen-to-square')
-    const deleteIcon: IconProp = faIcon('fas', 'trash')
+    const editIcon: IconProp = faIcon('fass', 'pen-to-square')
+    const deleteIcon: IconProp = faIcon('fass', 'trash')
 
     const confirmRef = useRef<ConfirmDeleteDialogRef>(null)
 

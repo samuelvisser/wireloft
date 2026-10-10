@@ -153,7 +153,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                         }
                         const isSorted = sortState?.id === id
                         const direction = isSorted ? sortState!.direction : undefined
-                        const sortIcon = direction === 'asc' ? (faIcon('fas', 'sort-up')) : direction === 'desc' ? (faIcon('fas', 'sort-down')) : (faIcon('fas', 'sort'))
+                        const sortIcon = direction === 'asc' ? (faIcon('fass', 'sort-up')) : direction === 'desc' ? (faIcon('fass', 'sort-down')) : (faIcon('fass', 'sort'))
                         return (
                             <th key={id} scope="col" style={style} aria-sort={direction === 'asc' ? 'ascending' : direction === 'desc' ? 'descending' : 'none'}>
                                 <button type="button" className="th-sort-btn" onClick={() => toggleSort(id)}>
@@ -272,7 +272,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
                                     </span>
                                     <FontAwesomeIcon
                                         className="mobile-data-chevron"
-                                        icon={(isExpanded ? faIcon('fas', 'chevron-up') : faIcon('fas', 'chevron-down')) as IconProp}
+                                        icon={(isExpanded ? faIcon('fass', 'chevron-up') : faIcon('fass', 'chevron-down')) as IconProp}
                                         aria-hidden="true"
                                     />
                                 </button>

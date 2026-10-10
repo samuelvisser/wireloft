@@ -212,7 +212,7 @@ export default function EpisodePage() {
             <article className="episode-details" aria-label="Episode details">
                 <nav className="episode-breadcrumb" aria-label="Breadcrumb">
                     <Link to="/library">Library</Link>
-                    <FontAwesomeIcon icon={faIcon('fas', 'chevron-right')} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fass', 'chevron-right')} aria-hidden="true"/>
                     <Link to={`/show/${showId}`}>{show.title}</Link>
                 </nav>
 
@@ -230,7 +230,7 @@ export default function EpisodePage() {
                             items={[
                                 {
                                     label: 'Refresh metadata',
-                                    icon: faIcon('fas', 'arrows-rotate'),
+                                    icon: faIcon('fass', 'arrows-rotate'),
                                     disabled: metadataRefreshBusy,
                                     disabledReason: metadataRefreshStarting
                                         ? OPERATION_STARTING_MESSAGE
@@ -242,7 +242,7 @@ export default function EpisodePage() {
                                 },
                                 ...(earlyDeleteAvailable ? [{
                                     label: 'Early Delete',
-                                    icon: faIcon('fas', 'trash') as [string, string],
+                                    icon: faIcon('fass', 'trash') as [string, string],
                                     tone: 'danger' as const,
                                     separatorBefore: true,
                                     disabled: earlyDeleteDisabledReason !== undefined,
@@ -260,14 +260,14 @@ export default function EpisodePage() {
                         </span>
                         <span className="episode-summary-separator" aria-hidden="true"/>
                         <span className="episode-summary-item">
-                            <FontAwesomeIcon icon={faIcon('fas', 'calendar')} aria-hidden="true"/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'calendar')} aria-hidden="true"/>
                             <span>Released {formatDate(episode.publishedDate)}</span>
                         </span>
                         {latestDownloadedAt && (
                             <>
                                 <span className="episode-summary-separator" aria-hidden="true"/>
                                 <span className="episode-summary-item">
-                                    <FontAwesomeIcon icon={faIcon('fas', 'circle-down')} aria-hidden="true"/>
+                                    <FontAwesomeIcon icon={faIcon('fass', 'circle-down')} aria-hidden="true"/>
                                     <span>Downloaded {formatDate(latestDownloadedAt)}</span>
                                 </span>
                             </>
@@ -331,7 +331,7 @@ export default function EpisodePage() {
                     onDismiss={() => {
                         if (!earlyDeleteBusy) setEarlyDeleteConfirm(false)
                     }}
-                    icon={faIcon('fas', 'trash')}
+                    icon={faIcon('fass', 'trash')}
                     iconTone="danger"
                     dismissOnOverlayClick={!earlyDeleteBusy}
                     cancelButton={{disabled: earlyDeleteBusy}}

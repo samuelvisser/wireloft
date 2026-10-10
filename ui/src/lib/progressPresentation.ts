@@ -43,7 +43,7 @@ export function waitingPresentation(
         label: `${deadline ? `Delayed until ${deadline}` : value?.[0] || 'Waiting'}...`,
         compactLabel: reason === 'publication_delay' ? 'Delayed...' : undefined,
         detail: frontendDetail || backendDetail || 'Waiting for a dependency.',
-        icon: faIcon('fas', 'clock'),
+        icon: faIcon('fass', 'clock'),
         canCancel: true,
         canRetry: true,
     }
@@ -61,7 +61,7 @@ export function workingPresentation(
         label: `${label}...`,
         compactLabel: `${compactLabel}...`,
         detail,
-        icon: faIcon('fas', 'spinner'),
+        icon: faIcon('fass', 'spinner'),
         canCancel: true,
         canRetry: true,
     }

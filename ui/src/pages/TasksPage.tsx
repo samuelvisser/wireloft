@@ -63,12 +63,12 @@ function resourceLabel(row: TaskLedgerEntryRead): string {
 }
 
 function statusIcon(status: string): IconProp {
-    if (status === 'SUCCEEDED') return faIcon('fas', 'circle-check')
-    if (status === 'FAILED') return faIcon('fas', 'triangle-exclamation')
-    if (status === 'CANCELED') return faIcon('fas', 'circle-xmark')
-    if (status === 'RETRY_SCHEDULED') return faIcon('fas', 'clock-rotate-left')
-    if (status === 'SCHEDULED' || status === 'QUEUED') return faIcon('fas', 'clock')
-    return faIcon('fas', 'spinner')
+    if (status === 'SUCCEEDED') return faIcon('fass', 'circle-check')
+    if (status === 'FAILED') return faIcon('fass', 'triangle-exclamation')
+    if (status === 'CANCELED') return faIcon('fass', 'circle-xmark')
+    if (status === 'RETRY_SCHEDULED') return faIcon('fass', 'clock-rotate-left')
+    if (status === 'SCHEDULED' || status === 'QUEUED') return faIcon('fass', 'clock')
+    return faIcon('fass', 'spinner')
 }
 
 function statusLabel(row: TaskLedgerEntryRead): string {
@@ -350,7 +350,7 @@ export default function TasksPage() {
                 <div ref={sentinelRef} className="infinite-scroll-sentinel" aria-hidden="true"/>
                 {query.isFetchingNextPage && (
                     <div className="task-table-loading">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fas', 'spinner')}/>
+                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fass', 'spinner')}/>
                         Loading more tasks...
                     </div>
                 )}

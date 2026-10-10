@@ -69,13 +69,13 @@ export default function ShowsPage() {
                     actions={(s) => [
                         {
                             onClick: () => navigate(`/edit-show/${s.slug}`),
-                            icon: faIcon('fas', 'pen-to-square'),
+                            icon: faIcon('fass', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',
                         },
                         {
                             onClick: () => confirmRef.current?.open(s),
-                            icon: faIcon('fas', 'trash'),
+                            icon: faIcon('fass', 'trash'),
                             text: 'Delete',
                             classes: 'btn btn-danger',
                         },

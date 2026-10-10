@@ -114,7 +114,7 @@ export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, on
       >
         <div className="modal-header show-sync-log-header">
           <div className="modal-icon" aria-hidden>
-            <FontAwesomeIcon icon={faIcon('fas', 'arrows-rotate')} />
+            <FontAwesomeIcon icon={faIcon('fass', 'arrows-rotate')} />
           </div>
           <div>
             <h2 id="show-sync-log-title" className="modal-title">Sync log</h2>
@@ -176,7 +176,7 @@ export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, on
           <div className="modal-actions show-sync-log-actions">
             <button type="button" className="btn" onClick={onClose}>Close</button>
             <button type="button" className="btn btn-primary" onClick={() => void onSyncNow()} disabled={syncing}>
-              <FontAwesomeIcon icon={faIcon('fas', syncing ? 'spinner' : 'arrows-rotate')} spin={syncing} aria-hidden="true" />
+              <FontAwesomeIcon icon={faIcon('fass', syncing ? 'spinner' : 'arrows-rotate')} spin={syncing} aria-hidden="true" />
               <span>{syncing ? 'Syncing...' : 'Sync now'}</span>
             </button>
           </div>

@@ -130,13 +130,13 @@ export default function DownloadProfilesPage() {
                     actions={(p) => [
                         {
                             onClick: () => navigate(`/edit-download-profile/${p.type}/${p.id}`, {state: p}),
-                            icon: faIcon('fas', 'pen-to-square'),
+                            icon: faIcon('fass', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',
                         },
                         {
                             onClick: () => confirmRef.current?.open(p),
-                            icon: faIcon('fas', 'trash'),
+                            icon: faIcon('fass', 'trash'),
                             text: 'Delete',
                             classes: 'btn btn-danger',
                         },

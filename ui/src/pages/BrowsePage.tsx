@@ -128,7 +128,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
             <div className="browse-toolbar">
                 <label className="browse-search">
                     <span className="sr-only">Search {activeType}</span>
-                    <FontAwesomeIcon icon={faIcon('fas', 'magnifying-glass')} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
                     <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`Search ${activeType}`}/>
                 </label>
                 {activeType === 'shows' && (
@@ -143,7 +143,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                 <div className="form-error-card" role="alert">Could not load the Daily Wire catalog: {activeQuery.error.message}</div>
             ) : !hasItems ? (
                 <div className="catalog-empty">
-                    <FontAwesomeIcon icon={faIcon('fas', 'magnifying-glass')}/>
+                    <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')}/>
                     <p>No {activeType} match your search.</p>
                 </div>
             ) : activeType === 'shows' ? (
@@ -158,14 +158,14 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                                     return (
                                         <button className="show-summary-card catalog-show-card" type="button" key={show.slug} onClick={() => chooseShow(show)}>
                                             <span className="show-summary-art">
-                                                {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={faIcon('fas', 'tv')}/></span>}
+                                                {image ? <img src={image} alt="" loading="lazy" decoding="async"/> : <span className="show-art-placeholder"><FontAwesomeIcon icon={faIcon('fass', 'tv')}/></span>}
                                             </span>
                                             <span className="show-summary-copy">
                                                 <strong className="show-summary-title">{show.title}</strong>
                                                 <span className="show-summary-author">{show.authorName || 'Daily Wire'}</span>
                                                 {show.description && <span className="show-summary-description">{show.description}</span>}
                                             </span>
-                                            {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fas', 'check')}/> In library</span>}
+                                            {added && <span className="catalog-added"><FontAwesomeIcon icon={faIcon('fass', 'check')}/> In library</span>}
                                         </button>
                                     )
                                 })}
@@ -183,7 +183,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
                                 <span className="movie-poster-art">
                                     {image
                                         ? <img src={image} alt="" loading="lazy" decoding="async"/>
-                                        : <FontAwesomeIcon icon={faIcon('fas', 'clapperboard')}/>
+                                        : <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/>
                                     }
                                     {added && <span className="badge" style={{top: 8, bottom: 'auto'}}>In library</span>}
                                 </span>
@@ -197,7 +197,7 @@ export default function BrowsePage({onboarding = false, onShowSelect, onMovieSel
 
             {activeQuery.hasNextPage && !activeQuery.isFetchNextPageError && (
                 <div ref={loadMoreRef} className="catalog-load-more" aria-live="polite" aria-busy={activeQuery.isFetchingNextPage}>
-                    {activeQuery.isFetchingNextPage && <><FontAwesomeIcon icon={faIcon('fas', 'circle-notch')} spin/> Loading more {activeType}…</>}
+                    {activeQuery.isFetchingNextPage && <><FontAwesomeIcon icon={faIcon('fass', 'circle-notch')} spin/> Loading more {activeType}…</>}
                 </div>
             )}
             {activeQuery.isFetchNextPageError && (

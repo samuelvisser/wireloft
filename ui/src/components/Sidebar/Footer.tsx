@@ -35,7 +35,7 @@ export default function Footer({ wrapperClass }: FooterProps) {
           <span className="icon" aria-hidden>
             <FontAwesomeIcon icon={faIcon('fab', 'github')} />
           </span>
-          <span>Github</span>
+          <span>GitHub</span>
         </a>
         {adminAuthEnabled && (
           <button
@@ -45,7 +45,7 @@ export default function Footer({ wrapperClass }: FooterProps) {
             style={{ background: 'none', border: 'none', width: '100%', textAlign: 'left', cursor: 'pointer' }}
           >
             <span className="icon" aria-hidden>
-              <FontAwesomeIcon icon={faIcon('fas', 'right-from-bracket')} />
+              <FontAwesomeIcon icon={faIcon('fass', 'right-from-bracket')} />
             </span>
             <span>Logout</span>
           </button>

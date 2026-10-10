@@ -1389,9 +1389,7 @@ div[class$="-clearIndicator"] { color: var(--muted) !important; }
 div[class$="-menu"] {
   background: var(--select-menu-bg) !important;
   color: var(--text) !important;
-  border: 1px solid var(--select-menu-border) !important;
-  border-radius: 6px !important;
-  box-shadow: var(--select-menu-shadow) !important;
+  border-radius: 8px !important;
   overflow: hidden;
 }
 div[class$="-menu-list"] { background: var(--select-menu-bg) !important; }

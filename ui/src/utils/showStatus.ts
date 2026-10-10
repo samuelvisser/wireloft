@@ -8,34 +8,34 @@ import {faIcon} from '../icons/faIcon'
 export function statusIcon(status: string) {
     switch (status) {
         case 'scheduled':
-            return faIcon('fas', 'clock')
+            return faIcon('fass', 'clock')
         case 'delayed':
-            return faIcon('fas', 'clock-rotate-left')
+            return faIcon('fass', 'clock-rotate-left')
         case 'live':
-            return faIcon('fas', 'circle-video')
+            return faIcon('fass', 'circle-video')
         case 'no_usable_media':
-            return faIcon('fas', 'circle-exclamation')
+            return faIcon('fass', 'circle-exclamation')
         case 'dw_processing':
         case 'local_processing':
-            return faIcon('fas', 'spinner')
+            return faIcon('fass', 'spinner')
         case 'published_with_countdown':
         case 'published_final':
-            return faIcon('fas', 'circle-play')
+            return faIcon('fass', 'circle-play')
         case 'downloaded':
         case 'redownloaded':
-            return faIcon('fas', 'circle-check')
+            return faIcon('fass', 'circle-check')
         case 'not_downloaded':
-            return faIcon('fas', 'floppy-disk-circle-xmark')
+            return faIcon('fass', 'floppy-disk-circle-xmark')
         case 'pending':
-            return faIcon('fas', 'clock')
+            return faIcon('fass', 'clock')
         case 'downloading':
-            return faIcon('fas', 'circle-down')
+            return faIcon('fass', 'circle-down')
         case 'error':
         case 'missing':
         case 'corrupted':
-            return faIcon('fas', 'circle-exclamation')
+            return faIcon('fass', 'circle-exclamation')
         default:
-            return faIcon('fas', 'circle-exclamation')
+            return faIcon('fass', 'circle-exclamation')
     }
 }
 

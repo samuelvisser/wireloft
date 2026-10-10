@@ -21,11 +21,11 @@ export default function MediaTypeTabs({
     return (
         <div className="media-type-tabs browse-type-tabs" role="tablist" aria-label={ariaLabel}>
             <button type="button" role="tab" aria-selected={activeType === 'shows'} onClick={() => onChange('shows')}>
-                <FontAwesomeIcon icon={faIcon('fas', 'tv')}/> Shows
+                <FontAwesomeIcon icon={faIcon('fass', 'tv')}/> Shows
                 {showCount !== undefined && <span>{showCount}</span>}
             </button>
             <button type="button" role="tab" aria-selected={activeType === 'movies'} onClick={() => onChange('movies')}>
-                <FontAwesomeIcon icon={faIcon('fas', 'clapperboard')}/> Movies
+                <FontAwesomeIcon icon={faIcon('fass', 'clapperboard')}/> Movies
                 {movieCount !== undefined && <span>{movieCount}</span>}
             </button>
         </div>

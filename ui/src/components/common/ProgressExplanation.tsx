@@ -101,7 +101,7 @@ export default function ProgressExplanation({detail, buttonClassName = 'icon-btn
                 setOpen(value => !value)
             }}
         >
-            <FontAwesomeIcon icon={faIcon('fas', 'circle-info')}/>
+            <FontAwesomeIcon icon={faIcon('fass', 'circle-info')}/>
         </button>
         {popover}
     </span>

@@ -248,7 +248,7 @@ export function EpisodeDownloadRow({
                             disabled={busy}
                             aria-label={`Download ${profile.name}`}
                         >
-                            <FontAwesomeIcon icon={faIcon('fas', 'download')}/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'download')}/>
                             Download
                         </button>}
             </div>
@@ -268,7 +268,7 @@ export function EpisodeDownloadRow({
                             title="Cancel download"
                             aria-label={`Cancel download for ${profile.name}`}
                         >
-                            <FontAwesomeIcon icon={faIcon('fas', 'ban')}/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'ban')}/>
                         </button>
                     )}
                     {showRetryButton && (
@@ -288,7 +288,7 @@ export function EpisodeDownloadRow({
                                     ? `Re-download ${profile.name}`
                                     : `Retry download for ${profile.name}`}
                         >
-                            <FontAwesomeIcon icon={faIcon('fas', 'rotate-right')}/>
+                            <FontAwesomeIcon icon={faIcon('fass', 'rotate-right')}/>
                         </button>
                     )}
                     <button
@@ -298,7 +298,7 @@ export function EpisodeDownloadRow({
                         title="View log"
                         aria-label={`View log for ${profile.name}`}
                     >
-                        <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
+                        <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
                     </button>
                 </div>
             )}
@@ -308,7 +308,7 @@ export function EpisodeDownloadRow({
                 onDismiss={() => {
                     if (!busy) setCountdownConfirm(false)
                 }}
-                icon={faIcon('fas', 'circle-exclamation')}
+                icon={faIcon('fass', 'circle-exclamation')}
                 dismissOnOverlayClick={!busy}
                 cancelButton={{disabled: busy}}
                 confirmButton={{
@@ -317,7 +317,7 @@ export function EpisodeDownloadRow({
                         await startDownload({redownloadFinal: redownloadWhenFinal})
                         setCountdownConfirm(false)
                     },
-                    icon: faIcon('fas', 'download'),
+                    icon: faIcon('fass', 'download'),
                     disabled: busy,
                 }}
             >

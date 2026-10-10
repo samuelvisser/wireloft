@@ -38,7 +38,7 @@ export function activityLabel(stage: Pick<DownloadStage, 'code' | 'asset_id'>): 
 function terminal(status: string, label: string, detail: string, outcome?: ProgressPresentation['outcome']): DownloadPresentation {
     return {
         status, mode: 'terminal', active: false, percent: null, label, detail, outcome,
-        icon: faIcon('fas', outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'),
+        icon: faIcon('fass', outcome === 'success' ? 'circle-check' : outcome === 'error' ? 'triangle-exclamation' : 'download'),
         canCancel: false, canRetry: status !== 'not_downloaded',
     }
 }
@@ -84,7 +84,7 @@ export function presentDownloadProgress(download?: MediaDownloadDomainViewRead, 
                         ? `${formatBytes(media?.bytes_received ?? 0)} downloaded; total size unknown`
                         : `${media?.bytes_received?.toLocaleString() || '0'} bytes received; total size unknown`
             if (transferPercent !== null) return {status: 'downloading', mode: 'determinate', active: true, percent: transferPercent,
-                label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: faIcon('fas', 'download'), secondary,
+                label: `${transferPercent}%`, detail: `Primary media transfer: ${basis}.`, icon: faIcon('fass', 'download'), secondary,
                 canCancel: true, canRetry: true}
             return {status: 'downloading', ...workingPresentation('Downloading', basis), secondary}
         }

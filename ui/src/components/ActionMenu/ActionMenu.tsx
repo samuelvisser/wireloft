@@ -112,7 +112,7 @@ export default function ActionMenu({label = 'Actions', items, className = ''}: P
                 onClick={() => setOpen((value) => !value)}
             >
                 <span>{label}</span>
-                <FontAwesomeIcon className="action-menu-caret" icon={faIcon('fas', 'chevron-down')} aria-hidden="true"/>
+                <FontAwesomeIcon className="action-menu-caret" icon={faIcon('fass', 'chevron-down')} aria-hidden="true"/>
             </button>
 
             {open && (

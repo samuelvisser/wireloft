@@ -237,7 +237,7 @@ export default function RssStreamProfileForm({
                             >
                                 <FontAwesomeIcon
                                     className="rss-feed-url-action-icon"
-                                    icon={faIcon('fas', copied ? 'check' : 'copy') as any}
+                                    icon={faIcon('fass', copied ? 'check' : 'copy') as any}
                                     aria-hidden="true"
                                 />
                                 <span className="rss-feed-url-action-text">{copied ? 'Copied!' : 'Copy'}</span>
@@ -253,7 +253,7 @@ export default function RssStreamProfileForm({
                                 >
                                     <FontAwesomeIcon
                                         className="rss-feed-url-action-icon"
-                                        icon={faIcon('fas', regeneratingToken ? 'spinner' : 'arrows-rotate') as any}
+                                        icon={faIcon('fass', regeneratingToken ? 'spinner' : 'arrows-rotate') as any}
                                         spin={!!regeneratingToken}
                                         aria-hidden="true"
                                     />

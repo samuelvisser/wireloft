@@ -63,7 +63,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
             >
                 <div className="modal-header">
                     <div className="modal-icon" aria-hidden>
-                        <FontAwesomeIcon icon={faIcon('fas', 'file-lines')}/>
+                        <FontAwesomeIcon icon={faIcon('fass', 'file-lines')}/>
                     </div>
                     <h2 id="download-log-title" className="modal-title">
                         {mediaTitle(row)}

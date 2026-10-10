@@ -3,6 +3,7 @@ import {NavLink, useLocation} from 'react-router-dom'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import type {IconProp} from '@fortawesome/fontawesome-svg-core'
 import type { NavItem } from './navTypes'
+import {faIcon} from '../../icons/faIcon'
 
 export type SubmenuProps = {
   label: string
@@ -108,7 +109,7 @@ export default function Submenu({label, icon, items}: SubmenuProps) {
         </span>
         <span className="submenu-label">{label}</span>
         <span className="submenu-caret" aria-hidden>
-          <FontAwesomeIcon icon={["fas", "chevron-down"]} />
+          <FontAwesomeIcon icon={faIcon('fass', 'chevron-down')} />
         </span>
       </button>
 

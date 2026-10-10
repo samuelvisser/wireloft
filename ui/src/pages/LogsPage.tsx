@@ -91,7 +91,7 @@ export default function LogsPage() {
             <div className="logs-toolbar">
                 <label className="logs-search">
                     <span className="sr-only">Search logs</span>
-                    <FontAwesomeIcon icon={faIcon('fas', 'magnifying-glass')} aria-hidden="true"/>
+                    <FontAwesomeIcon icon={faIcon('fass', 'magnifying-glass')} aria-hidden="true"/>
                     <input
                         type="search"
                         value={search}
@@ -140,7 +140,7 @@ export default function LogsPage() {
             >
                 {logs.isPending ? (
                     <div className="logs-message">
-                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fas', 'spinner')}/>
+                        <FontAwesomeIcon className="wl-progress-icon" icon={faIcon('fass', 'spinner')}/>
                         Loading logs...
                     </div>
                 ) : logs.error ? (

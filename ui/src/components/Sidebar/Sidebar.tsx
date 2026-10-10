@@ -11,7 +11,7 @@ const items: NavItem[] = [
     {path: '/downloads', label: 'Downloads', icon: faIcon('fass', 'circle-down')},
     {
         label: 'Profiles',
-        icon: faIcon('fas', 'layer-group'),
+        icon: faIcon('fass', 'layer-group'),
         children: [
             { path: '/local-media-profiles', label: 'Local Media Profiles', icon: faIcon('fass', 'file-video') },
             { path: '/download-profiles', label: 'Download Profiles', icon: faIcon('fass', 'download') },
@@ -20,7 +20,7 @@ const items: NavItem[] = [
     },
     {
         label: 'Config',
-        icon: faIcon('fas', 'sliders'),
+        icon: faIcon('fass', 'sliders'),
         children: [
             {path: '/settings', label: 'Settings', icon: faIcon('fass', 'gear')},
             {path: '/tasks', label: 'Tasks', icon: faIcon('fass', 'bars-progress')},

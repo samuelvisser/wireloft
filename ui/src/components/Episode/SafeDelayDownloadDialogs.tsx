@@ -88,29 +88,29 @@ export function SafeDelayConfirmDialog({
             className="safe-delay-confirm-dialog"
             title="Download before the safety delay has passed?"
             onDismiss={onDismiss}
-            icon={faIcon('fas', 'circle-exclamation')}
+            icon={faIcon('fass', 'circle-exclamation')}
             dismissOnOverlayClick={!busy}
             cancelButton={{disabled: busy}}
             confirmButton={schedulePreferred ? {
                 label: submitting === 'schedule' ? 'Scheduling…' : scheduleActionLabel,
                 onClick: onSchedule,
-                icon: faIcon('fas', 'clock'),
+                icon: faIcon('fass', 'clock'),
                 disabled: busy,
             } : {
                 label: submitting === 'immediate' ? 'Starting…' : immediateActionLabel,
                 onClick: onImmediate,
-                icon: faIcon('fas', 'download'),
+                icon: faIcon('fass', 'download'),
                 disabled: busy,
             }}
             secondaryButton={schedulePreferred ? {
                 label: submitting === 'immediate' ? 'Starting…' : immediateActionLabel,
                 onClick: onImmediate,
-                icon: faIcon('fas', 'download'),
+                icon: faIcon('fass', 'download'),
                 disabled: busy,
             } : {
                 label: submitting === 'schedule' ? 'Scheduling…' : scheduleActionLabel,
                 onClick: onSchedule,
-                icon: faIcon('fas', 'clock'),
+                icon: faIcon('fass', 'clock'),
                 disabled: busy,
             }}
         >
@@ -163,13 +163,13 @@ export function ImmediateSafeDelayConfirmDialog({
             open={open}
             title={isRetry ? 'Re-download before the safety delay?' : 'Download before the safety delay?'}
             onDismiss={onDismiss}
-            icon={faIcon('fas', 'circle-exclamation')}
+            icon={faIcon('fass', 'circle-exclamation')}
             dismissOnOverlayClick={!busy}
             cancelButton={{disabled: busy}}
             confirmButton={{
                 label: submitting === 'immediate' ? 'Starting…' : immediateActionLabel,
                 onClick: onImmediate,
-                icon: faIcon('fas', 'download'),
+                icon: faIcon('fass', 'download'),
                 disabled: busy,
             }}
         >

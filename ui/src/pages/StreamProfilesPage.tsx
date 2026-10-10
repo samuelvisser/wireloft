@@ -131,13 +131,13 @@ export default function StreamProfilesPage() {
                     actions={(p) => [
                         {
                             onClick: () => navigate(`/edit-stream-profile/${p.type}/${p.id}`, {state: p}),
-                            icon: faIcon('fas', 'pen-to-square'),
+                            icon: faIcon('fass', 'pen-to-square'),
                             text: 'Edit',
                             classes: 'btn',
                         },
                         {
                             onClick: () => confirmRef.current?.open(p),
-                            icon: faIcon('fas', 'trash'),
+                            icon: faIcon('fass', 'trash'),
                             text: 'Delete',
                             classes: 'btn btn-danger',
                         },

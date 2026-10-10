@@ -173,12 +173,12 @@ export default function EditStreamProfilePage() {
                 open={regenerateConfirmOpen}
                 title="Regenerate RSS feed URL"
                 onDismiss={() => setRegenerateConfirmOpen(false)}
-                icon={faIcon('fas', 'rotate')}
+                icon={faIcon('fass', 'rotate')}
                 iconTone="danger"
                 confirmButton={{
                     label: 'Regenerate URL',
                     onClick: regenerateToken,
-                    icon: faIcon('fas', 'rotate'),
+                    icon: faIcon('fass', 'rotate'),
                     className: 'btn btn-danger',
                 }}
             >

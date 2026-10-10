@@ -274,7 +274,7 @@ export default function CustomMetadataEditor({
                 open={confirmRemoval !== null}
                 title="Remove metadata field?"
                 onDismiss={() => setConfirmRemoval(null)}
-                icon={faIcon('fas', 'triangle-exclamation')}
+                icon={faIcon('fass', 'triangle-exclamation')}
                 iconTone="danger"
                 confirmButton={{
                     label: 'Remove field',
