@@ -29,6 +29,12 @@ docker run -d \
 
 ### Font Awesome Pro builds
 
+From the repository root, `npm install` runs a `postinstall` script that
+installs the frontend dependencies in `ui/`, including optional dependencies.
+It reads the Font Awesome registry credentials from `ui/.npmrc` when present.
+`ui/package-lock.json` remains the authoritative lockfile; any generated root
+`package-lock.json` is ignored.
+
 The normal `npm run build` path deliberately uses Font Awesome Free. The same
 build can be requested explicitly with `npm run build:free-icons`. The Free
 Font Awesome packages are pinned to Font Awesome 7, matching the artwork used
@@ -57,8 +63,14 @@ Then install dependencies including the paid kit and run:
 
 ```bash
 npm --prefix ui ci --include=optional
+npm --prefix ui ls @awesome.me/kit-83fa1ac5a9
 npm run build:pro-icons
 ```
+
+The Kit is optional, so npm may report a successful install even when the
+private package could not be downloaded. If the `npm ls` check shows the Kit
+is missing, verify `ui/.npmrc` and your Font Awesome token before starting
+`npm run dev:pro-icons` or building with Pro icons.
 
 A Docker image with Pro icons can be built explicitly with:
 
