@@ -28,19 +28,6 @@ class _ShowLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
     indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
-    def _default_subtitles_for_scope(self):
-        # Requests may omit subtitle_mode. A podcast-only profile defaults to
-        # no subtitles; series and mixed profiles default to sidecar files.
-        # Explicit selections always win, including explicit "no_subtitles".
-        if "subtitle_mode" not in self.model_fields_set:
-            self.subtitle_mode = (
-                LocalMediaProfileSubtitleMode.NO_SUBTITLES
-                if self.show_scope == ShowLocalMediaProfileScope.PODCAST
-                else LocalMediaProfileSubtitleMode.SIDECAR
-            )
-        return self
-
-    @model_validator(mode="after")
     def _unique_index_keys(self):
         keys = [item.key for item in self.indexing_values]
         if len(keys) != len(set(keys)):
@@ -60,6 +47,18 @@ class _ShowLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
 
 class ShowLocalMediaProfileAPICreate(_ShowLocalMediaProfileAPIBaseIn):
     """Create a Show Local Media Profile."""
+
+    @model_validator(mode="after")
+    def _default_subtitles_for_scope(self):
+        # Scope-dependent defaults apply only when a profile is first created.
+        # Updates must never infer a new subtitle mode from changed scope.
+        if "subtitle_mode" not in self.model_fields_set:
+            self.subtitle_mode = (
+                LocalMediaProfileSubtitleMode.NO_SUBTITLES
+                if self.show_scope == ShowLocalMediaProfileScope.PODCAST
+                else LocalMediaProfileSubtitleMode.SIDECAR
+            )
+        return self
 
 
 class ShowLocalMediaProfileAPIUpdate(_ShowLocalMediaProfileAPIBaseIn):

@@ -25,13 +25,14 @@ const METADATA_MODE_LABELS = {
 } as const
 
 export default function LocalMediaProfileCommonFields({
-    form, mode,
+    form, mode, isCreating,
 }: {
     form: UseFormReturn<any>
     mode: LocalMediaProfileType
+    isCreating: boolean
 }) {
     const {control, register, formState: {errors}} = form
-    const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode)
+    const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
     const {data: settings} = useSettings()
     const systemDownloadModeLabel = !settings
         ? 'Loading system setting…'
@@ -103,7 +104,13 @@ export default function LocalMediaProfileCommonFields({
                 )}
             </div>
 
-            {mode === 'show' && <ShowLocalMediaProfileScopeField form={form} onScopeChange={onScopeChange}/>}
+            {mode === 'show' && (
+                <ShowLocalMediaProfileScopeField
+                    form={form}
+                    onScopeChange={onScopeChange}
+                    isCreating={isCreating}
+                />
+            )}
 
             <div className="form-row">
                 <label htmlFor="local-media-download-mode">Download behavior</label>
@@ -223,7 +230,9 @@ export default function LocalMediaProfileCommonFields({
                         <SimpleSelect
                             inputId="local-media-subtitle-mode"
                             registry={subtitleModeReg}
-                            value={field.value ?? defaultSubtitleModeForProfile(mode, form.getValues('showScope'))}
+                            value={field.value ?? (isCreating
+                                ? defaultSubtitleModeForProfile(mode, form.getValues('showScope'))
+                                : undefined)}
                             onChange={(value) => {
                                 onSubtitleModeChange(value as LocalMediaProfileSubtitleMode)
                                 field.onChange(value)
@@ -245,7 +254,8 @@ export default function LocalMediaProfileCommonFields({
                         <p><strong>Embed in media</strong> adds available subtitles as selectable tracks in supported containers.</p>
                         <p><strong>Download besides media</strong> saves language-specific SRT files, such as <code>Movie.en.srt</code>, beside the downloaded media for Plex and other media servers.</p>
                         <p><strong>Both embed and download</strong> does both.</p>
-                        <p>Movie profiles and show profiles available for Series or Podcasts and Series default to sidecars. Podcast-only profiles default to no subtitles. Changing profile type or availability updates the default only until you choose a subtitle option yourself.</p>
+                        <p>New Movie profiles and Show profiles available for Series or Podcasts and Series default to sidecars. New Podcast-only profiles default to no subtitles. Changing availability on an existing profile never changes its saved subtitle choice.</p>
+                        {isCreating && <p>While creating a new profile, changing type or availability updates the suggested default until you select a subtitle option yourself.</p>}
                         <p>Embedding requires a supported media container, not a raw HLS bundle.</p>
                     </ReadMore>
                 </div>

@@ -148,7 +148,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
                     {selectedSlug ? 'Edit selected profile' : 'Create a new profile'}
                 </div>
 
-                <LocalMediaProfileForm form={form} mode="movie"/>
+                <LocalMediaProfileForm form={form} mode="movie" isCreating={selectedSlug === null}/>
 
                 <div className="actions">
                     <button className="btn" type="button" onClick={onBack}>Back</button>

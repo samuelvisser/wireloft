@@ -146,6 +146,7 @@ export default function LocalMediaProfileStep({value, onChange, onSubmit: onSubm
                         key={watchedOp === 'update_by_slug' ? watchedSlug : 'create_new'}
                         form={form}
                         mode="show"
+                        isCreating={watchedOp !== 'update_by_slug'}
                     />
                     <ShowLocalMediaProfileFields form={form}/>
                     <div className="form-row">

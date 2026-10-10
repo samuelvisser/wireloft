@@ -7,9 +7,11 @@ import SimpleSelect from '../common/SimpleSelect'
 export default function ShowLocalMediaProfileScopeField({
     form,
     onScopeChange,
+    isCreating,
 }: {
     form: UseFormReturn<any>
     onScopeChange: (scope: ShowLocalMediaProfileScope) => void
+    isCreating: boolean
 }) {
     const {control, formState: {errors}} = form
 
@@ -43,9 +45,12 @@ export default function ShowLocalMediaProfileScopeField({
                 </div>
             )}
             <div className="help" id="mp-show-scope-help">
-                <ReadMore summary="Controls where this profile is available and its initial subtitle behavior.">
-                    <p>Podcast-only profiles default to no subtitles. Series and mixed profiles default to downloading subtitles beside the media.</p>
-                    <p>Changing this selection adjusts the subtitle default only until you explicitly choose a subtitle option.</p>
+                <ReadMore summary="Controls where this profile is available in WireLoft.">
+                    <p>Podcast-only profiles default to no subtitles. Series and mixed profiles default to downloading subtitles beside the media when first created.</p>
+                    {isCreating
+                        ? <p>Changing this selection adjusts the subtitle default until you explicitly choose a subtitle option.</p>
+                        : <p>Changing availability on an existing profile does not change its saved subtitle behavior.</p>
+                    }
                 </ReadMore>
             </div>
         </div>

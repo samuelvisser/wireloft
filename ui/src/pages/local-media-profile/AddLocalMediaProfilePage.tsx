@@ -143,7 +143,7 @@ export default function AddLocalMediaProfilePage() {
                     />
                 </div>
 
-                <LocalMediaProfileForm form={form} mode={mode}/>
+                <LocalMediaProfileForm form={form} mode={mode} isCreating/>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

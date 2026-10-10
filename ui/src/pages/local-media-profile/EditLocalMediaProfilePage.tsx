@@ -217,7 +217,7 @@ export default function EditLocalMediaProfilePage() {
                     <div style={{padding: '6px 0'}}>{LocalMediaProfileTypeReg.getLabelLoose(profile.type)}</div>
                 </div>
 
-                <LocalMediaProfileForm form={form} mode={profile.type}/>
+                <LocalMediaProfileForm form={form} mode={profile.type} isCreating={false}/>
 
                 <div className="actions">
                     <button type="button" className="btn" onClick={onCancel}>Cancel</button>

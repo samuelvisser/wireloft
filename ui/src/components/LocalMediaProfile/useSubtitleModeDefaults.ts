@@ -12,15 +12,24 @@ import type {LocalMediaProfileSubtitleMode} from '../../types/schemas/local_medi
  * Scope and profile type are initial suggestions, not persistent inheritance:
  * once the user chooses a subtitle mode, changing scope/type must not overwrite it.
  *
- * A different saved value in an existing profile also counts as an override.
+ * Only new profiles have automatic defaults. Existing profiles always retain
+ * their saved subtitle mode, even when their availability changes.
  * In the Add Profile page, the two profile types have separate RHF forms, so
- * the explicit choice must follow the user when switching between them.
+ * an explicit choice must follow the user when switching between them.
  */
-export function useSubtitleModeDefaults(form: UseFormReturn<any>, mode: LocalMediaProfileType) {
+export function useSubtitleModeDefaults(
+    form: UseFormReturn<any>,
+    mode: LocalMediaProfileType,
+    isCreating: boolean,
+) {
     const manuallySelected = useRef<LocalMediaProfileSubtitleMode | null>(null)
     const previous = useRef({form, mode})
 
     useEffect(() => {
+        if (!isCreating) {
+            previous.current = {form, mode}
+            return
+        }
         const prior = previous.current
         if (prior.form !== form || prior.mode !== mode) {
             const priorValue = prior.form.getValues('subtitleMode') as LocalMediaProfileSubtitleMode | undefined
@@ -38,13 +47,14 @@ export function useSubtitleModeDefaults(form: UseFormReturn<any>, mode: LocalMed
             form.setValue('subtitleMode', nextValue, {shouldDirty: true, shouldValidate: true})
         }
         previous.current = {form, mode}
-    }, [form, mode])
+    }, [form, mode, isCreating])
 
     const onSubtitleModeChange = (value: LocalMediaProfileSubtitleMode) => {
-        manuallySelected.current = value
+        if (isCreating) manuallySelected.current = value
     }
 
     const onScopeChange = (nextScope: ShowLocalMediaProfileScope) => {
+        if (!isCreating) return
         if (manuallySelected.current === null) {
             const currentValue = form.getValues('subtitleMode') as LocalMediaProfileSubtitleMode | undefined
             const previousDefault = defaultSubtitleModeForProfile(
