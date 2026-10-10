@@ -1,10 +1,8 @@
 import DownloadStatusBadge from '../DownloadProgress/DownloadStatusBadge'
 import React from 'react'
-import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {useNavigate} from 'react-router-dom'
 import {EpisodeReadView} from '../../types/schemas/episode'
 import {MediaDownloadViewRead} from '../../types/schemas/media_download'
-import {faIcon} from '../../icons/faIcon'
 
 // Beyond this many downloads for one episode, collapse the rest into a "+N" pill
 // instead of letting icons overflow the thumbnail.
@@ -70,19 +68,12 @@ const TYPE_BADGE_LABEL: Record<string, string> = {
 }
 
 function DownloadStatusIcons({downloads}: { downloads: MediaDownloadViewRead[] }) {
-    if (downloads.length === 0) {
-        return (
-            <span className="status-group">
-                <span className="status status-none" title="No downloads on disk">
-                    <FontAwesomeIcon icon={faIcon('fas', 'floppy-disk-circle-xmark')}/>
-                </span>
-            </span>
-        )
-    }
+    const visibleDownloads = downloads.filter(download => download.presentation.status !== 'not_downloaded')
+    if (visibleDownloads.length === 0) return null
 
-    const overflow = downloads.length > MAX_VISIBLE_DOWNLOAD_ICONS
-    const shown = overflow ? downloads.slice(0, MAX_VISIBLE_DOWNLOAD_ICONS - 1) : downloads
-    const remaining = downloads.length - shown.length
+    const overflow = visibleDownloads.length > MAX_VISIBLE_DOWNLOAD_ICONS
+    const shown = overflow ? visibleDownloads.slice(0, MAX_VISIBLE_DOWNLOAD_ICONS - 1) : visibleDownloads
+    const remaining = visibleDownloads.length - shown.length
 
     return (
         <span className="status-group" role="list" aria-label="Download status">
