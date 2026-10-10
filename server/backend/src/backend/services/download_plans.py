@@ -10,14 +10,16 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode, Movie, MovieExtra
 from backend.db.models.media_download import MediaDownloadBase
 from backend.services.download_metadata import build_episode_metadata, build_movie_metadata, select_thumbnail_url
-from backend.services.download_options import effective_download_mode, effective_metadata_mode, effective_thumbnail_mode
+from backend.services.download_options import (
+    effective_download_mode, effective_metadata_mode, effective_subtitle_mode, effective_thumbnail_mode,
+)
 from backend.services.movies import update_movie_extra_source_metadata
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
 from config import get_settings
 from config.network import is_no_internet_error
-from config.settings.submodels import MetadataMode, ThumbnailMode
+from config.settings.submodels import MetadataMode, SubtitleMode, ThumbnailMode
 from dailywire_api.dw_api.client import MiddlewareClient
 from dailywire_api.dw_api.movie import MovieMiddlewareClient
 from dailywire_api.records import DwMovieExtraRecord
@@ -55,6 +57,7 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
     download_mode = effective_download_mode(profile).value
     thumbnail_mode = effective_thumbnail_mode(profile)
     metadata_mode = effective_metadata_mode(profile)
+    subtitle_mode = effective_subtitle_mode(profile)
     remux, ffmpeg_path, temporary_root = settings.remux_video_to_mp4, settings.ffmpeg_path, str(settings.temporary_download_root)
     output_template = profile.output_template
     title, slug, media_id = media.title, media.slug, media.id
@@ -173,8 +176,32 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         tags = tuple(metadata.ffmpeg_tags().items())
     if metadata_mode in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO):
         assets.append(SidecarSpec("nfo", "nfo", content=render_nfo(metadata), extension="nfo", target_suffix=".nfo"))
+
+    # The source resolver already inspected the HLS master once. Reuse those
+    # advertised renditions rather than requesting a second, potentially
+    # expiring signed manifest for subtitles.
+    publish_subtitles = subtitle_mode in (SubtitleMode.SIDECAR, SubtitleMode.EMBED_AND_SIDECAR)
+    embed_subtitles = (
+        subtitle_mode in (SubtitleMode.EMBED, SubtitleMode.EMBED_AND_SIDECAR)
+        and not source.hls_bundle and not source.audio_only
+        and source.extension in {"mp4", "m4v", "mkv"}
+    )
+    embedded_subtitle_ids: list[str] = []
+    if publish_subtitles or embed_subtitles:
+        for index, track in enumerate(source.subtitles):
+            asset_id = f"subtitle_{index}"
+            assets.append(SidecarSpec(
+                asset_id, "subtitle", url=track.url, extension="srt",
+                source_format="hls_webvtt", language=track.language,
+                forced=track.forced, target_suffix=track.target_suffix,
+                publish=publish_subtitles, required=False,
+            ))
+            if embed_subtitles:
+                embedded_subtitle_ids.append(asset_id)
     return build_download_plan(
         source=source, requested_destination=destination, download_mode=download_mode,
         temporary_root=temporary_root, ffmpeg_path=ffmpeg_path, assets=tuple(assets),
-        metadata_tags=tags, artwork_asset_id=artwork_id, attempt_id=tracker.attempt_id,
+        metadata_tags=tags, artwork_asset_id=artwork_id,
+        subtitle_asset_ids=tuple(embedded_subtitle_ids),
+        attempt_id=tracker.attempt_id,
     )

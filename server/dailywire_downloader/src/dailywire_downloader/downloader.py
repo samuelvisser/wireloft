@@ -5,7 +5,7 @@ import time
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError
-from .hls import is_master_playlist, is_playlist, parse_master_playlist, parse_media_playlist
+from .hls import is_master_playlist, is_playlist, parse_master_playlist, parse_media_playlist, parse_subtitle_renditions
 from .http import http_get
 from .models import (
     CancelCheck,
@@ -44,6 +44,7 @@ def probe(url: str) -> MediaInfo:
                         url=url,
                         kind=MediaKind.HLS_MASTER,
                         renditions=tuple(parse_master_playlist(text, base_url=url)),
+                        subtitles=tuple(parse_subtitle_renditions(text, base_url=url)),
                     )
                 return MediaInfo(url=url, kind=MediaKind.HLS_MEDIA)
 

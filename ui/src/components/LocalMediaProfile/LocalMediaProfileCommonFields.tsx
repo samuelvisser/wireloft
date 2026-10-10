@@ -19,6 +19,13 @@ const METADATA_MODE_LABELS = {
     embed_and_nfo: 'Both embed and download',
 } as const
 
+const SUBTITLE_MODE_LABELS = {
+    no_subtitles: 'No subtitles',
+    embed: 'Embed in media',
+    sidecar: 'Download besides media',
+    embed_and_sidecar: 'Both embed and download',
+} as const
+
 export default function LocalMediaProfileCommonFields({form}: { form: UseFormReturn<any> }) {
     const {control, register, formState: {errors}} = form
     const {data: settings} = useSettings()
@@ -33,6 +40,10 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
     const systemMetadataModeLabel = !settings
         ? 'Loading system setting…'
         : METADATA_MODE_LABELS[settings.values.downloadSettings.metadataMode]
+
+    const systemSubtitleModeLabel = !settings
+        ? 'Loading system setting…'
+        : SUBTITLE_MODE_LABELS[settings.values.downloadSettings.subtitleMode]
 
     const downloadModeReg = createSelectRegistry('LocalMediaProfileDownloadMode', {
         system: {label: `System (${systemDownloadModeLabel})`},
@@ -52,6 +63,14 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
         embed: {label: 'Embed in media'},
         nfo: {label: 'Download as NFO'},
         embed_and_nfo: {label: 'Both embed and download'},
+    })
+
+    const subtitleModeReg = createSelectRegistry('LocalMediaProfileSubtitleMode', {
+        system: {label: `System (${systemSubtitleModeLabel})`},
+        no_subtitles: {label: 'No subtitles'},
+        embed: {label: 'Embed in media'},
+        sidecar: {label: 'Download besides media'},
+        embed_and_sidecar: {label: 'Both embed and download'},
     })
 
     return (
@@ -190,6 +209,40 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                         <p><strong>Download as NFO</strong> writes the same metadata in a same-basename NFO file beside the media.</p>
                         <p><strong>Both embed and download</strong> does both.</p>
                         <p>HLS bundles cannot contain embedded file metadata, so only the NFO part applies when selected.</p>
+                    </ReadMore>
+                </div>
+            </div>
+
+            <div className="form-row">
+                <label htmlFor="local-media-subtitle-mode">Subtitle behavior</label>
+                <Controller
+                    control={control}
+                    name="subtitleMode"
+                    render={({field}) => (
+                        <SimpleSelect
+                            inputId="local-media-subtitle-mode"
+                            registry={subtitleModeReg}
+                            value={field.value ?? 'no_subtitles'}
+                            onChange={field.onChange}
+                            onBlur={field.onBlur}
+                            aria-invalid={!!errors.subtitleMode}
+                            aria-describedby={errors.subtitleMode ? 'local-media-subtitle-mode-errors' : 'local-media-subtitle-mode-help'}
+                        />
+                    )}
+                />
+                {errors.subtitleMode && (
+                    <div id="local-media-subtitle-mode-errors" className="error" role="alert" aria-live="polite">
+                        {String(errors.subtitleMode.message)}
+                    </div>
+                )}
+                <div className="help" id="local-media-subtitle-mode-help">
+                    <ReadMore summary="Choose how subtitles provided by The Daily Wire are stored with this media.">
+                        <p><strong>No subtitles</strong> skips subtitle acquisition.</p>
+                        <p><strong>Embed in media</strong> adds available subtitles as selectable tracks in supported containers.</p>
+                        <p><strong>Download besides media</strong> saves language-specific SRT files, such as <code>Movie.en.srt</code>, beside the downloaded media for Plex and other media servers.</p>
+                        <p><strong>Both embed and download</strong> does both.</p>
+                        <p><strong>System</strong> follows the system-wide default. New movie profiles default to sidecars, and show profiles to no subtitles.</p>
+                        <p>Embedding requires a supported media container, not a raw HLS bundle.</p>
                     </ReadMore>
                 </div>
             </div>

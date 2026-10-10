@@ -29,5 +29,9 @@ downloadSettings:
   # Media metadata handling: no_metadata, embed, nfo, or embed_and_nfo.
   metadataMode: embed
 
+  # HLS subtitle handling: no_subtitles, embed, sidecar, or embed_and_sidecar.
+  # Show profiles default to no subtitles; movie profiles default to sidecars.
+  subtitleMode: no_subtitles
+
   # Filename compatibility: unrestricted, windows, or restricted.
   filenameRestrictionMode: windows

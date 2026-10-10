@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError, FfmpegNotFoundError
+from .language_codes import mp4_language_code
 from .models import CancelCheck
 
 logger = logging.getLogger(__name__)
@@ -189,31 +190,45 @@ def embed_metadata(
 def embed_media(
     media_path: str, *, metadata: Mapping[str, str] | None = None,
     thumbnail_path: str | None = None, audio_only: bool = False,
+    subtitles: tuple[tuple[str, str, bool], ...] = (),
     ffmpeg_path: str = "ffmpeg", should_cancel: Optional[CancelCheck] = None,
 ) -> None:
-    """Apply artwork and metadata in one serialized stream-copy pass.
+    """Apply artwork, metadata, and optional subtitles in one serialized pass.
 
     FFmpeg's growing output is not a time/progress estimate: faststart can still
     rewrite a full file after that output has reached its apparent final size.
     The coordinator reports this as an indeterminate activity until it returns.
     """
-    if not metadata and thumbnail_path is None:
+    if not metadata and thumbnail_path is None and not subtitles:
         return
     if not ffmpeg_available(ffmpeg_path):
         raise FfmpegNotFoundError(f"ffmpeg binary '{ffmpeg_path}' not found on PATH")
     suffix = Path(media_path).suffix.lower()
     muxer = {".mp4": "mp4", ".m4a": "mp4", ".m4v": "mp4", ".mp3": "mp3", ".mkv": "matroska"}.get(suffix)
     if muxer is None:
-        raise DownloadError(f"Cannot embed artwork or metadata into '{suffix}' media")
+        raise DownloadError(f"Cannot embed artwork, metadata or subtitles into '{suffix}' media")
+    if subtitles and (audio_only or muxer not in {"mp4", "matroska"} or suffix == ".m4a"):
+        raise DownloadError("Embedding subtitles requires an MP4 or MKV video file")
     part_path = media_path + ".metadata.part"
     try:
         command = [ffmpeg_path, "-y", "-i", media_path]
         if thumbnail_path is not None:
             command += ["-i", thumbnail_path]
+        subtitle_input_index = 2 if thumbnail_path is not None else 1
+        for _language, path, _forced in subtitles:
+            command += ["-i", path]
         command += ["-map", "0"]
         if thumbnail_path is not None:
             command += ["-map", "1:v:0"]
+        for index in range(len(subtitles)):
+            command += ["-map", f"{subtitle_input_index + index}:s:0"]
         command += ["-c", "copy"]
+        if subtitles:
+            command += ["-c:s", "mov_text" if muxer == "mp4" else "srt"]
+            for index, (language, _path, forced) in enumerate(subtitles):
+                code = mp4_language_code(language) if muxer == "mp4" else language
+                command += [f"-metadata:s:s:{index}", f"language={code}"]
+                command += [f"-disposition:s:{index}", "forced" if forced else "0"]
         if thumbnail_path is not None:
             artwork_stream_index = 0 if audio_only else 1
             command += [f"-c:v:{artwork_stream_index}", "mjpeg",

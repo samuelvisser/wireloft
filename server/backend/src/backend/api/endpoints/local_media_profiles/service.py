@@ -64,7 +64,10 @@ def _download_has_physical_artifact(
         except OSError:
             return True
 
-    return _path_is_file(download.thumbnail_path)
+    # Auxiliary files are first-class download assets, including NFO metadata
+    # and language-specific subtitle sidecars. Never orphan a remaining asset
+    # when deleting a profile whose primary media was already removed.
+    return any(_path_is_file(asset.path) for asset in download.assets)
 
 
 def ensure_local_media_profile_can_be_deleted(

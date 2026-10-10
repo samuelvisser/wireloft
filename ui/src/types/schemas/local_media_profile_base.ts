@@ -20,6 +20,10 @@ export const LocalMediaProfileMetadataModeSchema = z.enum([
     'embed_and_nfo',
 ])
 export type LocalMediaProfileMetadataMode = z.infer<typeof LocalMediaProfileMetadataModeSchema>
+export const LocalMediaProfileSubtitleModeSchema = z.enum([
+    'system', 'no_subtitles', 'embed', 'sidecar', 'embed_and_sidecar',
+])
+export type LocalMediaProfileSubtitleMode = z.infer<typeof LocalMediaProfileSubtitleModeSchema>
 
 
 // ---------- Strict request (create/update) ----------
@@ -28,6 +32,7 @@ export const LocalMediaProfileSchemaRequest = z.object({
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
+    subtitleMode: LocalMediaProfileSubtitleModeSchema.default('no_subtitles'),
 })
 
 export const LocalMediaProfileCreateBaseSchema = LocalMediaProfileSchemaRequest
@@ -62,6 +67,7 @@ export const LocalMediaProfileSchemaResponse = z.looseObject({
     downloadMode: LocalMediaProfileStorageModeSchema.default('system'),
     thumbnailMode: LocalMediaProfileThumbnailModeSchema.default('system'),
     metadataMode: LocalMediaProfileMetadataModeSchema.default('system'),
+    subtitleMode: LocalMediaProfileSubtitleModeSchema.default('no_subtitles'),
     appendMediaTypeToFilename: z.boolean().optional().default(false),
     createdAt: ApiDateTimeSchema,
     updatedAt: ApiDateTimeSchema,

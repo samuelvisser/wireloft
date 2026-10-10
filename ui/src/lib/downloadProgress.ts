@@ -20,6 +20,10 @@ const ACTIVITIES: Record<string, string> = {
     download_media: 'Downloading', remux: 'Remuxing media', convert_audio: 'Converting video to M4A',
     embed_artwork: 'Embedding thumbnail', embed_metadata: 'Embedding metadata',
     embed_artwork_metadata: 'Embedding artwork and metadata',
+    embed_subtitles: 'Embedding subtitles',
+    embed_artwork_subtitles: 'Embedding thumbnail and subtitles',
+    embed_metadata_subtitles: 'Embedding metadata and subtitles',
+    embed_artwork_metadata_subtitles: 'Embedding artwork, metadata and subtitles',
     publish_media: 'Moving media into the library', verify: 'Verifying files', finalize: 'Finalizing',
 }
 export function downloadExecution(operation?: TaskOperationRead): DownloadExecution | undefined {
@@ -28,7 +32,8 @@ export function downloadExecution(operation?: TaskOperationRead): DownloadExecut
 }
 
 export function activityLabel(stage: Pick<DownloadStage, 'code' | 'asset_id'>): string {
-    const asset = stage.asset_id === 'artwork' ? 'thumbnail' : stage.asset_id === 'nfo' ? 'NFO metadata' : 'sidecar'
+    const asset = stage.asset_id === 'artwork' ? 'thumbnail' : stage.asset_id === 'nfo' ? 'NFO metadata'
+        : stage.asset_id?.startsWith('subtitle_') ? 'subtitles' : 'sidecar'
     if (stage.code === 'download_sidecar') return `Downloading ${asset}`
     if (stage.code === 'generate_sidecar') return `Generating ${asset}`
     if (stage.code === 'publish_sidecar') return `Publishing ${asset}`

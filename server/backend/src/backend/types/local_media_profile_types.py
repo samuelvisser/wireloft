@@ -31,6 +31,14 @@ class LocalMediaProfileMetadataMode(StrEnum):
     EMBED_AND_NFO = "embed_and_nfo"
 
 
+class LocalMediaProfileSubtitleMode(StrEnum):
+    SYSTEM = "system"
+    NO_SUBTITLES = "no_subtitles"
+    EMBED = "embed"
+    SIDECAR = "sidecar"
+    EMBED_AND_SIDECAR = "embed_and_sidecar"
+
+
 class ShowLocalMediaProfileScope(StrEnum):
     BOTH = "both"
     PODCAST = "podcast"

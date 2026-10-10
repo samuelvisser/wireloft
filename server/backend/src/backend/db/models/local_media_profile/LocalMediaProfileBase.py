@@ -11,6 +11,7 @@ from backend.db.datetime_types import UTCDateTime
 from backend.types.local_media_profile_types import (
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
+    LocalMediaProfileSubtitleMode,
     LocalMediaProfileThumbnailMode,
     LocalMediaProfileType,
 )
@@ -68,6 +69,13 @@ class LocalMediaProfileBase(Base):
         String(24),
         default=LocalMediaProfileMetadataMode.SYSTEM.value,
         server_default=LocalMediaProfileMetadataMode.SYSTEM.value,
+        nullable=False,
+    )
+
+    subtitle_mode: Mapped[str] = mapped_column(
+        String(24),
+        default=LocalMediaProfileSubtitleMode.NO_SUBTITLES.value,
+        server_default=LocalMediaProfileSubtitleMode.NO_SUBTITLES.value,
         nullable=False,
     )
 

@@ -52,6 +52,7 @@ def _seed_local_media_profiles(session: Session) -> None:
         MovieLocalMediaProfile(
             slug="wireloft-movies",
             name="WireLoft Movies",
+            subtitle_mode="sidecar",
             output_template=_MOVIE_TEMPLATE,
             preferred_format="format_1080p",
         ),

@@ -3,10 +3,11 @@ from __future__ import annotations
 from backend.types.local_media_profile_types import (
     LocalMediaProfileMetadataMode,
     LocalMediaProfileStorageMode,
+    LocalMediaProfileSubtitleMode,
     LocalMediaProfileThumbnailMode,
 )
 from config import get_settings
-from config.settings.submodels import DownloadMode, MetadataMode, ThumbnailMode
+from config.settings.submodels import DownloadMode, MetadataMode, SubtitleMode, ThumbnailMode
 
 
 def effective_download_mode(local_media_profile) -> DownloadMode:
@@ -37,6 +38,16 @@ def effective_metadata_mode(local_media_profile) -> MetadataMode:
     if profile_mode is LocalMediaProfileMetadataMode.SYSTEM:
         return system_mode
     return MetadataMode(profile_mode.value)
+
+
+def effective_subtitle_mode(local_media_profile) -> SubtitleMode:
+    """Resolve a Local Media Profile subtitle override against the system default."""
+    profile_mode = LocalMediaProfileSubtitleMode(getattr(
+        local_media_profile, "subtitle_mode", LocalMediaProfileSubtitleMode.NO_SUBTITLES.value,
+    ))
+    if profile_mode is LocalMediaProfileSubtitleMode.SYSTEM:
+        return SubtitleMode(get_settings().download_settings.subtitle_mode)
+    return SubtitleMode(profile_mode.value)
 
 
 def effective_thumbnail_mode(local_media_profile) -> ThumbnailMode:

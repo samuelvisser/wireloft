@@ -2,6 +2,7 @@ import type {
     DownloadMode,
     FilenameRestrictionMode,
     MetadataMode,
+    SubtitleMode,
     ShowArtworkFallbackFormat,
     ThumbnailMode,
 } from '../../types/schemas/settings'
@@ -43,6 +44,13 @@ const MetadataModeReg = createSelectRegistry('MetadataMode', {
     embed: {label: 'Embed in media'},
     nfo: {label: 'Download as NFO'},
     embed_and_nfo: {label: 'Both embed and download'},
+})
+
+const SubtitleModeReg = createSelectRegistry('SubtitleMode', {
+    no_subtitles: {label: 'No subtitles'},
+    embed: {label: 'Embed in media'},
+    sidecar: {label: 'Download besides media'},
+    embed_and_sidecar: {label: 'Both embed and download'},
 })
 
 const ShowArtworkFallbackFormatReg = createSelectRegistry('ShowArtworkFallbackFormat', {
@@ -290,6 +298,18 @@ export default function DownloadsSettingsTab({
                             <p>Local Media Profiles default to System and can override this setting individually.</p>
                         </ReadMore>
                     }
+                />
+                <SelectField
+                    id="settings-subtitle-mode"
+                    label="Default subtitle behavior"
+                    value={draft.downloadSettings.subtitleMode}
+                    registry={SubtitleModeReg}
+                    error={errorFor('downloadSettings.subtitleMode')}
+                    environmentVariable={environmentVariableFor('downloadSettings.subtitleMode')}
+                    onChange={(value) => updateDraft((next) => {
+                        next.downloadSettings.subtitleMode = value as SubtitleMode
+                    })}
+                    help="Choose how to save subtitles advertised by HLS streams. Language-specific SRT sidecars are recognized by media servers such as Plex. Existing Show Local Media Profiles default to no subtitles and Movie Local Media Profiles to sidecars; individual profiles can inherit this system setting."
                 />
                 <ToggleField
                     id="settings-show-assets"

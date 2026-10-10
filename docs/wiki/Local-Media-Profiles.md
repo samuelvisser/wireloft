@@ -33,6 +33,21 @@ Temporary mode is the system default. It is useful both when Plex, Jellyfin, or 
 
 The temporary folder may be on different storage from the final library. Configure the system default and temporary location under [[Settings#downloads]].
 
+## Subtitles
+
+Local Media Profiles can automatically save subtitle tracks advertised by The Daily Wire's HLS streams.
+
+- **No subtitles**: do not retrieve subtitle tracks.
+- **Embed in media**: add available subtitles as selectable tracks inside the downloaded MP4 or MKV.
+- **Download besides media**: save separate language-labeled SRT files next to the finished media.
+- **Both embed and download**: keep selectable embedded tracks and sidecar files.
+
+The default for **Movie Local Media Profiles** is **Download besides media**. **Show Local Media Profiles** default to **No subtitles**. The **System** choice follows the default in **Settings → Downloads**.
+
+Sidecars share the media filename, for example `Movie Name.mp4` and `Movie Name.en.srt` for English. Forced subtitles use names such as `Movie Name.en.forced.srt`. Plex and similar media servers can discover these files automatically. The same naming applies to movie extras and show episodes.
+
+Only subtitle tracks actually advertised by the source are downloaded. Missing or temporarily unavailable tracks do not prevent the primary media from downloading. HLS bundles cannot have subtitles embedded into a single file; use sidecars for that format.
+
 ## Preferred format
 
 The preferred format is the quality or media type WireLoft should request when this profile is used.
