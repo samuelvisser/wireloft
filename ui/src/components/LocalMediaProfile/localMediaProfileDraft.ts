@@ -7,7 +7,7 @@ export type LocalMediaProfileDraft<T> = {
     values: Partial<T>
 }
 
-const DRAFT_SCHEMA_VERSION = 'local-media-profile-v1'
+const DRAFT_SCHEMA_VERSION = 'local-media-profile-v2'
 
 function currentDraftVersion(): string {
     return `${getCurrentAppVersion() ?? 'development'}:${DRAFT_SCHEMA_VERSION}`

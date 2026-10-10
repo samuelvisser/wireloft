@@ -40,12 +40,14 @@ def _seed_local_media_profiles(session: Session) -> None:
         ShowLocalMediaProfile(
             slug="wireloft-shows-video",
             name="WireLoft Shows (Video)",
+            subtitle_mode="sidecar",
             output_template=_SHOW_VIDEO_TEMPLATE,
             preferred_format="format_1080p",
         ),
         ShowLocalMediaProfile(
             slug="wireloft-shows-audio",
             name="WireLoft Shows (Audio)",
+            subtitle_mode="sidecar",
             output_template=_SHOW_AUDIO_TEMPLATE,
             preferred_format="format_audio_only",
         ),

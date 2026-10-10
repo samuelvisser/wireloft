@@ -74,8 +74,8 @@ class LocalMediaProfileBase(Base):
 
     subtitle_mode: Mapped[str] = mapped_column(
         String(24),
-        default=LocalMediaProfileSubtitleMode.NO_SUBTITLES.value,
-        server_default=LocalMediaProfileSubtitleMode.NO_SUBTITLES.value,
+        default=LocalMediaProfileSubtitleMode.SIDECAR.value,
+        server_default=LocalMediaProfileSubtitleMode.SIDECAR.value,
         nullable=False,
     )
 

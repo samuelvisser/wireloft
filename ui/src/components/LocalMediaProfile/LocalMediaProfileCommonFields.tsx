@@ -1,5 +1,10 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 
+import {defaultSubtitleModeForProfile, type LocalMediaProfileType} from '../../types/local_media_profile'
+import type {LocalMediaProfileSubtitleMode} from '../../types/schemas/local_media_profile_base'
+import ShowLocalMediaProfileScopeField from './ShowLocalMediaProfileScopeField'
+import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
+
 import {useSettings} from '../../lib/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -19,15 +24,14 @@ const METADATA_MODE_LABELS = {
     embed_and_nfo: 'Both embed and download',
 } as const
 
-const SUBTITLE_MODE_LABELS = {
-    no_subtitles: 'No subtitles',
-    embed: 'Embed in media',
-    sidecar: 'Download besides media',
-    embed_and_sidecar: 'Both embed and download',
-} as const
-
-export default function LocalMediaProfileCommonFields({form}: { form: UseFormReturn<any> }) {
+export default function LocalMediaProfileCommonFields({
+    form, mode,
+}: {
+    form: UseFormReturn<any>
+    mode: LocalMediaProfileType
+}) {
     const {control, register, formState: {errors}} = form
+    const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode)
     const {data: settings} = useSettings()
     const systemDownloadModeLabel = !settings
         ? 'Loading system setting…'
@@ -40,10 +44,6 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
     const systemMetadataModeLabel = !settings
         ? 'Loading system setting…'
         : METADATA_MODE_LABELS[settings.values.downloadSettings.metadataMode]
-
-    const systemSubtitleModeLabel = !settings
-        ? 'Loading system setting…'
-        : SUBTITLE_MODE_LABELS[settings.values.downloadSettings.subtitleMode]
 
     const downloadModeReg = createSelectRegistry('LocalMediaProfileDownloadMode', {
         system: {label: `System (${systemDownloadModeLabel})`},
@@ -66,7 +66,6 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
     })
 
     const subtitleModeReg = createSelectRegistry('LocalMediaProfileSubtitleMode', {
-        system: {label: `System (${systemSubtitleModeLabel})`},
         no_subtitles: {label: 'No subtitles'},
         embed: {label: 'Embed in media'},
         sidecar: {label: 'Download besides media'},
@@ -103,6 +102,8 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     </div>
                 )}
             </div>
+
+            {mode === 'show' && <ShowLocalMediaProfileScopeField form={form} onScopeChange={onScopeChange}/>}
 
             <div className="form-row">
                 <label htmlFor="local-media-download-mode">Download behavior</label>
@@ -222,8 +223,11 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                         <SimpleSelect
                             inputId="local-media-subtitle-mode"
                             registry={subtitleModeReg}
-                            value={field.value ?? 'no_subtitles'}
-                            onChange={field.onChange}
+                            value={field.value ?? defaultSubtitleModeForProfile(mode, form.getValues('showScope'))}
+                            onChange={(value) => {
+                                onSubtitleModeChange(value as LocalMediaProfileSubtitleMode)
+                                field.onChange(value)
+                            }}
                             onBlur={field.onBlur}
                             aria-invalid={!!errors.subtitleMode}
                             aria-describedby={errors.subtitleMode ? 'local-media-subtitle-mode-errors' : 'local-media-subtitle-mode-help'}
@@ -241,7 +245,7 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                         <p><strong>Embed in media</strong> adds available subtitles as selectable tracks in supported containers.</p>
                         <p><strong>Download besides media</strong> saves language-specific SRT files, such as <code>Movie.en.srt</code>, beside the downloaded media for Plex and other media servers.</p>
                         <p><strong>Both embed and download</strong> does both.</p>
-                        <p><strong>System</strong> follows the system-wide default. New movie profiles default to sidecars, and show profiles to no subtitles.</p>
+                        <p>Movie profiles and show profiles available for Series or Podcasts and Series default to sidecars. Podcast-only profiles default to no subtitles. Changing profile type or availability updates the default only until you choose a subtitle option yourself.</p>
                         <p>Embedding requires a supported media container, not a raw HLS bundle.</p>
                     </ReadMore>
                 </div>

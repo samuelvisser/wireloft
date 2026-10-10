@@ -28,7 +28,7 @@ class LocalMediaProfileAPIBaseIn(RequestBase):
     download_mode: LocalMediaProfileStorageMode = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: LocalMediaProfileThumbnailMode = LocalMediaProfileThumbnailMode.SYSTEM
     metadata_mode: LocalMediaProfileMetadataMode = LocalMediaProfileMetadataMode.SYSTEM
-    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.NO_SUBTITLES
+    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
     output_template: str = Field(min_length=16, max_length=4096)
 
     @computed_field(return_type=str)
@@ -56,7 +56,7 @@ class LocalMediaProfileAPIBaseOut(ResponseBase):
     download_mode: Union[LocalMediaProfileStorageMode, str] = LocalMediaProfileStorageMode.SYSTEM
     thumbnail_mode: Union[LocalMediaProfileThumbnailMode, str] = LocalMediaProfileThumbnailMode.SYSTEM
     metadata_mode: Union[LocalMediaProfileMetadataMode, str] = LocalMediaProfileMetadataMode.SYSTEM
-    subtitle_mode: Union[LocalMediaProfileSubtitleMode, str] = LocalMediaProfileSubtitleMode.NO_SUBTITLES
+    subtitle_mode: Union[LocalMediaProfileSubtitleMode, str] = LocalMediaProfileSubtitleMode.SIDECAR
     append_media_type_to_filename: bool
     created_at: datetime
     updated_at: datetime

@@ -1,6 +1,7 @@
 import {createSelectRegistry, SelectRegistry} from "../utils/selectRegistry";
 import {useMemo} from "react";
 import type {LocalMediaProfileRead} from "./schemas/local_media_profile";
+import type {LocalMediaProfileSubtitleMode} from "./schemas/local_media_profile_base";
 
 
 export const PreferredFormatReg = createSelectRegistry("PreferredFormat", {
@@ -31,6 +32,13 @@ export const ShowLocalMediaProfileScopeReg = createSelectRegistry("ShowLocalMedi
 export type LocalMediaProfileType = 'show' | 'movie'
 export type ShowLocalMediaProfileScope = (typeof ShowLocalMediaProfileScopeReg)["values"][number]
 export type ShowLocalMediaProfileContext = 'podcast' | 'series'
+
+export function defaultSubtitleModeForProfile(
+    type: LocalMediaProfileType,
+    showScope: ShowLocalMediaProfileScope = 'both',
+): LocalMediaProfileSubtitleMode {
+    return type === 'show' && showScope === 'podcast' ? 'no_subtitles' : 'sidecar'
+}
 
 export function isShowLocalMediaProfileAvailableFor(
     profile: LocalMediaProfileRead,

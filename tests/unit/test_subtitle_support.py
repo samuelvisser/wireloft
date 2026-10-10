@@ -157,43 +157,69 @@ def test_download_plan_uses_existing_sidecar_and_embedding_stages(tmp_path):
     assert plan.subtitle_asset_ids == ("subtitle_0",)
 
 
-def test_subtitle_profiles_default_to_movie_sidecars_and_disabled_shows():
+def test_movie_profiles_default_to_subtitle_sidecars():
     from backend.api.models.movie_local_media_profile import MovieLocalMediaProfileAPICreate
-    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
     movie = MovieLocalMediaProfileAPICreate(
         name="Movie", type="movie", preferred_format="format_1080p",
         output_template="/downloads/movies/{{ movie_title }}/{{ title }}.ext",
     )
+    assert movie.subtitle_mode == "sidecar"
+
+
+@pytest.mark.parametrize(("scope", "expected"), [
+    ("both", "sidecar"),
+    ("series", "sidecar"),
+    ("podcast", "no_subtitles"),
+])
+def test_show_subtitle_default_follows_scope_when_not_specified(scope, expected):
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
+
     show = ShowLocalMediaProfileAPICreate(
-        name="Show", type="show", preferred_format="format_1080p",
+        name="Show", type="show", show_scope=scope,
+        preferred_format="format_1080p",
         output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
     )
-    assert movie.subtitle_mode == "sidecar"
-    assert show.subtitle_mode == "no_subtitles"
+    assert show.subtitle_mode == expected
+    assert show.model_dump(by_alias=True, mode="json")["subtitle_mode"] == expected
 
 
 @pytest.mark.parametrize("mode", [
-    "system", "no_subtitles", "embed", "sidecar", "embed_and_sidecar",
+    "no_subtitles", "embed", "sidecar", "embed_and_sidecar",
 ])
-def test_subtitle_profile_validation_accepts_all_modes(mode):
+@pytest.mark.parametrize("scope", ["podcast", "series", "both"])
+def test_manual_subtitle_selection_overrides_show_scope(scope, mode):
     from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
     profile = ShowLocalMediaProfileAPICreate(
-        name="Show", preferred_format="format_1080p", subtitle_mode=mode,
+        name="Show", preferred_format="format_1080p",
+        show_scope=scope, subtitle_mode=mode,
         output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
     )
     assert profile.subtitle_mode == mode
 
 
-def test_subtitle_mode_inherits_system_or_uses_profile_override(monkeypatch):
-    from backend.services.download_options import effective_subtitle_mode
-    from config import get_settings
-    from config.settings.submodels import SubtitleMode
+def test_subtitle_system_mode_is_no_longer_valid():
+    from pydantic import ValidationError
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
-    monkeypatch.setattr(get_settings().download_settings, "subtitle_mode", SubtitleMode.EMBED)
-    assert effective_subtitle_mode(SimpleNamespace(subtitle_mode="system")) is SubtitleMode.EMBED
-    assert effective_subtitle_mode(SimpleNamespace(subtitle_mode="sidecar")) is SubtitleMode.SIDECAR
+    with pytest.raises(ValidationError):
+        ShowLocalMediaProfileAPICreate(
+            name="Show", preferred_format="format_1080p", subtitle_mode="system",
+            output_template="/downloads/shows/{{ show }}/{{ episode }}.ext",
+        )
+
+
+def test_system_settings_no_longer_expose_subtitle_mode():
+    from backend.api.models.settings import SettingsValues
+    from config.settings.settings import AppSettings
+
+    settings = AppSettings()
+    assert "subtitle_mode" not in type(settings.download_settings).model_fields
+    serialized = SettingsValues.from_app_settings(settings).model_dump(
+        by_alias=True, mode="json",
+    )
+    assert "subtitleMode" not in serialized["downloadSettings"]
 
 
 def test_subtitle_mp4_embedding_uses_mov_text_and_three_letter_language(tmp_path, monkeypatch):

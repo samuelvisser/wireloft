@@ -331,13 +331,6 @@ class MetadataMode(StrEnum):
     EMBED_AND_NFO = "embed_and_nfo"
 
 
-class SubtitleMode(StrEnum):
-    NO_SUBTITLES = "no_subtitles"
-    EMBED = "embed"
-    SIDECAR = "sidecar"
-    EMBED_AND_SIDECAR = "embed_and_sidecar"
-
-
 class ShowArtworkFallbackFormat(StrEnum):
     JPG = "jpg"
     PNG = "png"
@@ -396,10 +389,6 @@ class DownloadSettings(SubmodelBase):
     metadata_mode: MetadataMode = Field(
         default=MetadataMode.EMBED,
         description="Whether downloaded media embeds metadata, writes an NFO sidecar, does both, or stores no metadata",
-    )
-    subtitle_mode: SubtitleMode = Field(
-        default=SubtitleMode.NO_SUBTITLES,
-        description="Whether HLS subtitles are embedded, saved as language-specific sidecars, both, or disabled",
     )
     download_show_assets: bool = Field(
         default=True,

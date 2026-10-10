@@ -25,7 +25,6 @@ from config.settings.submodels import (
     FilenameRestrictionMode,
     MetadataMode,
     ShowArtworkFallbackFormat,
-    SubtitleMode,
     ThumbnailMode,
     normalize_metadata_refresh_intervals,
 )
@@ -77,7 +76,6 @@ SettingFieldPath = Literal[
     "downloadSettings.downloadMode",
     "downloadSettings.thumbnailMode",
     "downloadSettings.metadataMode",
-    "downloadSettings.subtitleMode",
     "downloadSettings.downloadShowAssets",
     "downloadSettings.showArtworkFallbackFormat",
     "downloadSettings.temporaryDownloadRoot",
@@ -138,7 +136,6 @@ UI_SETTING_PATHS: tuple[SettingFieldPath, ...] = (
     "downloadSettings.downloadMode",
     "downloadSettings.thumbnailMode",
     "downloadSettings.metadataMode",
-    "downloadSettings.subtitleMode",
     "downloadSettings.downloadShowAssets",
     "downloadSettings.temporaryDownloadRoot",
     "downloadSettings.rssCacheRoot",
@@ -280,7 +277,6 @@ class DownloadSettingsValue(_SettingsValueModel):
     download_mode: DownloadMode
     thumbnail_mode: ThumbnailMode
     metadata_mode: MetadataMode
-    subtitle_mode: SubtitleMode
     download_show_assets: bool
     show_artwork_fallback_format: ShowArtworkFallbackFormat
     temporary_download_root: Path

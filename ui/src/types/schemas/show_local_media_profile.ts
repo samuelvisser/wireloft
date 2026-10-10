@@ -8,6 +8,7 @@ import {
     LocalMediaProfileSchemaRequest,
     LocalMediaProfileSchemaResponse,
     LocalMediaProfileUpdateBaseSchema,
+    LocalMediaProfileSubtitleModeSchema,
 } from './local_media_profile_base'
 
 
@@ -45,15 +46,17 @@ const ShowLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     indexingValues: ShowLocalMediaProfileIndexingValuesSchema.default([]),
 })
 
-export const ShowLocalMediaProfileCreateSchema = ShowLocalMediaProfileBaseSchema.safeExtend(
-    LocalMediaProfileCreateBaseSchema.shape,
-)
+export const ShowLocalMediaProfileCreateSchema = ShowLocalMediaProfileBaseSchema.safeExtend({
+    ...LocalMediaProfileCreateBaseSchema.shape,
+    subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
+})
 export type ShowLocalMediaProfileCreateIn = z.input<typeof ShowLocalMediaProfileCreateSchema>
 export type ShowLocalMediaProfileCreateOut = z.output<typeof ShowLocalMediaProfileCreateSchema>
 
-export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileBaseSchema.safeExtend(
-    LocalMediaProfileUpdateBaseSchema.shape,
-)
+export const ShowLocalMediaProfileUpdateSchema = ShowLocalMediaProfileBaseSchema.safeExtend({
+    ...LocalMediaProfileUpdateBaseSchema.shape,
+    subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
+})
 export type ShowLocalMediaProfileUpdateIn = z.input<typeof ShowLocalMediaProfileUpdateSchema>
 export type ShowLocalMediaProfileUpdateOut = z.output<typeof ShowLocalMediaProfileUpdateSchema>
 

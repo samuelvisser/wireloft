@@ -10,6 +10,7 @@ from backend.api.models.local_media_profile import (
 )
 from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
 from backend.types.local_media_profile_types import (
+    LocalMediaProfileSubtitleMode,
     LocalMediaProfileType,
     ShowLocalMediaProfileScope,
 )
@@ -25,6 +26,19 @@ class _ShowLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
     show_scope: ShowLocalMediaProfileScope = ShowLocalMediaProfileScope.BOTH
     download_show_assets: bool | None = None
     indexing_values: list[IndexingValueDefinitionAPI] = Field(default_factory=list, max_length=100)
+
+    @model_validator(mode="after")
+    def _default_subtitles_for_scope(self):
+        # Requests may omit subtitle_mode. A podcast-only profile defaults to
+        # no subtitles; series and mixed profiles default to sidecar files.
+        # Explicit selections always win, including explicit "no_subtitles".
+        if "subtitle_mode" not in self.model_fields_set:
+            self.subtitle_mode = (
+                LocalMediaProfileSubtitleMode.NO_SUBTITLES
+                if self.show_scope == ShowLocalMediaProfileScope.PODCAST
+                else LocalMediaProfileSubtitleMode.SIDECAR
+            )
+        return self
 
     @model_validator(mode="after")
     def _unique_index_keys(self):

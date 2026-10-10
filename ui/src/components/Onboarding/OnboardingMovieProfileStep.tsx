@@ -52,6 +52,7 @@ export default function OnboardingMovieProfileStep({movieTitle, onBack, onContin
             name: profile.name,
             outputTemplate: profile.outputTemplate,
             preferredFormat: profile.preferredFormat as MovieLocalMediaProfileCreateIn['preferredFormat'],
+            subtitleMode: profile.subtitleMode,
         })
     }, [form])
 

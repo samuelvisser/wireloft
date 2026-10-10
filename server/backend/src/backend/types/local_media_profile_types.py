@@ -32,7 +32,6 @@ class LocalMediaProfileMetadataMode(StrEnum):
 
 
 class LocalMediaProfileSubtitleMode(StrEnum):
-    SYSTEM = "system"
     NO_SUBTITLES = "no_subtitles"
     EMBED = "embed"
     SIDECAR = "sidecar"

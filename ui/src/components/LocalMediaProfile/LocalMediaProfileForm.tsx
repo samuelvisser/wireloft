@@ -31,7 +31,7 @@ export function buildLocalMediaProfileOnSubmit<TIn extends FieldValues, TOut ext
 export default function LocalMediaProfileForm({form, mode}: Props) {
     return (
         <>
-            <LocalMediaProfileCommonFields form={form}/>
+            <LocalMediaProfileCommonFields form={form} mode={mode}/>
             {mode === 'movie'
                 ? <MovieLocalMediaProfileForm form={form}/>
                 : <ShowLocalMediaProfileForm form={form}/>

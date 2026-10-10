@@ -42,7 +42,7 @@ Local Media Profiles can automatically save subtitle tracks advertised by The Da
 - **Download besides media**: save separate language-labeled SRT files next to the finished media.
 - **Both embed and download**: keep selectable embedded tracks and sidecar files.
 
-The default for **Movie Local Media Profiles** is **Download besides media**. **Show Local Media Profiles** default to **No subtitles**. The **System** choice follows the default in **Settings → Downloads**.
+**Movies**, **Series** and Show profiles available for **Podcasts and Series** default to **Download besides media**. **Podcast-only** profiles default to **No subtitles**. There is no system-wide subtitle setting; each profile stores its own choice. When creating or editing a profile, changing its type or **Available for** selection updates the suggested subtitle option unless you have explicitly selected another one.
 
 Sidecars share the media filename, for example `Movie Name.mp4` and `Movie Name.en.srt` for English. Forced subtitles use names such as `Movie Name.en.forced.srt`. Plex and similar media servers can discover these files automatically. The same naming applies to movie extras and show episodes.
 

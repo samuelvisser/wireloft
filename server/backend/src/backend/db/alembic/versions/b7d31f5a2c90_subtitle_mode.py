@@ -24,6 +24,16 @@ def upgrade() -> None:
     op.execute(
         sa.text("UPDATE local_media_profiles SET subtitle_mode = 'sidecar' WHERE type = 'movie'")
     )
+    # Before subtitle handling existed, no profile could have selected a mode.
+    # Assign the new defaults based on the existing Show Local Media Profile scope.
+    op.execute(sa.text("""
+        UPDATE local_media_profiles
+        SET subtitle_mode = 'sidecar'
+        WHERE type = 'show' AND id IN (
+            SELECT id FROM local_media_profiles_show
+            WHERE show_scope IN ('series', 'both')
+        )
+    """))
 
 
 def downgrade() -> None:
