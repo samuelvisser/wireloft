@@ -10,6 +10,12 @@ import {
 import {useEffect, useMemo, useRef} from 'react'
 import {saveEpisodePreviewToStorage, saveProfilesToStorage, saveShowsToStorage} from './cache'
 import {
+    loadDailywireMovieCatalogFromStorage,
+    loadDailywireShowCatalogFromStorage,
+    saveDailywireMovieCatalogToStorage,
+    saveDailywireShowCatalogToStorage,
+} from './dailywireCatalogCache'
+import {
     type LazyCollectionPage,
     type LazyCollectionPageRequest,
     contiguousLazyCollectionItems,
@@ -221,18 +227,20 @@ export function useDailywireCatalog() {
             const value = await fetchJSON<any>(`${(window as any).appConfig.API_URL}/dailywire/catalog`, signal)
             return DailywireCatalogReadSchema.parse(value)
         },
-        staleTime: 5 * 60 * 1000,
-        refetchOnMount: false,
+        staleTime: Infinity,
+        gcTime: Infinity,
+        refetchOnMount: 'always',
     })
 }
 
 const DAILYWIRE_CATALOG_PAGE_SIZE = 24
 
 export function useDailywireShowCatalog(search: string, grouping: 'host' | 'alphabetical', enabled = true) {
-    return useInfiniteQuery({
+    const result = useInfiniteQuery({
         queryKey: ['dailywireCatalog', 'shows', search, grouping] as const,
         enabled,
         initialPageParam: 0,
+        initialData: search ? undefined : () => loadDailywireShowCatalogFromStorage(grouping),
         queryFn: async ({pageParam, signal}) => {
             const params = new URLSearchParams({
                 offset: String(pageParam),
@@ -249,17 +257,22 @@ export function useDailywireShowCatalog(search: string, grouping: 'host' | 'alph
         getNextPageParam: (lastPage) => lastPage.hasMore
             ? lastPage.offset + lastPage.items.length
             : undefined,
-        staleTime: 5 * 60 * 1000,
-        gcTime: 30 * 60 * 1000,
-        refetchOnMount: false,
+        staleTime: Infinity,
+        gcTime: Infinity,
+        refetchOnMount: 'always',
     })
+    useEffect(() => {
+        if (!search && result.data) saveDailywireShowCatalogToStorage(grouping, result.data)
+    }, [grouping, result.data, search])
+    return result
 }
 
 export function useDailywireMovieCatalog(search: string, enabled = true) {
-    return useInfiniteQuery({
+    const result = useInfiniteQuery({
         queryKey: ['dailywireCatalog', 'movies', search] as const,
         enabled,
         initialPageParam: 0,
+        initialData: search ? undefined : loadDailywireMovieCatalogFromStorage,
         queryFn: async ({pageParam, signal}) => {
             const params = new URLSearchParams({
                 offset: String(pageParam),
@@ -275,10 +288,14 @@ export function useDailywireMovieCatalog(search: string, enabled = true) {
         getNextPageParam: (lastPage) => lastPage.hasMore
             ? lastPage.offset + lastPage.items.length
             : undefined,
-        staleTime: 5 * 60 * 1000,
-        gcTime: 30 * 60 * 1000,
-        refetchOnMount: false,
+        staleTime: Infinity,
+        gcTime: Infinity,
+        refetchOnMount: 'always',
     })
+    useEffect(() => {
+        if (!search && result.data) saveDailywireMovieCatalogToStorage(result.data)
+    }, [result.data, search])
+    return result
 }
 
 export function useDailywireMovie(slug?: string) {

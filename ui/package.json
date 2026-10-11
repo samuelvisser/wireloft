@@ -11,7 +11,8 @@
     "build:pro-icons": "tsc --noEmit && vite build --mode pro-icons",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "test:download-progress": "node scripts/test-download-progress.mjs"
+    "test:download-progress": "node scripts/test-download-progress.mjs",
+    "test:catalog-cache": "node scripts/test-dailywire-catalog-cache.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
