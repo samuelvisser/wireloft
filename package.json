@@ -8,6 +8,6 @@
     "build:pro-icons": "npm --prefix ui run build:pro-icons",
     "preview": "npm --prefix ui run preview",
     "format": "npm --prefix ui run format",
-    "postinstall": "npm --prefix ui install --registry=https://registry.npmjs.org --no-audit --no-fund"
+    "postinstall": "npm --prefix ui install --include=optional --no-audit --no-fund"
   }
 }
