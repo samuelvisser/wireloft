@@ -1,3 +1,7 @@
+# The repository root only delegates npm commands to ui/.
+# ui/package-lock.json is the authoritative dependency lockfile.
+/package-lock.json
+
 .cadence/
 
 # Project- specific
