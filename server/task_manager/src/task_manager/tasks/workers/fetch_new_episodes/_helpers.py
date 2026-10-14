@@ -6,12 +6,13 @@ from backend.db.models import Show, Season, Episode
 
 
 def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
-    """Resolve an explicit Show scope, selecting only what we need"""
+    """Resolve one Show, or all shows for the None/0 global scope."""
     if show_slug:
         show = s.scalar(select(Show).where(Show.slug == show_slug))
         return [show] if show is not None else []
 
-    if show_id is not None:
+    # Scheduled scans and Settings "Run now" use 0 for all shows.
+    if show_id not in (None, 0):
         show = s.get(Show, show_id)
         return [show] if show is not None else []
 
