@@ -92,7 +92,7 @@ export default function AutomationSettingsTab({draft, updateDraft, environmentVa
                     runNow={{
                         definition: frontendOperationDefinitions['system.cron.find_episodes'],
                         job: 'find-episodes',
-                        ledger: {definitionKey: 'fetch_new_episodes', resourceType: 'show', resourceId: 0},
+                        ledger: {definitionKey: 'fetch_new_episodes', resourceType: 'show', resourceId: 0, includeUnscoped: true},
                     }}
                     value={draft.newEpisodeSchedule.findEpisodesCron}
                     enabled={draft.newEpisodeSchedule.findEpisodesCronEnabled}

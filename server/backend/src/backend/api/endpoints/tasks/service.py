@@ -188,6 +188,7 @@ def query_ledger(
     definition_key: str | None,
     resource_type: str | None = None,
     resource_ids: list[int] | None = None,
+    include_unscoped: bool = False,
     statuses: list[str] | None = None,
     started_after: datetime | None = None,
     order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
@@ -202,7 +203,11 @@ def query_ledger(
     if resource_type is not None:
         filters.append(TaskRun.resource_type == ResourceType(resource_type))
     if resource_ids:
-        filters.append(TaskRun.resource_id.in_(resource_ids))
+        scoped_ids = TaskRun.resource_id.in_(resource_ids)
+        filters.append(
+            or_(scoped_ids, TaskRun.resource_id.is_(None))
+            if include_unscoped else scoped_ids
+        )
     if statuses:
         filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
     if started_after is not None:
@@ -212,6 +217,7 @@ def query_ledger(
         "definition_key": definition_key,
         "resource_type": resource_type,
         "resource_ids": sorted(resource_ids or []),
+        "include_unscoped": include_unscoped,
         "statuses": sorted(statuses or []),
         "started_after": started_after.isoformat() if started_after is not None else None,
     }
@@ -319,6 +325,7 @@ def list_ledger(
     definition_key: str | None,
     resource_type: str | None = None,
     resource_ids: list[int] | None = None,
+    include_unscoped: bool = False,
     statuses: list[str] | None = None,
     started_after: datetime | None = None,
     order_by: Literal["started_at", "finished_at", "created_at"] = "started_at",
@@ -333,6 +340,7 @@ def list_ledger(
             definition_key=definition_key,
             resource_type=resource_type,
             resource_ids=resource_ids,
+            include_unscoped=include_unscoped,
             statuses=statuses,
             started_after=started_after,
             order_by=order_by,

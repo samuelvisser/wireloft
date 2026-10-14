@@ -22,7 +22,7 @@ export const TaskRunReadSchema = z.looseObject({
   id: z.int(),
   definitionKey: z.string(),
   resourceType: z.string(),
-  resourceId: z.int(),
+  resourceId: z.int().nullable(),
   status: z.string(),
   progress: z.int().nullable().optional(),
   waitState: TaskRunWaitStateReadSchema.nullable().optional(),

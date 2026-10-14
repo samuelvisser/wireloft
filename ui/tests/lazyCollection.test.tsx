@@ -479,13 +479,13 @@ test('cron task ledger can render immediately from the broader Tasks cache witho
     const queryClient = new QueryClient()
     const tasksKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        [null, null, null, null, null, 'created_at', 'desc'],
+        [null, null, null, null, null, 'created_at', 'desc', false],
         100,
         100,
     )
     const cronKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        ['fetch_new_episodes', 'show', [0], null, null, 'created_at', 'desc'],
+        ['fetch_new_episodes', 'show', [0], null, null, 'created_at', 'desc', false],
         10,
         10,
     )
@@ -532,7 +532,7 @@ test('task ledger placeholder reuse respects status and started-after filters', 
     const queryClient = new QueryClient()
     const tasksKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        [null, null, null, null, null, 'created_at', 'desc'],
+        [null, null, null, null, null, 'created_at', 'desc', false],
         100,
         100,
     )
@@ -574,7 +574,7 @@ test('task ledger placeholder reuse never crosses ordering', () => {
     const queryClient = new QueryClient()
     const tasksKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        [null, null, null, null, null, 'started_at', 'desc'],
+        [null, null, null, null, null, 'started_at', 'desc', false],
         100,
         100,
     )
@@ -612,13 +612,13 @@ test('task ledger placeholder reuse never crosses ordering', () => {
 test('Tasks and 10-row ledger modals use separate refresh executions over the same semantic cache', () => {
     const tasksKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        [null, null, null, null, null, 'created_at', 'desc'],
+        [null, null, null, null, null, 'created_at', 'desc', false],
         100,
         100,
     )
     const modalKey = lazyCollectionQueryKey(
         ['taskLedger'],
-        [null, null, null, null, null, 'created_at', 'desc'],
+        [null, null, null, null, null, 'created_at', 'desc', false],
         10,
         10,
     )
@@ -673,4 +673,80 @@ test('mixed cursor revisions are never reused as compatible placeholder cache', 
     ]
 
     assert.equal(contiguousLazyCollectionItems(pages), null)
+})
+
+test('task ledger placeholder includes both unscoped and legacy global scans', () => {
+    const queryClient = new QueryClient()
+    const key = lazyCollectionQueryKey(
+        ['taskLedger'],
+        [null, null, null, null, null, 'created_at', 'desc', false],
+        100,
+        100,
+    )
+    const page: LazyCollectionPage<TaskLedgerEntryRead> = {
+        items: [
+            taskLedgerEntry(4, {resourceId: null}),
+            taskLedgerEntry(3, {resourceId: 0}),
+            taskLedgerEntry(2, {resourceId: 7}),
+            taskLedgerEntry(1, {resourceId: 9}),
+        ],
+        total: 4,
+        limit: 100,
+        nextCursor: null,
+    }
+    queryClient.setQueryData(key, {
+        pages: [page],
+        pageParams: [{cursor: null, limit: 100}],
+    })
+
+    const query = {
+        definitionKey: 'fetch_new_episodes',
+        resourceType: 'show',
+        resourceIds: [0, 7],
+        statuses: undefined,
+        startedAfter: undefined,
+        orderBy: 'created_at' as const,
+        order: 'desc' as const,
+        initialCount: 10,
+    }
+    const combined = deriveTaskLedgerCollectionPlaceholder(queryClient, {
+        ...query,
+        includeUnscoped: true,
+    })
+    assert.ok(combined)
+    assert.deepEqual(combined.pages[0].items.map((entry) => entry.resourceId), [null, 0, 7])
+
+    const legacy = deriveTaskLedgerCollectionPlaceholder(queryClient, query)
+    assert.ok(legacy)
+    assert.deepEqual(legacy.pages[0].items.map((entry) => entry.resourceId), [0, 7])
+})
+
+test('scoped task cache cannot seed unscoped-inclusive ledger without global rows', () => {
+    const queryClient = new QueryClient()
+    const key = lazyCollectionQueryKey(
+        ['taskLedger'],
+        ['fetch_new_episodes', 'show', [0, 7], null, null, 'created_at', 'desc', false],
+        10,
+        10,
+    )
+    queryClient.setQueryData(key, {
+        pages: [{
+            items: [taskLedgerEntry(1, {resourceId: 0})],
+            total: 1,
+            limit: 10,
+            nextCursor: null,
+        }],
+        pageParams: [{cursor: null, limit: 10}],
+    })
+    assert.equal(deriveTaskLedgerCollectionPlaceholder(queryClient, {
+        definitionKey: 'fetch_new_episodes',
+        resourceType: 'show',
+        resourceIds: [0, 7],
+        includeUnscoped: true,
+        statuses: undefined,
+        startedAfter: undefined,
+        orderBy: 'created_at',
+        order: 'desc',
+        initialCount: 10,
+    }), undefined)
 })

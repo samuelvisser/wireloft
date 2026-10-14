@@ -174,7 +174,7 @@ def setup_triggers_from_registry() -> None:
                     kwargs={
                         "def_key": task_key,
                         "resource_type": trigger.resource_type or "show",
-                        "resource_id": trigger.resource_id if trigger.resource_id is not None else 0,
+                        "resource_id": trigger.resource_id,
                         "schedule_id": None,
                     },
                     id=job_id,
