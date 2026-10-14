@@ -14,7 +14,9 @@ def remove_download_artifacts(
     file_path: Optional[str],
     thumbnail_path: Optional[str] = None,
     nfo_path: Optional[str] = None,
-    *, sidecar_paths: tuple[str, ...] = (),
+    *,
+    sidecar_paths: tuple[str, ...] = (),
+    raise_on_error: bool = False,
 ) -> None:
     """Remove a download's owned final files and every temporary form WireLoft uses.
 
@@ -23,6 +25,8 @@ def remove_download_artifacts(
     output, and sidecar thumbnails are tracked explicitly on MediaDownload.
     Cancellation can happen in any one of those phases, so cleanup must cover all
     owned paths and be safe to repeat when the worker later observes cancellation.
+    Strict callers may raise on removal errors instead of recording a successful
+    deletion while a file remains on disk.
 
     A media path ending in the Local Media Profile ``.ext`` marker is unresolved:
     no download attempt has claimed that concrete filesystem name yet. Treat it as
@@ -44,6 +48,8 @@ def remove_download_artifacts(
                 try:
                     path.unlink(missing_ok=True)
                 except OSError:
+                    if raise_on_error:
+                        raise
                     # An in-flight writer can briefly keep a file open on some hosts.
                     # The worker calls this helper again after observing cancellation.
                     logger.warning("Could not remove cancelled download artifact '%s'", path, exc_info=True)
@@ -65,6 +71,8 @@ def remove_download_artifacts(
                     except FileNotFoundError:
                         pass
                     except OSError:
+                        if raise_on_error:
+                            raise
                         logger.warning(
                             "Could not remove HLS download assets '%s'",
                             directory,
@@ -82,4 +90,6 @@ def remove_download_artifacts(
             try:
                 path.unlink(missing_ok=True)
             except OSError:
+                if raise_on_error:
+                    raise
                 logger.warning("Could not remove %s artifact '%s'", label, path, exc_info=True)

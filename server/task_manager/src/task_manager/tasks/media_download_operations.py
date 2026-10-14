@@ -126,6 +126,7 @@ def prepare_media_download_artifact(
     download: MediaDownloadBase,
     *,
     remove_existing_artifacts: bool = True,
+    strict_cleanup: bool = False,
 ) -> None:
     """Prepare domain state for an attempt without encoding any execution state."""
     if remove_existing_artifacts:
@@ -134,7 +135,11 @@ def prepare_media_download_artifact(
             resolved_path = resolve_media_download_file(session, download)
         artifact_status_before_removal = download.artifact_status
         removed_path = str(resolved_path) if resolved_path is not None else download.file_path
-        remove_download_artifacts(removed_path, sidecar_paths=tuple(asset.path for asset in download.assets))
+        remove_download_artifacts(
+            removed_path,
+            sidecar_paths=tuple(asset.path for asset in download.assets),
+            raise_on_error=strict_cleanup,
+        )
         if resolved_path is not None:
             record_media_download_history(
                 session,

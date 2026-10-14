@@ -1170,6 +1170,9 @@ th[aria-sort="descending"] .th-sort-icon { opacity: 1; }
 .log-dialog-actions {
   flex: 0 0 auto;
 }
+.log-dialog-delete {
+  margin-right: auto;
+}
 .log-attempt {
   border: 1px solid #e2e8f0;
   border-radius: 8px;

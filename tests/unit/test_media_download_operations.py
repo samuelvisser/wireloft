@@ -1406,3 +1406,168 @@ def test_delete_unavailable_media_download_rejects_restored_file(tmp_path):
     finally:
         session.close()
         engine.dispose()
+
+
+def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from backend.db.models.media_download import (
+        MediaDownloadAsset,
+        MediaDownloadBase,
+        MediaDownloadHistory,
+    )
+    from backend.services import download_actions
+    from backend.services.media_download_history import record_media_download_history
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_download_history_types import MediaDownloadHistoryAction
+
+    session, engine = _session()
+    try:
+        # This test exercises the same database-side cascading behavior enabled by
+        # WireLoft's production connection settings.
+        with engine.connect() as connection:
+            connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+
+        download = _make_download(session, slug="delete-file-and-record")
+        media = tmp_path / "episode.m4a"
+        media.write_bytes(b"completed audio")
+        artwork = tmp_path / "episode.jpg"
+        artwork.write_bytes(b"artwork")
+        nfo = tmp_path / "episode.nfo"
+        nfo.write_text("metadata")
+        leftover = tmp_path / "episode.m4a.part"
+        leftover.write_bytes(b"temporary data")
+        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        download.file_path = str(media)
+        download.set_asset_path("artwork", "thumbnail", str(artwork))
+        download.set_asset_path("nfo", "nfo", str(nfo))
+        record_media_download_history(session, download.id, MediaDownloadHistoryAction.CREATED)
+        download_id = download.id
+        session.commit()
+
+        @contextmanager
+        def test_db_session():
+            yield session
+
+        monkeypatch.setattr(download_actions, "db_session", test_db_session)
+
+        assert download_actions.delete_media_download_action(download_id)
+        assert not media.exists()
+        assert not artwork.exists()
+        assert not nfo.exists()
+        assert not leftover.exists()
+        assert session.get(MediaDownloadBase, download_id) is None
+        assert session.scalar(
+            select(MediaDownloadHistory.id).where(MediaDownloadHistory.media_download_id == download_id)
+        ) is None
+        assert session.scalar(
+            select(MediaDownloadAsset.id).where(MediaDownloadAsset.media_download_id == download_id)
+        ) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_media_download_action_removes_unfinished_parts(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.services import download_actions
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-incomplete")
+        media = tmp_path / "incomplete.m4a"
+        part = tmp_path / "incomplete.m4a.part"
+        part.write_bytes(b"incomplete media")
+        download.file_path = str(media)
+        download_id = download.id
+        session.commit()
+
+        @contextmanager
+        def test_db_session():
+            yield session
+
+        monkeypatch.setattr(download_actions, "db_session", test_db_session)
+
+        assert download_actions.delete_media_download_action(download_id)
+        assert not part.exists()
+        assert session.get(MediaDownloadBase, download_id) is None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_media_download_action_refuses_unowned_absent_destination(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    import pytest
+
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.services import download_actions
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-unowned")
+        media = tmp_path / "not-claimed.m4a"
+        media.write_bytes(b"unowned data")
+        download.file_path = str(media)
+        download_id = download.id
+        session.commit()
+
+        @contextmanager
+        def test_db_session():
+            yield session
+
+        monkeypatch.setattr(download_actions, "db_session", test_db_session)
+
+        with pytest.raises(download_actions.DownloadActionError) as exc_info:
+            download_actions.delete_media_download_action(download_id)
+        assert exc_info.value.kind == "conflict"
+        assert media.read_bytes() == b"unowned data"
+        assert session.get(MediaDownloadBase, download_id) is not None
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_delete_media_download_action_keeps_record_if_file_cleanup_fails(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+
+    import pytest
+
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.services import download_actions
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from task_manager.tasks import media_download_operations
+
+    session, engine = _session()
+    try:
+        download = _make_download(session, slug="delete-failure")
+        media = tmp_path / "protected.m4a"
+        media.write_bytes(b"protected data")
+        download.file_path = str(media)
+        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        download_id = download.id
+        session.commit()
+
+        @contextmanager
+        def test_db_session():
+            yield session
+
+        monkeypatch.setattr(download_actions, "db_session", test_db_session)
+
+        def fail_cleanup(*_args, **_kwargs):
+            raise PermissionError("Permission denied")
+
+        monkeypatch.setattr(media_download_operations, "remove_download_artifacts", fail_cleanup)
+
+        with pytest.raises(download_actions.DownloadActionError) as exc_info:
+            download_actions.delete_media_download_action(download_id)
+        assert exc_info.value.kind == "conflict"
+        assert "Permission denied" in str(exc_info.value)
+        assert media.read_bytes() == b"protected data"
+        assert session.get(MediaDownloadBase, download_id) is not None
+    finally:
+        session.close()
+        engine.dispose()
