@@ -1,9 +1,9 @@
 # syntax=docker/dockerfile:1
 
 ########################################
-# 1) Build the React UI (Vite + TS)
+# 1) Test and build the React UI (Vite+ / Vitest / TypeScript)
 ########################################
-FROM node:22-alpine AS ui-build
+FROM node:24-bookworm-slim AS ui-build
 
 WORKDIR /ui
 
@@ -11,11 +11,12 @@ ARG WIRELOFT_PRO_ICONS=false
 
 COPY ui/package.json ui/package-lock.json ./
 
-# Keep npm's package download cache independently of Docker's normal layer cache
+# Keep npm's package download cache independently of Docker's normal layer cache.
+# Resolve the refreshed Vite+ dependency graph until the npm lockfile is regenerated.
 RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
     --mount=type=cache,id=wireloft-npm,target=/root/.npm,sharing=locked \
     if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
-        npm ci \
+        npm install \
             --include=optional \
             --prefer-offline \
             --no-audit \
@@ -32,7 +33,8 @@ RUN --mount=type=secret,id=npmrc,target=/ui/.npmrc,required=false \
 COPY pyproject.toml /pyproject.toml
 COPY ui/ ./
 
-RUN if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
+RUN npm run test && \
+    if [ "$WIRELOFT_PRO_ICONS" = "true" ]; then \
         npm run build:pro-icons; \
     else \
         npm run build; \

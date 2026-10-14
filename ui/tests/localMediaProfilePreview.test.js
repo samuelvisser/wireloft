@@ -1,15 +1,12 @@
-// Run with: node --test tests/ui/local_media_profile_preview.test.cjs
+// Preserves the mocked React-hook lifecycle and request-ordering assertions.
 // Small effect/state harness: tests request ordering without a browser or React
 // renderer. The response-schema boundary is stubbed; Python tests cover the API.
-const {test} = require('node:test')
-const assert = require('node:assert/strict')
-const {readFileSync} = require('node:fs')
-const {createRequire} = require('node:module')
-const path = require('node:path')
-const vm = require('node:vm')
-const root = path.resolve(__dirname, '../..')
-const ts = createRequire(path.join(root, 'ui/package.json'))('typescript')
-const source = readFileSync(path.join(root, 'ui/src/lib/localMediaProfilePreview.ts'), 'utf8')
+import {test} from 'vite-plus/test'
+import assert from 'node:assert/strict'
+import {readFileSync} from 'node:fs'
+import vm from 'node:vm'
+import ts from 'typescript'
+const source = readFileSync(new URL('../src/lib/localMediaProfilePreview.ts', import.meta.url), 'utf8')
 const code = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022}}).outputText
 
 function harness() {

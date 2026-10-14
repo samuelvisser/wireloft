@@ -138,6 +138,8 @@ when they are necessary for the domain logic itself.
 Before you push your branch, please run all appropriate tests to verify your work.  
 Also be sure to launch both the backend and frontend servers and verify your work in the UI.
 First, run `uv sync` and `npm install` from the repository root to install all dependencies.
+The UI uses Vite+ (project-local `vp` under `ui`) for builds, Vitest tests, Oxlint, Oxfmt, and type checking.
+Run `npm test`, `npm run check`, and `npm run build` from the repository root; `cd ui && vp run verify` is the cached UI test/build task.
 The backend is started with: `backend-api run` and the frontend is started with `npm run dev` from the repository root.
 If your environment is not able to run any of these tests, you can skip this step.
 

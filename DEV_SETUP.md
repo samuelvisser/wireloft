@@ -95,6 +95,63 @@ restricted to your user only) so later runs don't ask again. The token is
 never passed as a CLI argument and never printed.
 
 ## Development
+### UI (React 19, Vite+ / TypeScript)
+
+WireLoft uses the **Vite+ 1.1.0** frontend toolchain. The `ui` directory
+is the Vite+ project; the repository-root `npm run` commands delegate to it.
+The pinned project-local `vp` executable is installed by `npm install`
+and is used by development, test, and production build scripts.
+
+Optionally install the global Vite+ CLI for Node.js/package-manager management
+and direct `vp` commands:
+
+```bash
+# macOS / Linux
+curl -fsSL https://vite.plus | bash
+
+# Windows PowerShell: irm https://vite.plus/ps1 | iex
+```
+
+Open a new terminal after the global installation, then run `vp help`.
+Vite+ can manage Node.js and npm automatically; `vp env off` opts out.
+The project pins Node.js 24.11.0 in `.node-version` (Node 22.18+
+is also supported). An independently installed Node.js and npm work with
+the project-local CLI.
+
+From the `ui` directory:
+
+```bash
+vp install             # npm dependency installation via the existing npm lockfile
+vp dev                 # Vite+ development server; Font Awesome Free
+vp check               # Oxlint and TypeScript checks; formatting excluded for now
+vp lint                # Oxlint
+vp fmt . --write       # Oxfmt (replaces Prettier)
+vp test                # Vitest (TS/TSX tests, including the former Node harness)
+vp test watch          # Vitest watch mode
+vp build               # Production UI build
+vp run verify          # Cached typecheck + tests + Free-icons build
+vp preview             # Preview the built app
+```
+
+Use `vp dev --mode pro-icons` or `vp build --mode pro-icons` for paid
+Font Awesome builds after configuring `ui/.npmrc`. The default remains Free.
+The `npm run build` wrapper runs a type check before the Free-icons build.
+From the repository root, `npm run dev`, `npm run check`, `npm test`,
+`npm run format`, and `npm run build` remain supported. `vp` built-in
+commands run inside `ui`; from the repository root use `vp run dev` or
+`vp run build` to execute the root delegation scripts.
+
+Formatting is intentionally not enforced by `vp check` until the existing UI
+files are uniformly formatted; use `vp fmt` explicitly. Git hook setup is
+optional (`vp config` from `ui`). Backend dependencies, testing, and
+formatting remain under the Python/uv toolchain.
+
+**Lockfile follow-up:** regenerate `ui/package-lock.json` using `npm install`
+inside `ui` and commit it before switching Docker back to `npm ci`. The npm
+registry is not reachable from the integration execution environment, so this
+branch temporarily uses `npm install` for Docker rather than a stale-lockfile
+`npm ci`. This should be resolved before merging into a release branch.
+
 ### UI (React 19, Vite + TypeScript)
 
 A web UI is included for navigation and demonstration purposes. It now uses a proper build step so you can write JSX and TypeScript.

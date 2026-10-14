@@ -1,7 +1,8 @@
 import {existsSync, readFileSync} from 'node:fs'
 import {resolve} from 'node:path'
-import {defineConfig, type Plugin} from 'vite'
-import react from '@vitejs/plugin-react-swc'
+import {defineConfig} from 'vite-plus'
+import type {Plugin} from 'vite'
+import react from '@vitejs/plugin-react'
 import {fontAwesomeCompiler} from './scripts/font-awesome-compiler.mjs'
 
 const VIRTUAL_VERSION_MODULE = 'virtual:wireloft-version'
@@ -64,4 +65,38 @@ export default defineConfig(({mode}) => ({
     fontAwesomeCompiler({proIcons: mode === 'pro-icons'}),
     react(),
   ],
+  test: {
+    include: ['tests/**/*.test.{js,ts,tsx}'],
+    environment: 'node',
+  },
+  lint: {
+    ignorePatterns: ['dist/**', 'node_modules/**', '.vite/**'],
+    options: {
+      typeAware: true,
+      typeCheck: true,
+    },
+  },
+  fmt: {
+    semi: true,
+    singleQuote: true,
+    trailingComma: 'all',
+    printWidth: 100,
+    tabWidth: 2,
+    endOfLine: 'auto',
+    ignorePatterns: ['dist/**', 'node_modules/**', '.vite/**'],
+  },
+  // Existing UI files have not been reformatted en masse. Formatting stays
+  // opt-in until the baseline has been normalized; lint and types are checked.
+  check: {
+    fmt: false,
+  },
+  run: {
+    tasks: {
+      // A cached, deterministic replacement for the old ad-hoc UI test/build scripts.
+      verify: {
+        command: 'vp check --no-fmt --no-lint && vp test && vp build --mode free-icons',
+        cache: {output: ['dist/**']},
+      },
+    },
+  },
 }))

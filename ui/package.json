@@ -4,14 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "dev:pro-icons": "vite --mode pro-icons",
+    "dev": "vp dev",
+    "dev:pro-icons": "vp dev --mode pro-icons",
     "build": "npm run build:free-icons",
-    "build:free-icons": "tsc --noEmit && vite build --mode free-icons",
-    "build:pro-icons": "tsc --noEmit && vite build --mode pro-icons",
-    "preview": "vite preview",
-    "format": "prettier --write .",
-    "test:download-progress": "node scripts/test-download-progress.mjs"
+    "build:free-icons": "vp check --no-fmt --no-lint && vp build --mode free-icons",
+    "build:pro-icons": "vp check --no-fmt --no-lint && vp build --mode pro-icons",
+    "preview": "vp preview",
+    "check": "vp check --no-fmt",
+    "typecheck": "vp check --no-fmt --no-lint",
+    "lint": "vp lint",
+    "format": "vp fmt . --write",
+    "format:check": "vp fmt --check",
+    "test": "vp test",
+    "test:watch": "vp test watch"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
@@ -43,11 +48,16 @@
     "@types/node": "^22.15.30",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.3",
-    "@vitejs/plugin-react-swc": "^3.7.0",
-    "babel-plugin-react-compiler": "^1.0.0",
-    "concurrently": "^9.0.0",
-    "prettier": "^3.3.3",
+    "@vitejs/plugin-react": "6.0.1",
     "typescript": "^5.6.2",
-    "vite": "7.1.5"
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
+    "vite-plus": "1.1.0"
+  },
+  "overrides": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.1.0",
+    "vitest": "4.1.10"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
   }
 }

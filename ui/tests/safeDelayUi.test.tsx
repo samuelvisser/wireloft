@@ -1,5 +1,5 @@
 import {strict as assert} from 'node:assert'
-import {test} from 'node:test'
+import {test} from 'vite-plus/test'
 import {renderToStaticMarkup} from 'react-dom/server'
 import {library} from '@fortawesome/fontawesome-svg-core'
 import {fas} from '@fortawesome/free-solid-svg-icons'
