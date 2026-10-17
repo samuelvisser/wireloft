@@ -15,7 +15,6 @@ from .http import http_get, http_get_text
 from .models import CancelCheck, DownloadProgress, DownloadResult, ProgressCallback, VideoRendition
 
 
-_TARGET_HEIGHTS = (480, 720, 1080)
 _PROGRESS_INTERVAL_S = 1.0
 _CHUNK_SIZE = 256 * 1024
 _URI_ATTRIBUTE_RE = re.compile(r'URI="[^"]*"')
@@ -40,25 +39,48 @@ def hls_asset_marker(master_path: str | Path) -> Path:
 
 
 def missing_hls_bundle_files(master_path: str | Path) -> list[Path]:
-    """Return missing/unsafe files referenced by a WireLoft local HLS bundle."""
+    """Verify the playlists actually declared in a published compact HLS bundle."""
+    master_path = Path(master_path)
     root = hls_asset_root(master_path)
-    missing: list[Path] = []
-
     if not hls_asset_marker(master_path).is_file():
         return [hls_asset_marker(master_path)]
+    try:
+        text = master_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return [master_path]
+    if not is_playlist(text) or not is_master_playlist(text):
+        return [master_path]
 
-    required_playlists = [
-        root / f"{height}p" / "playlist.m3u8"
-        for height in _TARGET_HEIGHTS
-    ]
-    for playlist in required_playlists:
-        if not playlist.is_file():
+    public_uris: list[str] = []
+    lines = text.splitlines()
+    for index, raw in enumerate(lines):
+        line = raw.strip()
+        if line.startswith("#EXT-X-STREAM-INF:"):
+            uri = next(
+                (item.strip() for item in lines[index + 1:]
+                 if item.strip() and not item.lstrip().startswith("#")),
+                None,
+            )
+            if uri:
+                public_uris.append(uri)
+        elif line.startswith("#EXT-X-MEDIA:"):
+            attrs = parse_attribute_list(line.split(":", 1)[1])
+            if attrs.get("TYPE") == "AUDIO" and attrs.get("URI"):
+                public_uris.append(attrs["URI"])
+
+    if not public_uris:
+        return [master_path]
+    missing: list[Path] = []
+    owned_root = root.resolve()
+    for uri in public_uris:
+        if not uri.startswith("hls/"):
+            missing.append(master_path)
+            continue
+        playlist = (root / uri[len("hls/"):]).resolve()
+        if not playlist.is_relative_to(owned_root) or not playlist.is_file():
             missing.append(playlist)
-
-    for playlist in root.glob("*/playlist.m3u8"):
-        if playlist.is_file():
+        else:
             missing.extend(_missing_playlist_files(playlist, root=root))
-
     return missing
 
 
@@ -66,22 +88,39 @@ def download_hls_bundle(
         master_url: str,
         master_path: str,
         *,
+        rendition_urls: tuple[tuple[int, str], ...],
         progress: Optional[ProgressCallback] = None,
         should_cancel: Optional[CancelCheck] = None,
 ) -> DownloadResult:
-    """Store 480p, 720p and 1080p as a compact adaptive HLS bundle.
+    """Store preselected HLS renditions as a compact adaptive bundle.
 
-    Each rendition is stored as one byte-range-addressed media file instead of
-    hundreds of loose segment files. The master and media playlists remain
-    normal HLS and use paths served by WireLoft's stable RSS endpoint.
+    Each rendition is stored as one byte-range-addressed media file instead
+    of hundreds of loose segments. The caller selects the exact renditions;
+    this function transfers and rewrites their playlists and media segments.
     """
     _ensure_not_cancelled(should_cancel)
     master_text = http_get_text(master_url)
     if not is_playlist(master_text) or not is_master_playlist(master_text):
         raise DownloadError("HLS output requires a master playlist")
 
-    renditions = parse_master_playlist(master_text, base_url=master_url)
-    selected = _select_required_renditions(renditions)
+    # These precise renditions are selected before execution by the caller.
+    # Parsing the master here only verifies that the requested source URLs
+    # still belong to it; no alternate quality or URL is ever selected.
+    available = {
+        (item.height, item.url): item
+        for item in parse_master_playlist(master_text, base_url=master_url)
+    }
+    requested = dict(rendition_urls)
+    if (not requested or len(requested) != len(rendition_urls)
+            or any(type(height) is not int or height <= 0 for height in requested)
+            or len(set(requested.values())) != len(requested)):
+        raise ValueError("HLS bundle requires distinct, positive rendition heights and URLs")
+    try:
+        selected = {height: available[(height, url)] for height, url in requested.items()}
+    except KeyError as exc:
+        raise MediaUnavailableError(
+            "A preselected HLS rendition is no longer available in the master playlist"
+        ) from exc
     selected_urls = {rendition.url for rendition in selected.values()}
 
     asset_root = hls_asset_root(master_path)
@@ -186,24 +225,6 @@ def download_hls_bundle(
         raise
 
 
-def _select_required_renditions(
-        renditions: list[VideoRendition],
-) -> dict[int, VideoRendition]:
-    selected: dict[int, VideoRendition] = {}
-    for height in _TARGET_HEIGHTS:
-        matches = [item for item in renditions if item.height == height]
-        if not matches:
-            raise MediaUnavailableError(
-                "HLS source does not provide all required adaptive renditions "
-                "(480p, 720p and 1080p)"
-            )
-        selected[height] = max(
-            matches,
-            key=lambda item: item.bandwidth or 0,
-        )
-    return selected
-
-
 def _build_master_and_jobs(
         master_text: str,
         *,
@@ -245,9 +266,9 @@ def _build_master_and_jobs(
                 selected_audio_groups.add(audio_group)
         index = uri_index + 1
 
-    if len(selected_stream_lines) != len(_TARGET_HEIGHTS):
+    if len(selected_stream_lines) != len(selected):
         raise DownloadError(
-            "Could not map required HLS renditions back to the master playlist"
+            "Could not map selected HLS renditions back to the master playlist"
         )
 
     master_out = ["#EXTM3U"]

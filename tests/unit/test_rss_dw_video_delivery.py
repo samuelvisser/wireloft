@@ -8,6 +8,7 @@ import pytest
 
 
 MASTER_URL = "https://media.example/master.m3u8"
+RENDITIONS = tuple((height, f"https://media.example/{height}.m3u8") for height in (480, 720, 1080))
 
 
 def _master() -> str:
@@ -73,7 +74,7 @@ def test_hls_download_stores_480_720_and_1080_without_transcoding(
     )
 
     target = tmp_path / "episode.m3u8"
-    result = hls_bundle.download_hls_bundle(MASTER_URL, str(target))
+    result = hls_bundle.download_hls_bundle(MASTER_URL, str(target), rendition_urls=RENDITIONS)
 
     assert result.path == str(target)
     assert result.segments_downloaded == 6
@@ -111,10 +112,11 @@ def test_hls_download_requires_all_three_adaptive_renditions(tmp_path, monkeypat
 """
     monkeypatch.setattr(hls_bundle, "http_get_text", lambda _url: master_without_480)
 
-    with pytest.raises(MediaUnavailableError, match="480p, 720p and 1080p"):
+    with pytest.raises(MediaUnavailableError, match="preselected HLS rendition"):
         hls_bundle.download_hls_bundle(
             MASTER_URL,
             str(tmp_path / "episode.m3u8"),
+            rendition_urls=RENDITIONS,
         )
 
 
@@ -134,6 +136,7 @@ def test_hls_download_rejects_live_playlist(tmp_path, monkeypatch):
         hls_bundle.download_hls_bundle(
             MASTER_URL,
             str(tmp_path / "episode.m3u8"),
+            rendition_urls=RENDITIONS,
         )
 
 
@@ -251,14 +254,24 @@ def test_file_watcher_rejects_incomplete_hls_bundle(tmp_path):
     from task_manager.tasks.workers.file_watcher.service import _size_problem
 
     master = tmp_path / "episode.m3u8"
-    master.write_text("#EXTM3U\n")
+    master.write_text(
+        "#EXTM3U\n"
+        + "".join(
+            f"#EXT-X-STREAM-INF:BANDWIDTH=1000,RESOLUTION=854x{height}\n"
+            f"hls/{height}p/playlist.m3u8\n"
+            for height in (480, 720, 1080)
+        )
+    )
     assets = hls_asset_root(master)
     assets.mkdir()
     hls_asset_marker(master).write_text("owned")
     for height in (480, 1080):
         directory = assets / f"{height}p"
         directory.mkdir()
-        (directory / "playlist.m3u8").write_text("#EXTM3U\n")
+        (directory / "playlist.m3u8").write_text(
+            "#EXTM3U\n#EXTINF:6.0,\nmedia.ts\n#EXT-X-ENDLIST\n"
+        )
+        (directory / "media.ts").write_bytes(b"sample")
 
     download = SimpleNamespace(downloaded_bytes=10_000)
     problem = _size_problem(
@@ -294,10 +307,57 @@ def test_compact_hls_bundle_validator_detects_missing_media_file(
     )
 
     target = tmp_path / "episode.m3u8"
-    hls_bundle.download_hls_bundle(MASTER_URL, str(target))
+    hls_bundle.download_hls_bundle(MASTER_URL, str(target), rendition_urls=RENDITIONS)
     missing_media = hls_bundle.hls_asset_root(target) / "720p" / "media.ts"
     missing_media.unlink()
 
     missing = hls_bundle.missing_hls_bundle_files(target)
 
     assert missing_media.resolve() in missing
+
+
+def test_hls_bundle_accepts_any_preselected_rendition_set(tmp_path, monkeypatch):
+    """The engine follows explicit URLs, not a WireLoft-specific quality policy."""
+    import dailywire_downloader.hls_bundle as hls_bundle
+
+    master = """#EXTM3U
+#EXT-X-STREAM-INF:BANDWIDTH=600000,RESOLUTION=640x360
+360.m3u8
+#EXT-X-STREAM-INF:BANDWIDTH=1600000,RESOLUTION=1280x720
+720.m3u8
+"""
+    playlists = {
+        MASTER_URL: master,
+        "https://media.example/360.m3u8": _media(360),
+        "https://media.example/720.m3u8": _media(720),
+    }
+    monkeypatch.setattr(hls_bundle, "http_get_text", lambda url: playlists[url])
+    monkeypatch.setattr(
+        hls_bundle, "http_get",
+        lambda url: _Response(f"bytes:{url}".encode()),
+    )
+    destination = tmp_path / "two-renditions.m3u8"
+    result = hls_bundle.download_hls_bundle(
+        MASTER_URL,
+        str(destination),
+        rendition_urls=(
+            (360, "https://media.example/360.m3u8"),
+            (720, "https://media.example/720.m3u8"),
+        ),
+    )
+    assert result.segments_downloaded == 4
+    assert "hls/360p/playlist.m3u8" in destination.read_text()
+    assert hls_bundle.missing_hls_bundle_files(destination) == []
+
+
+def test_hls_bundle_refuses_to_reselect_missing_preselected_rendition(tmp_path, monkeypatch):
+    import dailywire_downloader.hls_bundle as hls_bundle
+    from dailywire_downloader import MediaUnavailableError
+
+    monkeypatch.setattr(hls_bundle, "http_get_text", lambda _url: _master())
+    with pytest.raises(MediaUnavailableError, match="preselected HLS rendition"):
+        hls_bundle.download_hls_bundle(
+            MASTER_URL,
+            str(tmp_path / "missing.m3u8"),
+            rendition_urls=((720, "https://media.example/different.m3u8"),),
+        )

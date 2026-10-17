@@ -5,7 +5,7 @@ from typing import Iterable
 
 from backend.db.models.media_item import Episode
 from backend.types.show_types import EpisodeIdentifier
-from dailywire_downloader.metadata import MediaServerMetadata
+from backend.services.media_server_metadata import MediaServerMetadata
 
 
 def build_episode_metadata(episode: Episode, show) -> MediaServerMetadata:

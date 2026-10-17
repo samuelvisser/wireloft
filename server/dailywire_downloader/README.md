@@ -1,10 +1,67 @@
 # Download execution
 
+A provider-independent download engine. Playback URL discovery, profile interpretation,
+output naming and NFO generation happen in the application **before** calling this package.
+The downloader accepts a resolved URL and explicit processing options, never imports the
+application domain, and never queries a database. HLS segment URL resolution is part of
+transferring a supplied playlist, not provider URL discovery.
+
+## Public interface and CLI
+
+Python callers use the flat `download_media(url, destination, **options)` interface:
+
+```python
+from dailywire_downloader import SidecarSpec, download_media
+
+execution = download_media(
+    "https://cdn.example/episode.mp4",
+    "/media/episode.mp4",
+    transfer="file", download_mode="temporary",
+    metadata_tags={"title": "Example episode"},
+    sidecars=(SidecarSpec("description", "nfo", content=b"<movie/>", extension="nfo"),),
+)
+try:
+    # Application code persists artifact identities and history here.
+    pass
+finally:
+    execution.cleanup_workspace()
+```
+
+For an application transaction that fails, use `execution.rollback()` before
+`execution.cleanup_workspace()`. Clients may supply a `DownloadTracker`, a progress callback,
+resource limits, and lifecycle observers without introducing package dependencies on a scheduler.
+
+Command-line use needs no WireLoft services:
+
+```sh
+dailywire-downloader download "https://cdn.example/video.mp4" "/media/video.mp4" \
+  --metadata title="Example" --sidecar cover="https://cdn.example/cover.jpg" \
+  --artwork cover
+dailywire-downloader download "https://cdn.example/720.m3u8" "/media/video.mp4" \
+  --transfer hls --remux-to-mp4 --generated-sidecar info=movie.nfo
+```
+
+Use `--sidecars-json specs.json` for optional assets, custom publication suffixes,
+size limits and exact retry behavior. A JSON element has the fields of `SidecarSpec`;
+`content_file` may be supplied instead of `content`.
+
+For `--transfer hls_bundle`, supply each rendition explicitly using
+`--hls-rendition 480=https://cdn.example/480.m3u8`, repeating for additional
+heights. The engine accepts any explicitly selected set of renditions and validates
+the URLs against the master without selecting or replacing them. WireLoft chooses
+480p, 720p and 1080p for its existing HLS media profiles.
+The downloader deliberately has no `probe` command because format selection
+and playback URL discovery belong upstream.
+
+
 `dailywire_downloader` is a standalone package: it does not import WireLoft's ORM,
 settings, HTTP response models, or task scheduler. It owns transfer, auxiliary
 acquisition, media rewrites, capacity limits, publication and filesystem recovery.
 
 ## Plan before execution
+
+The `download_media` facade constructs a plan from explicit arguments;
+advanced callers can still use `build_download_plan` with `execute_download_plan`.
 
 `build_download_plan` returns an immutable `DownloadPlan`. Its inputs are resolved
 source information, a concrete output path, storage policy, auxiliary asset specs,

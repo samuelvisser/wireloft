@@ -5,55 +5,19 @@ import time
 from typing import Optional
 
 from .errors import DownloadCancelled, DownloadError
-from .hls import is_master_playlist, is_playlist, parse_master_playlist, parse_media_playlist
+from .hls import is_playlist, parse_media_playlist
 from .http import http_get
 from .models import (
     CancelCheck,
     DownloadProgress,
     DownloadResult,
-    MediaInfo,
-    MediaKind,
     ProgressCallback,
-    VideoRendition,
 )
 
 # How often (seconds) the progress callback fires at most.
 _PROGRESS_INTERVAL_S = 1.0
 _CHUNK_SIZE = 256 * 1024
 
-
-def probe(url: str) -> MediaInfo:
-    """Inspect a media URL and report what can be downloaded from it.
-
-    - HLS master playlist -> MediaKind.HLS_MASTER with its renditions
-    - HLS media playlist  -> MediaKind.HLS_MEDIA (a single quality, no variants)
-    - anything else       -> MediaKind.DIRECT_FILE with content type/length
-    """
-    with http_get(url) as resp:
-        content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-
-        looks_like_playlist = (
-                "mpegurl" in content_type
-                or url.split("?")[0].lower().endswith((".m3u8", ".m3u"))
-        )
-        if looks_like_playlist or content_type.startswith("text/"):
-            text = resp.read().decode("utf-8", errors="replace")
-            if is_playlist(text):
-                if is_master_playlist(text):
-                    return MediaInfo(
-                        url=url,
-                        kind=MediaKind.HLS_MASTER,
-                        renditions=tuple(parse_master_playlist(text, base_url=url)),
-                    )
-                return MediaInfo(url=url, kind=MediaKind.HLS_MEDIA)
-
-        content_length = resp.headers.get("Content-Length")
-        return MediaInfo(
-            url=url,
-            kind=MediaKind.DIRECT_FILE,
-            content_type=content_type or None,
-            content_length=int(content_length) if content_length and content_length.isdigit() else None,
-        )
 
 
 def download_hls(

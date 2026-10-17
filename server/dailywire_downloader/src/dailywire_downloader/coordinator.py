@@ -5,6 +5,7 @@ import errno
 import os
 import shutil
 from contextlib import contextmanager
+from functools import partial
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Iterator
@@ -154,7 +155,11 @@ def execute_download_plan(
                 should_cancel=tracker.is_canceled,
                 waiting=lambda value: tracker.wait("media", "download_capacity" if value else None),
             ):
-                transfer = download_hls_bundle if plan.source.hls_bundle else download_hls if plan.source.use_hls else download_file
+                transfer = (
+                    partial(download_hls_bundle, rendition_urls=plan.source.hls_renditions)
+                    if plan.source.hls_bundle
+                    else download_hls if plan.source.use_hls else download_file
+                )
                 result = transfer(
                     plan.source.url, str(transfer_path),
                     progress=lambda value: tracker.progress("media", value), should_cancel=tracker.is_canceled,

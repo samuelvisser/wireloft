@@ -1,10 +1,48 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from .downloader import probe
-from .errors import DownloadCancelled, DownloadError, MediaUnavailableError
-from .models import MediaKind, VideoRendition
-from .plan import ResolvedDownloadSource
+from dailywire_downloader.errors import DownloadCancelled, DownloadError, MediaUnavailableError
+from dailywire_downloader.models import MediaInfo, MediaKind, VideoRendition
+from dailywire_downloader.plan import ResolvedDownloadSource
+
+from dailywire_downloader.hls import is_master_playlist, is_playlist, parse_master_playlist
+from dailywire_downloader.http import http_get
+
+
+def probe(url: str) -> MediaInfo:
+    """Inspect a media URL and report what can be downloaded from it.
+
+    - HLS master playlist -> MediaKind.HLS_MASTER with its renditions
+    - HLS media playlist  -> MediaKind.HLS_MEDIA (a single quality, no variants)
+    - anything else       -> MediaKind.DIRECT_FILE with content type/length
+    """
+    with http_get(url) as resp:
+        content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+
+        looks_like_playlist = (
+                "mpegurl" in content_type
+                or url.split("?")[0].lower().endswith((".m3u8", ".m3u"))
+        )
+        if looks_like_playlist or content_type.startswith("text/"):
+            text = resp.read().decode("utf-8", errors="replace")
+            if is_playlist(text):
+                if is_master_playlist(text):
+                    return MediaInfo(
+                        url=url,
+                        kind=MediaKind.HLS_MASTER,
+                        renditions=tuple(parse_master_playlist(text, base_url=url)),
+                    )
+                return MediaInfo(url=url, kind=MediaKind.HLS_MEDIA)
+
+        content_length = resp.headers.get("Content-Length")
+        return MediaInfo(
+            url=url,
+            kind=MediaKind.DIRECT_FILE,
+            content_type=content_type or None,
+            content_length=int(content_length) if content_length and content_length.isdigit() else None,
+        )
+
+
 
 FORMAT_HEIGHTS = {"format_4k": 2160, "format_1080p": 1080, "format_720p": 720}
 
@@ -67,6 +105,18 @@ def resolve_download_source(
             raise DownloadError("HLS media format cannot be used for an audio-only download")
         if info.kind is not MediaKind.HLS_MASTER:
             raise DownloadError("HLS media format requires a master HLS source")
+        # WireLoft chooses which renditions to archive. The downloader merely
+        # transfers these exact URLs and never performs quality selection.
+        selected = []
+        for height in (480, 720, 1080):
+            candidates = [item for item in info.renditions if item.height == height]
+            if not candidates:
+                raise MediaUnavailableError(
+                    "HLS source does not provide all required adaptive renditions "
+                    "(480p, 720p and 1080p)"
+                )
+            chosen = max(candidates, key=lambda item: item.bandwidth or 0)
+            selected.append((height, chosen.url))
         return ResolvedDownloadSource(
             url=url,
             format_downloaded="HLS 480p/720p/1080p",
@@ -75,6 +125,7 @@ def resolve_download_source(
             extension="m3u8",
             audio_only=False,
             hls_bundle=True,
+            hls_renditions=tuple(selected),
         )
 
     if audio_only:

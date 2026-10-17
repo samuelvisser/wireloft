@@ -30,6 +30,7 @@ class ResolvedDownloadSource:
     hls_bundle: bool = False
     expected_bytes: int | None = None
     convert_video_to_m4a: bool = False
+    hls_renditions: tuple[tuple[int, str], ...] = ()
 
 
 @dataclass(frozen=True)

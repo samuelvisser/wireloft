@@ -58,7 +58,7 @@ def test_date_based_episode_metadata_does_not_invent_numbers():
 
 def test_movie_nfo_contains_media_server_metadata(tmp_path):
     from backend.services.download_metadata import build_movie_metadata
-    from dailywire_downloader.metadata import write_nfo
+    from backend.services.media_server_metadata import write_nfo
 
     movie = SimpleNamespace(
         title="Example Movie",
@@ -101,7 +101,7 @@ def test_movie_nfo_contains_media_server_metadata(tmp_path):
 
 
 def test_nfo_writer_refuses_to_overwrite_external_file(tmp_path):
-    from dailywire_downloader.metadata import (
+    from backend.services.media_server_metadata import (
         MediaServerMetadata,
         write_nfo,
     )

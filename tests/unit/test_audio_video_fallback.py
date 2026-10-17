@@ -5,7 +5,7 @@ import pytest
 
 def test_video_fallback_for_audio_selects_smallest_rendition_and_m4a(monkeypatch):
     from dailywire_downloader.models import MediaInfo, MediaKind, VideoRendition
-    from dailywire_downloader import source as source_module
+    from backend.services import download_sources as source_module
 
     info = MediaInfo(
         url="https://media.test/master.m3u8",
@@ -92,3 +92,54 @@ def test_convert_video_to_m4a_stream_copies_audio(tmp_path, monkeypatch):
     assert command[command.index("-f") + 1] == "mp4"
     assert destination.read_bytes() == b"m4a"
     assert not (tmp_path / "audio.m4a.part").exists()
+
+
+def test_hls_bundle_renditions_are_selected_by_the_wireloft_adapter(monkeypatch):
+    from backend.services import download_sources
+    from dailywire_downloader.models import MediaInfo, MediaKind, VideoRendition
+
+    url = "https://media.test/master.m3u8"
+    renditions = (
+        VideoRendition("https://media.test/480-low.m3u8", 854, 480, 400_000, None),
+        VideoRendition("https://media.test/480-high.m3u8", 854, 480, 900_000, None),
+        VideoRendition("https://media.test/720.m3u8", 1280, 720, 2_000_000, None),
+        VideoRendition("https://media.test/1080.m3u8", 1920, 1080, 4_000_000, None),
+    )
+    monkeypatch.setattr(
+        download_sources, "probe",
+        lambda _url: MediaInfo(url, MediaKind.HLS_MASTER, renditions=renditions),
+    )
+    selected = download_sources.resolve_download_source(
+        url,
+        preferred_format="format_hls",
+        audio_only=False,
+        remux_video_to_mp4=True,
+    )
+
+    assert selected.hls_bundle is True
+    assert selected.remux_to_mp4 is False
+    assert selected.hls_renditions == (
+        (480, "https://media.test/480-high.m3u8"),
+        (720, "https://media.test/720.m3u8"),
+        (1080, "https://media.test/1080.m3u8"),
+    )
+
+
+def test_hls_bundle_missing_quality_fails_before_downloader_is_called(monkeypatch):
+    from backend.services import download_sources
+    from dailywire_downloader.models import MediaInfo, MediaKind, VideoRendition
+    from dailywire_downloader.errors import MediaUnavailableError
+
+    url = "https://media.test/master.m3u8"
+    monkeypatch.setattr(
+        download_sources, "probe",
+        lambda _url: MediaInfo(
+            url, MediaKind.HLS_MASTER,
+            renditions=(VideoRendition("https://media.test/720.m3u8", 1280, 720, 2_000_000, None),),
+        ),
+    )
+    with pytest.raises(MediaUnavailableError, match="480p, 720p and 1080p"):
+        download_sources.resolve_download_source(
+            url, preferred_format="format_hls",
+            audio_only=False, remux_video_to_mp4=False,
+        )

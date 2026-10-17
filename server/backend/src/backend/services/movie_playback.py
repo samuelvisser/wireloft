@@ -1,14 +1,10 @@
-"""Playback selection policies using an injected Daily Wire client.
-
-No application ORM, API models, settings or scheduler dependencies belong here.
-The provider's metadata is returned untouched for the application to persist.
-"""
+"""Resolve Daily Wire movie playback before creating a generic download request."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from .errors import MediaUnavailableError
+from dailywire_downloader.errors import MediaUnavailableError
 
 
 class MoviePlaybackClient(Protocol):

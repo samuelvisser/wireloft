@@ -1,9 +1,12 @@
-"""Translate application policy and domain facts into an immutable library plan.
+"""Resolve WireLoft domain facts into explicit, immutable download arguments.
 
-The downloader owns all transfer, optional processing, publication and cleanup.
-This adapter alone knows Local Media Profiles, output templates and ORM models.
+All profile, media, playback and output-template decisions are taken here.
+The standalone downloader receives only concrete execution options.
 """
 from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -24,13 +27,34 @@ from dailywire_api.records import DwMovieExtraRecord
 from dailywire_authorisation import DeviceAuthClient
 from dailywire_downloader import DownloadCancelled, DownloadError, MediaUnavailableError
 from dailywire_downloader.lifecycle import DownloadTracker
-from dailywire_downloader.metadata import render_nfo
-from dailywire_downloader.plan import DownloadPlan, SidecarSpec, build_download_plan
-from dailywire_downloader.playback import resolve_movie_playback
-from dailywire_downloader.source import resolve_download_source
+from backend.services.media_server_metadata import render_nfo
+from dailywire_downloader.plan import SidecarSpec
+from backend.services.movie_playback import resolve_movie_playback
+from backend.services.download_sources import resolve_download_source
 
 
-def prepare_download_plan(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadPlan:
+@dataclass(frozen=True, kw_only=True)
+class DownloadArguments:
+    """Resolved media and output instructions; no WireLoft objects cross the boundary."""
+    url: str
+    destination: str
+    transfer: Literal["file", "hls", "hls_bundle"]
+    format_label: str
+    extension: str
+    audio_only: bool
+    remux_to_mp4: bool
+    convert_video_to_m4a: bool
+    expected_bytes: int | None
+    download_mode: Literal["direct", "temporary"]
+    temporary_root: str
+    ffmpeg_path: str
+    sidecars: tuple[SidecarSpec, ...]
+    metadata_tags: tuple[tuple[str, str], ...]
+    artwork_asset_id: str | None
+    hls_renditions: tuple[tuple[int, str], ...] = ()
+
+
+def prepare_download_arguments(session: Session, media_download_id: int, tracker: DownloadTracker) -> DownloadArguments:
     download = session.get(MediaDownloadBase, media_download_id)
     if download is None:
         raise DownloadCancelled("The download was deleted before preparation")
@@ -173,8 +197,21 @@ def prepare_download_plan(session: Session, media_download_id: int, tracker: Dow
         tags = tuple(metadata.ffmpeg_tags().items())
     if metadata_mode in (MetadataMode.NFO, MetadataMode.EMBED_AND_NFO):
         assets.append(SidecarSpec("nfo", "nfo", content=render_nfo(metadata), extension="nfo", target_suffix=".nfo"))
-    return build_download_plan(
-        source=source, requested_destination=destination, download_mode=download_mode,
-        temporary_root=temporary_root, ffmpeg_path=ffmpeg_path, assets=tuple(assets),
-        metadata_tags=tags, artwork_asset_id=artwork_id, attempt_id=tracker.attempt_id,
+    return DownloadArguments(
+        url=source.url,
+        destination=str(destination),
+        transfer="hls_bundle" if source.hls_bundle else "hls" if source.use_hls else "file",
+        format_label=source.format_downloaded,
+        extension=source.extension,
+        audio_only=source.audio_only,
+        remux_to_mp4=source.remux_to_mp4,
+        convert_video_to_m4a=source.convert_video_to_m4a,
+        expected_bytes=source.expected_bytes,
+        download_mode=download_mode,
+        temporary_root=temporary_root,
+        ffmpeg_path=ffmpeg_path,
+        sidecars=tuple(assets),
+        metadata_tags=tags,
+        artwork_asset_id=artwork_id,
+        hls_renditions=source.hls_renditions,
     )

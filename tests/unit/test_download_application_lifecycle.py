@@ -12,6 +12,7 @@ from sqlalchemy import select
 from dailywire_downloader.lifecycle import DownloadTracker
 from dailywire_downloader.models import DownloadProgress, DownloadResult
 from dailywire_downloader.plan import ResolvedDownloadSource, SidecarSpec, build_download_plan
+from backend.services.download_plans import DownloadArguments
 
 
 @pytest.fixture
@@ -66,10 +67,8 @@ def test_artifacts_history_and_execution_commit_atomically(library, tmp_path, mo
     run_id, operation_id = start_run(factory, download_id)
     def prepare(session, _download_id, tracker):
         session.rollback()
-        return build_download_plan(source=ResolvedDownloadSource('https://media.test/file.mp4','1080p',False,False,'mp4',False,expected_bytes=100),
-            requested_destination=tmp_path/'library'/'Movie.mp4', temporary_root=tmp_path/'temp',download_mode='temporary',
-            assets=(SidecarSpec('nfo','nfo',content=b'<movie/>',extension='nfo'),),attempt_id=tracker.attempt_id)
-    monkeypatch.setattr(download_adapter,'prepare_download_plan',prepare)
+        return DownloadArguments(url='https://media.test/file.mp4', destination=str(tmp_path/'library'/'Movie.mp4'), transfer='file', format_label='1080p', extension='mp4', audio_only=False, remux_to_mp4=False, convert_video_to_m4a=False, expected_bytes=100, download_mode='temporary', temporary_root=str(tmp_path/'temp'), ffmpeg_path='ffmpeg', sidecars=(SidecarSpec('nfo','nfo',content=b'<movie/>',extension='nfo'),), metadata_tags=(), artwork_asset_id=None)
+    monkeypatch.setattr(download_adapter,'prepare_download_arguments',prepare)
     def download(_url,path,*,progress,should_cancel):
         Path(path).write_bytes(b'x'*100)
         progress(DownloadProgress(100,100))
@@ -174,10 +173,10 @@ def test_pipeline_failure_removes_owned_outputs(library,tmp_path,monkeypatch):
     factory,(download_id,_)=library
     def prepare(session,_id,tracker):
         session.rollback()
-        return build_download_plan(source=ResolvedDownloadSource('https://media.test/a.mp4','1080p',False,False,'mp4',False),requested_destination=tmp_path/'a.mp4',download_mode='temporary',temporary_root=tmp_path/'temp',assets=(SidecarSpec('nfo','nfo',content=b'<movie/>',extension='nfo'),),attempt_id=tracker.attempt_id)
+        return DownloadArguments(url='https://media.test/a.mp4', destination=str(tmp_path/'a.mp4'), transfer='file', format_label='1080p', extension='mp4', audio_only=False, remux_to_mp4=False, convert_video_to_m4a=False, expected_bytes=None, download_mode='temporary', temporary_root=str(tmp_path/'temp'), ffmpeg_path='ffmpeg', sidecars=(SidecarSpec('nfo','nfo',content=b'<movie/>',extension='nfo'),), metadata_tags=(), artwork_asset_id=None)
     def download(_url,path,**kwargs):
         Path(path).write_bytes(b'media');return DownloadResult(path,5)
-    monkeypatch.setattr(download_adapter,'prepare_download_plan',prepare)
+    monkeypatch.setattr(download_adapter,'prepare_download_arguments',prepare)
     monkeypatch.setattr(coordinator,'download_file',download)
     monkeypatch.setattr(PublicationJournal,'publish',lambda *a,**k: (_ for _ in ()).throw(OSError('disk full')))
     with factory() as session,pytest.raises(OSError,match='disk full'):

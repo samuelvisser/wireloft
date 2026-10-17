@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
-from backend.services.download_plans import prepare_download_plan
+from backend.services.download_plans import prepare_download_arguments
 from backend.services.media_download_history import (
     download_attempt_metadata, record_media_download_history,
     record_media_download_history_if_exists, record_media_download_operation_history_once,
@@ -24,7 +24,7 @@ from config import get_settings
 from dailywire_api.pacing import RequestCancelled, request_context
 from dailywire_downloader import DownloadCancelled
 from dailywire_downloader.capacity import resources
-from dailywire_downloader.coordinator import execute_download_plan
+from dailywire_downloader.api import download_media
 from dailywire_downloader.lifecycle import (
     DownloadSnapshot,
     DownloadTracker,
@@ -122,8 +122,8 @@ def run_download(
             def waiting(event):
                 tracker.wait("prepare", event.reason if event else None, event.until if event else None)
             with request_context(observer=waiting, should_cancel=tracker.is_canceled), transfer_context(tracker.is_canceled, waiting):
-                plan = prepare_download_plan(session, media_download_id, tracker)
-            reporter.selected_format = plan.source.format_downloaded
+                arguments = prepare_download_arguments(session, media_download_id, tracker)
+            reporter.selected_format = arguments.format_label
 
             def reserved(destination: str) -> None:
                 current = session.get(MediaDownloadBase, media_download_id)
@@ -132,8 +132,23 @@ def run_download(
                 current.file_path = destination
                 session.commit()
 
-            execution = execute_download_plan(
-                plan, tracker=tracker, resources=resources,
+            execution = download_media(
+                arguments.url, arguments.destination,
+                transfer=arguments.transfer,
+                format_label=arguments.format_label,
+                extension=arguments.extension,
+                audio_only=arguments.audio_only,
+                remux_to_mp4=arguments.remux_to_mp4,
+                convert_video_to_m4a=arguments.convert_video_to_m4a,
+                expected_bytes=arguments.expected_bytes,
+                download_mode=arguments.download_mode,
+                temporary_root=arguments.temporary_root,
+                ffmpeg_path=arguments.ffmpeg_path,
+                sidecars=arguments.sidecars,
+                metadata_tags=arguments.metadata_tags,
+                artwork_asset_id=arguments.artwork_asset_id,
+                hls_renditions=arguments.hls_renditions,
+                tracker=tracker, resources=resources,
                 on_destination_reserved=reserved,
                 on_media_transfer_complete=on_media_download_transfer_complete,
             )
