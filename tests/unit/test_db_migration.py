@@ -9,7 +9,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "a4e7c19b2d53"
+HEAD_REVISION = "7749f16eac07"
+WIRELOFT_1_2_3_REVISION = "a4e7c19b2d53"
 COUNTDOWN_REDOWNLOAD_REVISION = "6d3a9f1c2b7e"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
@@ -245,8 +246,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == COUNTDOWN_REDOWNLOAD_REVISION
-    assert script.get_revision(COUNTDOWN_REDOWNLOAD_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_3_REVISION
+    assert script.get_revision(WIRELOFT_1_2_3_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
     assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
         script.get_revision(WIRELOFT_1_2_REVISION).down_revision
@@ -256,6 +257,29 @@ def test_migration_history_has_one_head(migration_database):
     assert script.get_revision(WIRELOFT_1_0_REVISION).down_revision == BASE_REVISION
     assert script.get_revision(BASE_REVISION) is not None
 
+
+
+def test_fresh_database_matches_the_models(migration_database):
+    _database_path, _engine = migration_database
+    from backend.db.migrations import check_database, upgrade_database
+
+    upgrade_database()
+
+    check_database()
+
+
+def test_demo_seed_runs_on_a_fresh_database(migration_database):
+    _database_path, engine = migration_database
+    from backend.db import seed_db
+    from backend.db.migrations import upgrade_database
+
+    upgrade_database()
+    seed_db()
+    seed_db()
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM shows")).scalar_one() == 3
+        assert connection.execute(text("SELECT count(*) FROM media_items_episode")).scalar_one() == 57
 
 
 def test_countdown_redownload_intent_migration_uses_current_episode_table(migration_database):

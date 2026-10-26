@@ -1,215 +1,71 @@
-from __future__ import annotations
-import datetime as dt
-import random
-from typing import List, Dict, Any
+"""Development/demo data for ``backend-api db seed``.
 
+Run it on a migrated database: the initial seed already created the default
+Local Media Profiles, so the demo shows only add shows, seasons and episodes.
+"""
+from __future__ import annotations
+
+import datetime as dt
+from typing import Any
+
+from backend.types.dailywire_user_info import WlDwMembershipLevel
+from backend.types.episode_types import EpisodePublishStatus
+from backend.types.media_types import MediaType
+from backend.types.show_types import EpisodeIdentifier, ShowType
 from backend.utils.helpers import slugify
 
 
-def _now() -> dt.datetime:
-    return dt.datetime.now(dt.timezone.utc)
+def _published(show_index: int, episode_index: int) -> dt.datetime:
+    """A stable, distinct publication instant per demo episode."""
+    start = dt.datetime(2025, 1, 1, 12, tzinfo=dt.timezone.utc)
+    return start + dt.timedelta(days=episode_index, minutes=show_index)
 
 
-def random_datetime(start: dt.datetime | None = None, end: dt.datetime | None = None) -> dt.datetime:
-    if start is None:
-        start = dt.datetime(2016, 1, 1, tzinfo=dt.timezone.utc)
-    if end is None:
-        end = dt.datetime(2025, 9, 1, tzinfo=dt.timezone.utc)
-    start_ts = start.timestamp()
-    end_ts = end.timestamp()
-    if start_ts > end_ts:
-        start_ts, end_ts = end_ts, start_ts
-    random_ts = random.uniform(start_ts, end_ts)
-    return dt.datetime.fromtimestamp(random_ts, tz=dt.timezone.utc)
+def _show(slug: str, title: str, author: str) -> dict[str, Any]:
+    return {
+        "uuid": f"demo-show-{slug}",
+        "slug": slug,
+        "title": title,
+        "description": None,
+        "sharing_url": f"https://www.dailywire.com/show/{slug}",
+        "membership_level": WlDwMembershipLevel.FREE.value,
+        "type": ShowType.PODCAST.value,
+        "episode_identifier": EpisodeIdentifier.DATE_BASED.value,
+        "author_name": author,
+        "author_slug": slugify(author),
+    }
 
 
-def _status_for(start: int, index: int) -> str:
-    _status_cycle = ["downloaded", "downloading", "processing", "error"]
-    return _status_cycle[(start + (index - 1)) % len(_status_cycle)]
-
-
-# Hardcoded media profiles
-local_media_profiles: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "slug": "default-1080p",
-        "name": "Default 1080p",
-        "output_template": "D:/Media/Shows/{{ show }}/{{ season }}",
-        "preferred_format": "1080p",
-        "created_date": _now(),
-        "modified_date": _now(),
-    },
-    {
-        "id": 2,
-        "slug": "mobile-720p",
-        "name": "Mobile 720p backend",
-        "output_template": "E:/Mobile/Shows/{{ show }}",
-        "preferred_format": "720p",
-        "created_date": _now(),
-        "modified_date": _now(),
-    },
+shows: list[dict[str, Any]] = [
+    _show("the-ben-shapiro-show", "The Ben Shapiro Show", "Ben Shapiro"),
+    _show("the-matt-walsh-show", "The Matt Walsh Show", "Matt Walsh"),
+    _show("ben-after-dark", "Ben After Dark", "Ben Shapiro"),
 ]
 
-
-# Hardcoded shows (no embedded episodes)
-shows: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "uuid": "uuid-1",
-        "slug": "the-ben-shapiro-show",
-        "local_media_profile_id": 1,
-        "title": "The Ben Shapiro Show",
-        "description": None,
-        "url": "https://www.dailywire.com/show/the-ben-shapiro-show",
-        "status": "active",
-        "media_type": "show",
-        "author_name": "Ben Shapiro",
-        "author_slug": slugify("Ben Shapiro"),
-        "author_headshot_path": None,
-        "download_media": True,
-        "download_delay_minutes": 0,
-        "redownload_delay_minutes": 0,
-        "download_days_in_past": 0,
-        "delete_older_episodes": True,
-        "title_filter": None,
-        "background_image_path": None,
-        "logo_image_path": None,
-        "thumbnail_landscape_path": None,
-        "thumbnail_portrait_path": None,
-        "thumbnail_square_path": None,
-        "created_date": _now(),
-        "modified_date": _now(),
-    },
-    {
-        "id": 2,
-        "uuid": "uuid-2",
-        "slug": "the-matt-walsh-show",
-        "local_media_profile_id": 1,
-        "title": "The Matt Walsh Show",
-        "description": None,
-        "url": "https://www.dailywire.com/show/the-matt-walsh-show",
-        "status": "active",
-        "media_type": "show",
-        "author_name": "Matt Walsh",
-        "author_slug": slugify("Matt Walsh"),
-        "author_headshot_path": None,
-        "download_media": True,
-        "download_delay_minutes": 0,
-        "redownload_delay_minutes": 0,
-        "download_days_in_past": 0,
-        "delete_older_episodes": True,
-        "title_filter": None,
-        "background_image_path": None,
-        "logo_image_path": None,
-        "thumbnail_landscape_path": None,
-        "thumbnail_portrait_path": None,
-        "thumbnail_square_path": None,
-        "created_date": _now(),
-        "modified_date": _now(),
-    },
-    {
-        "id": 3,
-        "uuid": "uuid-3",
-        "slug": "ben-after-dark",
-        "local_media_profile_id": 2,
-        "title": "Ben After Dark",
-        "description": None,
-        "url": "https://www.dailywire.com/show/ben-after-dark",
-        "status": "active",
-        "media_type": "show",
-        "author_name": "Ben Shapiro",
-        "author_slug": slugify("Ben Shapiro"),
-        "author_headshot_path": None,
-        "download_media": True,
-        "download_delay_minutes": 0,
-        "redownload_delay_minutes": 0,
-        "download_days_in_past": 0,
-        "delete_older_episodes": True,
-        "title_filter": None,
-        "background_image_path": None,
-        "logo_image_path": None,
-        "thumbnail_landscape_path": None,
-        "thumbnail_portrait_path": None,
-        "thumbnail_square_path": None,
-        "created_date": _now(),
-        "modified_date": _now(),
-    },
-]
+# Number of demo episodes per show, by show slug.
+episode_counts: dict[str, int] = {
+    "the-ben-shapiro-show": 30,
+    "the-matt-walsh-show": 20,
+    "ben-after-dark": 7,
+}
 
 
-# Hardcoded episodes (flat), each references a show via show_id (the show id)
-episodes: List[Dict[str, Any]] = []
-
-# The Ben Shapiro Show: 30 episodes, starting with "downloaded"
-for i in range(1, 31):
-    episodes.append({
-        "id": i,
-        "index": i,
-        "show_id": 1,
-        "uuid": f"uuid-1-{i}",
-
-        "slug": f"the-ben-shapiro-show-{i}",
-        "title": f"The Ben Shapiro Show — Episode {i}",
-        "description": "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-        "status": _status_for(0, i),
-        "went_live_date": random_datetime(),
-        "published_date": random_datetime(),
-        "created_date": random_datetime(),
-        "modified_date": random_datetime(),
-    })
-
-# The Matt Walsh Show: 20 episodes, starting with "processing"
-for i in range(1, 21):
-    episodes.append({
-        "id": i,
-        "index": i,
-        "show_id": 2,
-        "uuid": f"uuid-2-{i}",
-
-        "slug": f"the-matt-walsh-show-{i}",
-        "title": f"The Matt Walsh Show — Episode {i}",
-        "description": "Consectetur adipiscing elit.",
-        "status": _status_for(2, i),
-        "went_live_date": random_datetime(),
-        "published_date": random_datetime(),
-        "created_date": random_datetime(),
-        "modified_date": random_datetime(),
-    })
-
-# Ben After Dark: 7 episodes, starting with "processing"
-for i in range(1, 8):
-    episodes.append({
-        "id": i,
-        "index": i,
-        "show_id": 3,
-        "uuid": f"uuid-3-{i}",
-
-        "slug": f"ben-after-dark-{i}",
-        "title": f"Ben After Dark — Episode {i}",
-        "description": None,
-        "status": _status_for(2, i),
-        "went_live_date": random_datetime(),
-        "published_date": random_datetime(),
-        "created_date": random_datetime(),
-        "modified_date": random_datetime(),
-    })
-
-# Hardcoded settings
-settings: List[Dict[str, Any]] = [
-    {
-        "id": 1,
-        "slug": "download_root",
-        "name": "Download root path",
-        "value": "D:\\Downloads\\DailyWire",
-        "created_date": _now(),
-        "modified_date": _now(),
-    },
-    {
-        "id": 2,
-        "slug": "concurrency",
-        "name": "Concurrent downloads",
-        "value": "2",
-        "created_date": _now(),
-        "modified_date": _now(),
-    },
-]
+def episodes_for(show: dict[str, Any], show_index: int) -> list[dict[str, Any]]:
+    """Demo episodes of one show, oldest first, without show and season ids."""
+    episodes = []
+    for index in range(1, episode_counts[show["slug"]] + 1):
+        published = _published(show_index, index)
+        episodes.append({
+            "uuid": f"demo-episode-{show['slug']}-{index}",
+            "type": MediaType.EPISODE.value,
+            "index": index,
+            "episode_identifier": f"ep.{published:%Y-%m-%dT%H:%M:%S.%f}",
+            "slug": f"{show['slug']}-{index}",
+            "publish_status": EpisodePublishStatus.PUBLISHED_FINAL.value,
+            "metadata_is_final": True,
+            "sharing_url": f"{show['sharing_url']}/episode-{index}",
+            "published_date": published,
+            "title": f"{show['title']} — Episode {index}",
+            "description": "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+        })
+    return episodes

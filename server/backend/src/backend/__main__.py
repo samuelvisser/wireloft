@@ -32,7 +32,7 @@ from backend.db.migrations import (
     upgrade_database,
     validate_database_migration_state,
 )
-from config.registry import get_settings
+from config.registry import get_settings, replace_settings
 from .config import PROJECT_ROOT
 
 
@@ -206,7 +206,13 @@ def _stop_backend() -> None:
 
 
 def _configure_database_for_args(args: argparse.Namespace) -> None:
-    os.environ["WL_DATABASE_PATH"] = str(_get_db_path(args))
+    db_path = _get_db_path(args)
+    # Reload workers build their own settings from the environment; this
+    # process already has settings, so point them at the database too.
+    os.environ["WL_DATABASE_PATH"] = str(db_path)
+    settings = get_settings()
+    if settings.database_path != db_path:
+        replace_settings(settings.model_copy(update={"database_path": db_path}))
     configure_db()
 
 

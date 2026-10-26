@@ -170,47 +170,24 @@ def seed_db() -> None:
     """Seed an already-migrated database with the development/demo data."""
     load_database_models()
 
-    from backend.db.models import LocalMediaProfile, Show, Episode, Settings
-    from backend.db.fake_data import local_media_profiles as seed_local_media_profiles
-    from backend.db.fake_data import shows as seed_shows
-    from backend.db.fake_data import episodes as seed_episodes
-    from backend.db.fake_data import settings as seed_settings
+    from sqlalchemy import select
+
+    from backend.db.fake_data import episodes_for, shows as seed_shows
+    from backend.db.models import Episode, Season, Show
 
     session = get_session()
     try:
-        for media_profile_data in seed_local_media_profiles:
-            pk = media_profile_data.get("id")
-            if pk is None:
+        for show_index, show_data in enumerate(seed_shows, start=1):
+            if session.scalar(select(Show.id).where(Show.uuid == show_data["uuid"])) is not None:
                 continue
-            if session.get(LocalMediaProfile, pk) is None:
-                session.add(LocalMediaProfile(**media_profile_data))
-
-        for show_data in seed_shows:
-            pk = show_data.get("id")
-            if pk is None:
-                continue
-            if session.get(Show, pk) is None:
-                session.add(Show(**show_data))
-
-        for episode_data in seed_episodes:
-            show_id = episode_data.get("show_id")
-            episode_id = episode_data.get("id")
-            if show_id is None or episode_id is None:
-                continue
-            existing_episode = (
-                session.query(Episode)
-                .filter_by(show_id=str(show_id), id=str(episode_id))
-                .one_or_none()
+            show = Show(**show_data)
+            season = Season(show=show, index=1, slug=f"{show.slug}-episodes", name="Episodes", season_number=1)
+            session.add_all([show, season])
+            session.flush()
+            session.add_all(
+                Episode(show_id=show.id, season_id=season.id, **episode_data)
+                for episode_data in episodes_for(show_data, show_index)
             )
-            if existing_episode is None:
-                session.add(Episode(**episode_data))
-
-        for settings_data in seed_settings:
-            pk = settings_data.get("id")
-            if pk is None:
-                continue
-            if session.get(Settings, pk) is None:
-                session.add(Settings(**settings_data))
 
         session.commit()
     except Exception:
