@@ -49,6 +49,10 @@ def delete_media_download_artifact_action(media_download_id: int, *, missing_ok:
     return _invoke(actions.delete_media_download_artifact_action, media_download_id, missing_ok=missing_ok)
 
 
+def delete_media_download_action(media_download_id: int) -> bool:
+    return _invoke(actions.delete_media_download_action, media_download_id)
+
+
 def delete_unavailable_media_download_action(media_download_id: int, *, missing_ok: bool = False) -> bool:
     return _invoke(actions.delete_unavailable_media_download_action, media_download_id, missing_ok=missing_ok)
 

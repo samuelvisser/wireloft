@@ -6,7 +6,6 @@ import toast from 'react-hot-toast'
 import {FontAwesomeIcon} from '@fortawesome/react-fontawesome'
 import {Column, DataTable, DataTableAction} from '../components/DataTable/DataTable'
 import DownloadLogDialog from '../components/MediaDownload/DownloadLogDialog'
-import ConfirmDialog from '../components/ConfirmDialog/ConfirmDialog'
 import {useActiveOperation} from '../components/OperationNotifier/OperationNotifier'
 import PageSubtitle from '../components/common/PageSubtitle'
 import DownloadProgressStatus from '../components/DownloadProgress/DownloadProgressStatus'
@@ -31,7 +30,7 @@ import {getErrorMessageFromResponse} from '../utils/helpers'
 import {movieExtraTypeLabel} from '../utils/movieExtras'
 import './DownloadsPage.css'
 
-type BulkAction = 'retry' | 'cancel' | 'delete-unavailable'
+type BulkAction = 'retry' | 'cancel'
 
 const DOWNLOAD_PAGE_SIZE = 50
 
@@ -89,10 +88,6 @@ function isCancellableDownload(row: MediaDownloadViewRead): boolean {
     return row.presentation.canCancel
 }
 
-function isDeletableDownload(row: MediaDownloadViewRead): boolean {
-    return row.artifactStatus === 'absent' || row.artifactStatus === 'missing'
-}
-
 export default function DownloadsPage() {
     const navigate = useNavigate()
     const [searchParams, setSearchParams] = useSearchParams()
@@ -102,9 +97,6 @@ export default function DownloadsPage() {
     const filterPress = useFilterChipPress()
     const loadMoreRef = useRef<HTMLDivElement | null>(null)
     const [logRow, setLogRow] = useState<MediaDownloadViewRead | null>(null)
-    const [deleteRow, setDeleteRow] = useState<MediaDownloadViewRead | null>(null)
-    const [deleteBusy, setDeleteBusy] = useState(false)
-    const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false)
     const [statusFilter, setStatusFilter] = useState<Set<string>>(
         () => downloadStatusFilterFromSearchParams(searchParams),
     )
@@ -127,7 +119,6 @@ export default function DownloadsPage() {
 
     const retryAllOperation = useActiveOperation('media_download.bulk_retry', 'media_download')
     const cancelAllOperation = useActiveOperation('media_download.bulk_cancel', 'media_download')
-    const deleteUnavailableOperation = useActiveOperation('media_download.bulk_delete_unavailable', 'media_download')
 
     const applyStatusFilter = (next: Set<string>, replace = false) => {
         setStatusFilter(next)
@@ -179,21 +170,17 @@ export default function DownloadsPage() {
 
     const retryableCount = downloadsQuery.actions.retry ?? 0
     const cancellableCount = downloadsQuery.actions.cancel ?? 0
-    const deletableCount = downloadsQuery.actions['delete-unavailable'] ?? 0
 
     const bulkOperationActive = Boolean(
         retryAllOperation
         || cancelAllOperation
-        || deleteUnavailableOperation
         || bulkActionStarting,
     )
     const showActionRow = Boolean(
         retryableCount
         || cancellableCount
-        || deletableCount
         || retryAllOperation
         || cancelAllOperation
-        || deleteUnavailableOperation,
     )
 
     const prioritize = async (row: MediaDownloadViewRead) => {
@@ -266,40 +253,8 @@ export default function DownloadsPage() {
         if (row.showSlug) await qc.invalidateQueries({queryKey: ['showDownloads', row.showSlug]})
     }
 
-    const deleteUnavailable = async () => {
-        if (!deleteRow || deleteBusy) return
-        setDeleteBusy(true)
-        try {
-            const base = (window as any).appConfig.API_URL
-            const r = await fetch(`${base}/media-downloads/${deleteRow.id}`, {
-                method: 'DELETE',
-                credentials: 'include',
-            })
-            if (!r.ok) {
-                const {error: message} = await getErrorMessageFromResponse(r)
-                toast.error(message || 'Could not delete the download item')
-                return
-            }
-
-            const row = deleteRow
-            setDeleteRow(null)
-            await qc.invalidateQueries({queryKey: ['mediaDownloads']})
-            await qc.invalidateQueries({queryKey: ['mediaDownloadsView']})
-            if (row.episodeSlug) await qc.invalidateQueries({queryKey: ['episodeDownloads', row.episodeSlug]})
-            if (row.movieSlug) await qc.invalidateQueries({queryKey: ['movieDownloads', row.movieSlug]})
-        } catch {
-            toast.error('Could not delete the download item')
-        } finally {
-            setDeleteBusy(false)
-        }
-    }
-
     const startBulkAction = async (action: BulkAction) => {
-        const expectedCount = action === 'retry'
-            ? retryableCount
-            : action === 'cancel'
-                ? cancellableCount
-                : deletableCount
+        const expectedCount = action === 'retry' ? retryableCount : cancellableCount
         if (!expectedCount || bulkOperationActive) return
 
         setBulkActionStarting(action)
@@ -326,9 +281,7 @@ export default function DownloadsPage() {
         } catch (actionError) {
             const fallback = action === 'retry'
                 ? 'Could not retry the selected downloads'
-                : action === 'cancel'
-                    ? 'Could not cancel the selected downloads'
-                    : 'Could not delete the selected download items'
+                : 'Could not cancel the selected downloads'
             toast.error(actionError instanceof Error && actionError.message ? actionError.message : fallback)
         } finally {
             setBulkActionStarting(null)
@@ -412,7 +365,7 @@ export default function DownloadsPage() {
                         Every episode and movie download shows up here, one row per Local Media Profile.
                         Running downloads report live progress; failed ones show the error and can be retried.
                         Records without a file or active queue item are marked Not downloaded and can also be retried.
-                        Download records are persistent history; any record whose artifact is Absent or Missing can be deleted individually or in bulk, regardless of its download status.
+                        Open a download's log to delete its record, history and downloaded files after confirmation.
                     </p>
                 </PageSubtitle>
             </div>
@@ -478,22 +431,6 @@ export default function DownloadsPage() {
                             onCancel={cancelAllOperation ? () => void cancelBulkOperation(cancelAllOperation) : undefined}
                             cancelDisabled={bulkControlBusy === cancelAllOperation?.id}
                             cancelLabel="Stop cancel all"
-                        />
-                    )}
-                    {(deletableCount > 0 || deleteUnavailableOperation || bulkActionStarting === 'delete-unavailable') && (
-                        <ProgressButton
-                            definition={frontendOperationDefinitions['media_download.bulk_delete_unavailable']}
-                            label="Delete unavailable"
-                            icon={faIcon('fass', 'trash')}
-                            onClick={() => setBulkDeleteConfirmOpen(true)}
-                            disabled={bulkOperationActive && !deleteUnavailableOperation && bulkActionStarting !== 'delete-unavailable'}
-                            primary={false}
-                            starting={bulkActionStarting === 'delete-unavailable'}
-                            active={deleteUnavailableOperation !== undefined}
-                            ariaLabel={`Delete ${deletableCount} filtered unavailable download records`}
-                            onCancel={deleteUnavailableOperation ? () => void cancelBulkOperation(deleteUnavailableOperation) : undefined}
-                            cancelDisabled={bulkControlBusy === deleteUnavailableOperation?.id}
-                            cancelLabel="Stop deleting unavailable download records"
                         />
                     )}
                 </div>
@@ -575,14 +512,6 @@ export default function DownloadsPage() {
                                 classes: 'btn',
                             })
                         }
-                        if (isDeletableDownload(row)) {
-                            actions.push({
-                                onClick: () => setDeleteRow(row),
-                                icon: faIcon('fass', 'trash'),
-                                text: 'Delete',
-                                classes: 'btn btn-danger',
-                            })
-                        }
                         return actions
                     }}
                 />
@@ -599,51 +528,6 @@ export default function DownloadsPage() {
                 )}
             </div>
             <DownloadLogDialog row={logRow} onClose={() => setLogRow(null)}/>
-            <ConfirmDialog
-                open={bulkDeleteConfirmOpen}
-                title="Delete download records"
-                onDismiss={() => setBulkDeleteConfirmOpen(false)}
-                icon={faIcon('fass', 'trash')}
-                iconTone="danger"
-                confirmButton={{
-                    label: 'Delete',
-                    onClick: async () => {
-                        setBulkDeleteConfirmOpen(false)
-                        await startBulkAction('delete-unavailable')
-                    },
-                    className: 'btn btn-danger',
-                }}
-            >
-                <p>
-                    Delete {deletableCount} filtered {deletableCount === 1 ? 'record' : 'records'} whose artifact is Absent or Missing?
-                    WireLoft will verify that no artifact is available before deleting each download record.
-                    Records with an available artifact will be kept.
-                </p>
-            </ConfirmDialog>
-            <ConfirmDialog
-                open={deleteRow !== null}
-                title="Delete download record"
-                onDismiss={() => {
-                    if (!deleteBusy) setDeleteRow(null)
-                }}
-                icon={faIcon('fass', 'trash')}
-                iconTone="danger"
-                confirmButton={{
-                    label: deleteBusy ? 'Deleting…' : 'Delete',
-                    onClick: deleteUnavailable,
-                    className: 'btn btn-danger',
-                    disabled: deleteBusy,
-                    icon: deleteBusy ? faIcon('fass', 'spinner') : undefined,
-                    iconSpin: deleteBusy,
-                }}
-                cancelButton={{disabled: deleteBusy}}
-                dismissOnOverlayClick={!deleteBusy}
-            >
-                <p>
-                    Delete the download record for &quot;{deleteRow ? rowTitle(deleteRow) : ''}&quot;?
-                    WireLoft will verify that no artifact is available before removing its history record.
-                </p>
-            </ConfirmDialog>
         </section>
     )
 }
