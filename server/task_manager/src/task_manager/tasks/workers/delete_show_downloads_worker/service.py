@@ -22,6 +22,7 @@ def run_delete_show_downloads_worker(
         show_id: int,
         local_media_profile_id: int | None = None,
         download_profiles_disabled: int = 0,
+        selected_media_download_ids: list[int] | None = None,
         progress=None,
 ) -> dict[str, Any]:
     """Delete existing show artifacts after affected Download Profiles are disabled."""
@@ -30,6 +31,8 @@ def run_delete_show_downloads_worker(
         show_id=show_id,
         local_media_profile_id=local_media_profile_id,
     )
+    if selected_media_download_ids is not None:
+        scope = scope.select(media_download_ids=selected_media_download_ids)
     base_result = scope.result_data()
     downloads = list(scope.downloads)
 

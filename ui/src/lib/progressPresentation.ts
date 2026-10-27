@@ -14,6 +14,7 @@ const WAITS: Record<string, [string, string]> = {
     custom_indexes: ['Preparing...', 'Waiting for Custom Index assignments.'],
     previous_attempt: ['Restarting', 'Waiting for the previous download to stop and clean up.'],
     publication_delay: ['Delayed', 'Waiting for the post-publication safety delay before downloading.'],
+    publication_countdown: ['Countdown', 'Waiting for the episode countdown to finish before downloading final media.'],
 }
 
 function publicationDelayDeadline(until?: number | null): string | undefined {

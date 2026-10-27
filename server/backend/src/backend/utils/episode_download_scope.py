@@ -21,6 +21,7 @@ class EpisodeDownloadScope:
     _session: Session = field(repr=False, compare=False)
     _local_media_profile_id: int | None = field(default=None, repr=False, compare=False)
     _artifact_statuses: frozenset[str] | None = field(default=None, repr=False, compare=False)
+    _filtered_download_ids: frozenset[int] | None = field(default=None, repr=False, compare=False)
 
     @staticmethod
     def _downloads(
@@ -114,8 +115,10 @@ class EpisodeDownloadScope:
             *,
             local_media_profile_id: int | None = None,
             artifact_statuses: Collection[str] | None = None,
+            episode_ids: Collection[int] | None = None,
+            media_download_ids: Collection[int] | None = None,
     ) -> EpisodeDownloadScope:
-        """Return this scope narrowed in SQL by profile and/or artifact state."""
+        """Return this scope narrowed in SQL by profile, artifact, episode, or download IDs."""
         selected_profile_id = (
             local_media_profile_id
             if local_media_profile_id is not None
@@ -126,6 +129,19 @@ class EpisodeDownloadScope:
             if artifact_statuses is not None
             else self._artifact_statuses
         )
+        if episode_ids is not None or media_download_ids is not None:
+            selected_episode_ids = frozenset(episode_ids) if episode_ids is not None else None
+            selected_download_ids = frozenset(media_download_ids) if media_download_ids is not None else None
+            downloads = tuple(download for download in self.downloads
+                if (selected_episode_ids is None or download.media_item_id in selected_episode_ids)
+                and (selected_download_ids is None or download.id in selected_download_ids)
+            )
+            return replace(
+                self,
+                downloads=downloads,
+                _filtered_download_ids=frozenset(download.id for download in downloads),
+            )
+
         if (
             selected_profile_id == self._local_media_profile_id
             and selected_statuses == self._artifact_statuses
@@ -139,6 +155,11 @@ class EpisodeDownloadScope:
             local_media_profile_id=selected_profile_id,
             artifact_statuses=selected_statuses,
         )
+        if self._filtered_download_ids is not None:
+            downloads = tuple(
+                download for download in downloads
+                if download.id in self._filtered_download_ids
+            )
         return replace(
             self,
             downloads=downloads,

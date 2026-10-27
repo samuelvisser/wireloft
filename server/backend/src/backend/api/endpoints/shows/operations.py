@@ -36,6 +36,22 @@ class ShowSyncOperation(_ShowOperation):
     task = _FETCH_EPISODES_TASK_KEY
 
 
+class ShowDownloadAllOperation(_ShowOperation):
+    kind = "show.download_all"
+
+    def __init__(self, show: Show, *, local_media_profile_id: int, download_count: int) -> None:
+        super().__init__(show)
+        self.local_media_profile_id = local_media_profile_id
+        self.download_count = download_count
+
+    def context(self) -> dict[str, object]:
+        return {
+            **super().context(),
+            "local_media_profile_id": self.local_media_profile_id,
+            "downloads_requested": self.download_count,
+        }
+
+
 class ShowMetadataRefreshOperation(_ShowOperation):
     kind = "show.refresh_metadata"
 
@@ -128,6 +144,7 @@ class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
         local_media_profile_id: int | None,
         selected_profile_count: int,
         disabled_profile_count: int,
+        selected_media_download_ids: Sequence[int] | None = None,
     ) -> None:
         super().__init__(
             show,
@@ -135,11 +152,21 @@ class ShowDeleteDownloadsOperation(_ShowDownloadMaintenanceOperation):
             selected_profile_count=selected_profile_count,
         )
         self.disabled_profile_count = disabled_profile_count
+        # None preserves the existing unfiltered show-wide behavior. An empty
+        # tuple is a valid filtered request with no matching downloads.
+        self.selected_media_download_ids = (
+            tuple(selected_media_download_ids)
+            if selected_media_download_ids is not None else None
+        )
 
     def task_kwargs(self) -> dict[str, object]:
         return {
             **super().task_kwargs(),
             "download_profiles_disabled": self.disabled_profile_count,
+            **(
+                {"selected_media_download_ids": list(self.selected_media_download_ids)}
+                if self.selected_media_download_ids is not None else {}
+            ),
         }
 
 
