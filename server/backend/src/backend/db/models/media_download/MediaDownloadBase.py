@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import BigInteger, Boolean, Index, String, Text, func, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Index, String, Text, func, UniqueConstraint
 from sqlalchemy.sql.schema import ForeignKey
 
 from backend.db import Base
@@ -41,6 +41,16 @@ class MediaDownloadBase(HasMetadataMixin, HasTaskResourcesMixin, Base):
         # A media item can only have one persistent artifact per local media profile.
         UniqueConstraint("media_item_id", "local_media_profile_id", name="uq_download_per_media_profile"),
         Index("ix_media_downloads_local_profile_id", "local_media_profile_id", "id"),
+        # An available artifact always carries its complete filesystem identity.
+        CheckConstraint(
+            "artifact_status IN ('absent', 'missing') OR ("
+            "artifact_stat_dev IS NOT NULL AND length(artifact_stat_dev) > 0 AND "
+            "artifact_stat_ino IS NOT NULL AND length(artifact_stat_ino) > 0 AND "
+            "artifact_size_bytes IS NOT NULL AND artifact_size_bytes >= 0 AND "
+            "artifact_fingerprint IS NOT NULL AND length(artifact_fingerprint) = 64"
+            ")",
+            name="artifact_identity_complete",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
