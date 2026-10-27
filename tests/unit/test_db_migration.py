@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "7749f16eac07"
+HEAD_REVISION = "c4e93f1a2b6d"
 WIRELOFT_1_2_3_REVISION = "a4e7c19b2d53"
 COUNTDOWN_REDOWNLOAD_REVISION = "6d3a9f1c2b7e"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"

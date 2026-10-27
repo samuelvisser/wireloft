@@ -1,23 +1,30 @@
-"""Bring constraint and index names in line with the models.
+"""Upgrade the shipped WireLoft 1.2.4 schema to WireLoft 1.2.5.
 
-Tables renamed in earlier releases kept the index and constraint names of
-their old table, and the artifact identity check got its naming-convention
-prefix twice.
-
-Revision ID: 7749f16eac07
+Revision ID: c4e93f1a2b6d
 Revises: a4e7c19b2d53
-Create Date: 2026-10-26
+Create Date: 2026-10-27
+
+This is the single release migration from WireLoft 1.2.4 to 1.2.5. It
+combines the constraint and index renames with Local Media Profile subtitle
+handling. The latest subtitle prerelease revision is preserved so
+installations already migrated through it remain at the current head.
 """
 from __future__ import annotations
 
 from alembic import op
+import sqlalchemy as sa
 
 
-revision = "7749f16eac07"
+revision = "c4e93f1a2b6d"
 down_revision = "a4e7c19b2d53"
 branch_labels = None
 depends_on = None
 
+
+# Constraint and index names ------------------------------------------------
+# Tables renamed in earlier releases kept the index and constraint names of
+# their old table, and the artifact identity check got its naming-convention
+# prefix twice.
 
 _IDENTITY_CHECK = (
     "artifact_status IN ('absent', 'missing') OR ("
@@ -60,7 +67,7 @@ def _rename_unique_constraints(*, reverse: bool) -> None:
             batch.create_unique_constraint(op.f(wanted), columns)
 
 
-def upgrade() -> None:
+def _upgrade_schema_names() -> None:
     _rename_indexes(reverse=False)
     _rename_unique_constraints(reverse=False)
     with op.batch_alter_table("media_downloads") as batch:
@@ -68,9 +75,54 @@ def upgrade() -> None:
         batch.create_check_constraint(op.f(_IDENTITY_NAME), _IDENTITY_CHECK)
 
 
-def downgrade() -> None:
+def _downgrade_schema_names() -> None:
     with op.batch_alter_table("media_downloads") as batch:
         batch.drop_constraint(op.f(_IDENTITY_NAME), type_="check")
         batch.create_check_constraint(op.f(_DOUBLED_IDENTITY_NAME), _IDENTITY_CHECK)
     _rename_unique_constraints(reverse=True)
     _rename_indexes(reverse=True)
+
+
+# Local Media Profile subtitle handling -------------------------------------
+
+
+def _upgrade_subtitle_mode() -> None:
+    op.add_column(
+        "local_media_profiles",
+        sa.Column("subtitle_mode", sa.String(length=24), nullable=False, server_default="no_subtitles"),
+    )
+    # Movie profiles and show profiles covering series acquire subtitles as a
+    # sidecar on their next download; podcast-only show profiles do not.
+    op.execute(sa.text("""
+        UPDATE local_media_profiles
+        SET subtitle_mode = 'sidecar'
+        WHERE type = 'movie' OR (type = 'show' AND id IN (
+            SELECT id FROM local_media_profiles_show
+            WHERE show_scope IN ('series', 'both')
+        ))
+    """))
+    with op.batch_alter_table("local_media_profiles") as batch:
+        batch.alter_column(
+            "subtitle_mode",
+            existing_type=sa.String(length=24),
+            existing_nullable=False,
+            server_default="sidecar",
+        )
+
+
+def _downgrade_subtitle_mode() -> None:
+    with op.batch_alter_table("local_media_profiles") as batch:
+        batch.drop_column("subtitle_mode")
+
+
+# Release migration ---------------------------------------------------------
+
+
+def upgrade() -> None:
+    _upgrade_schema_names()
+    _upgrade_subtitle_mode()
+
+
+def downgrade() -> None:
+    _downgrade_subtitle_mode()
+    _downgrade_schema_names()
