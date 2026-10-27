@@ -121,7 +121,6 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
     const qc = useQueryClient()
 
     const [step, setStep] = useState<WizardStep>(() => persisted?.step ?? 1)
-    const wizardRootRef = useRef<HTMLDivElement>(null)
     const previousStepRef = useRef(step)
     const [showAction, setShowAction] = useState<ShowAction | undefined>(() => persisted?.action)
 
@@ -178,7 +177,9 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
         previousStepRef.current = step
         if (step <= previousStep) return
 
-        wizardRootRef.current?.scrollIntoView({behavior: 'auto', block: 'start'})
+        // Scroll to the top of the page rather than the wizard itself, so the sticky mobile header
+        // can't cover the first field of the next step.
+        window.scrollTo({top: 0, behavior: 'auto'})
     }, [step])
 
     useEffect(() => {
@@ -317,7 +318,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
             : 'Stream Profile'
 
     return (
-        <div ref={wizardRootRef}>
+        <div>
             {globalMessage && (
                 <div
                     className={globalMessage.type === 'ERROR' ? 'form-error-card' : 'form-info-card'}
@@ -443,6 +444,7 @@ export default function AddShowPage({onCancel, initialUrl}: Props) {
                     onFinish={() => handleFinish('download-stream')}
                     onCancel={handleCancel}
                     showSlug={showSubmit?.slug}
+                    showTitle={showSubmit?.title}
                     downloadProfileDefaults={wizardDownloadProfileDefaults}
                     episodeTypesManuallyChanged={streamEpisodeTypesManuallyChanged}
                     onEpisodeTypesManuallyChanged={() => setStreamEpisodeTypesManuallyChanged(true)}
