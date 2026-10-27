@@ -146,7 +146,12 @@ def update_show_local_media_profile(
         body,
         exclude_id=item.id,
     )
-    update_database_fields(item, body, exclude_fields={"indexing_values"})
+    excluded_fields = {"indexing_values"}
+    if "subtitle_mode" not in body.model_fields_set:
+        # Missing values on updates are not creation defaults; retain the
+        # persisted selection, even if show_scope was changed.
+        excluded_fields.add("subtitle_mode")
+    update_database_fields(item, body, exclude_fields=excluded_fields)
     replace_indexing_value_definitions(item, body.indexing_values)
     s.flush()
 

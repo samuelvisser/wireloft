@@ -10,6 +10,7 @@ from backend.api.models.local_media_profile import (
 )
 from backend.api.models.custom_metadata import IndexingValueDefinitionAPI
 from backend.types.local_media_profile_types import (
+    LocalMediaProfileSubtitleMode,
     LocalMediaProfileType,
     ShowLocalMediaProfileScope,
 )
@@ -46,6 +47,18 @@ class _ShowLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
 
 class ShowLocalMediaProfileAPICreate(_ShowLocalMediaProfileAPIBaseIn):
     """Create a Show Local Media Profile."""
+
+    @model_validator(mode="after")
+    def _default_subtitles_for_scope(self):
+        # Scope-dependent defaults apply only when a profile is first created.
+        # Updates must never infer a new subtitle mode from changed scope.
+        if "subtitle_mode" not in self.model_fields_set:
+            self.subtitle_mode = (
+                LocalMediaProfileSubtitleMode.NO_SUBTITLES
+                if self.show_scope == ShowLocalMediaProfileScope.PODCAST
+                else LocalMediaProfileSubtitleMode.SIDECAR
+            )
+        return self
 
 
 class ShowLocalMediaProfileAPIUpdate(_ShowLocalMediaProfileAPIBaseIn):

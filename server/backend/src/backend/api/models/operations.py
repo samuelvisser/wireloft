@@ -24,6 +24,10 @@ class MovieRedownloadOperationAccepted(TaskOperationAccepted):
     downloads_queued: int
 
 
+class ShowDownloadAllOperationAccepted(TaskOperationAccepted):
+    episodes_queued: int
+
+
 class ShowMetadataOperationAccepted(TaskOperationAccepted):
     episodes_queued: int
 

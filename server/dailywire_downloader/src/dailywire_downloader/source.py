@@ -75,6 +75,7 @@ def resolve_download_source(
             extension="m3u8",
             audio_only=False,
             hls_bundle=True,
+            subtitles=info.subtitles,
         )
 
     if audio_only:
@@ -120,4 +121,5 @@ def resolve_download_source(
         hls_bundle=False,
         expected_bytes=info.content_length,
         convert_video_to_m4a=convert_video_to_m4a,
+        subtitles=info.subtitles if info.kind is MediaKind.HLS_MASTER else (),
     )

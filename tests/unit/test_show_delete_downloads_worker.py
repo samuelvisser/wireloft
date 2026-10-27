@@ -328,3 +328,376 @@ def test_delete_show_downloads_worker_is_not_automatically_retried():
     )
 
     assert delete_show_downloads_worker._task_meta.default_max_retries == 0
+
+
+def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, monkeypatch):
+    from datetime import timedelta, timezone
+
+    from backend.api.endpoints.shows import service
+    monkeypatch.setattr(service, "queue_operation_target_dispatch", lambda *_args, **_kwargs: None)
+    from backend.db.models import Episode, Season
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_types import MediaType
+    from task_manager.scheduler.db import TaskOperationTarget
+    from task_manager.tasks.workers.delete_show_downloads_worker.service import (
+        run_delete_show_downloads_worker,
+    )
+
+    session, engine = _session()
+    try:
+        (
+            show,
+            audio_profile,
+            _unused_profile,
+            _profiles,
+            original_audio,
+            original_video,
+            audio_path,
+            video_path,
+        ) = _library(session, tmp_path)
+        original_episode = session.get(Episode, original_audio.media_item_id)
+        original_episode.published_date = datetime.now(timezone.utc) - timedelta(days=90)
+        season = session.query(Season).filter_by(show_id=show.id).one()
+
+        def episode(index, days_ago, name, *, with_download=True):
+            media = Episode(
+                uuid=f"retention-{index}",
+                type=MediaType.EPISODE.value,
+                show=show,
+                season=season,
+                index=index,
+                episode_identifier=f"ep.{index}",
+                slug=f"retention-{index}",
+                title=f"Retention {index}",
+                description=None,
+                duration=60,
+                publish_status="published_final",
+                sharing_url=f"https://example.test/retention-{index}",
+                published_date=datetime.now(timezone.utc) - timedelta(days=days_ago),
+            )
+            session.add(media)
+            session.flush()
+            if not with_download:
+                return media, None, None
+            path = tmp_path / name
+            path.write_bytes(b"downloaded")
+            download = EpisodeMediaDownload(
+                type=MediaType.EPISODE.value,
+                media_item_id=media.id,
+                local_media_profile_id=audio_profile.id,
+                download_profile_id=original_audio.download_profile_id,
+                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+                file_path=str(path),
+                downloaded_bytes=10,
+            )
+            session.add(download)
+            session.flush()
+            return media, download, path
+
+        _, middle_download, middle_path = episode(2, 30, "middle.m4a")
+        _, recent_download, recent_path = episode(3, 2, "recent.m4a")
+        # An episode with no download must not consume a retention slot.
+        episode(4, 0, "newest", with_download=False)
+
+        result = service.request_show_download_delete(
+            session,
+            show.slug,
+            None,
+            delete_older_than="latest_downloads",
+            delete_older_than_latest_downloads=2,
+        )
+        target = session.query(TaskOperationTarget).filter_by(
+            operation_id=result["operation_id"],
+        ).one()
+        selected_ids = target.task_kwargs["selected_media_download_ids"]
+        assert set(selected_ids) == {
+            original_audio.id,
+            original_video.id,
+        }
+        assert middle_download.id not in selected_ids
+        assert recent_download.id not in selected_ids
+        assert result["download_profiles_disabled"] == 2
+
+        # A newly indexed older download must not expand a queued delete's scope.
+        _, later_download, later_path = episode(5, 120, "later-added.m4a")
+        session.commit()
+        work = run_delete_show_downloads_worker(
+            session,
+            show_id=show.id,
+            selected_media_download_ids=selected_ids,
+            download_profiles_disabled=result["download_profiles_disabled"],
+        )
+        assert work["episode_files"] == 2
+        assert not audio_path.exists()
+        assert not video_path.exists()
+        assert middle_path.exists()
+        assert recent_path.exists()
+        assert later_path.exists()
+        session.expire_all()
+        assert session.get(EpisodeMediaDownload, recent_download.id).artifact_status == "available"
+        assert session.get(EpisodeMediaDownload, later_download.id).artifact_status == "available"
+    finally:
+        session.close()
+        engine.dispose()
+
+
+
+def test_latest_five_downloads_are_kept_despite_ten_newer_undownloaded_episodes(tmp_path, monkeypatch):
+    from datetime import timedelta, timezone
+
+    from backend.api.endpoints.shows import service
+    from backend.db.models import DownloadProfileBase, Episode, Season
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_types import MediaType
+    from task_manager.scheduler.db import TaskOperationTarget
+
+    monkeypatch.setattr(service, "queue_operation_target_dispatch", lambda *_args, **_kwargs: None)
+    session, engine = _session()
+    try:
+        (
+            show,
+            audio_profile,
+            _unused_profile,
+            profiles,
+            original_audio,
+            original_video,
+            audio_path,
+            video_path,
+        ) = _library(session, tmp_path)
+        original = session.get(Episode, original_audio.media_item_id)
+        original.published_date = datetime.now(timezone.utc) - timedelta(days=90)
+        season = session.query(Season).filter_by(show_id=show.id).one()
+        other_downloads = []
+        # Only three of the next thirteen episodes have actual files. The
+        # ten others include a MISSING record and an ABSENT (never downloaded)
+        # record, neither of which may consume a retention slot.
+        for index in range(2, 15):
+            episode = Episode(
+                uuid=f"latest-download-{index}",
+                type=MediaType.EPISODE.value,
+                show=show,
+                season=season,
+                index=index,
+                episode_identifier=f"ep.{index}",
+                slug=f"latest-download-{index}",
+                title=f"Episode {index}",
+                description="",
+                duration=60,
+                publish_status="published_final",
+                sharing_url=f"https://example.test/latest-download-{index}",
+                published_date=datetime.now(timezone.utc) - timedelta(days=30-index),
+            )
+            session.add(episode)
+            session.flush()
+            if index not in (2, 5, 8, 13, 14):
+                continue
+            path = tmp_path / f"latest-{index}.m4a"
+            if index not in (13, 14):
+                path.write_bytes(b"media")
+            download = EpisodeMediaDownload(
+                type=MediaType.EPISODE.value,
+                media_item_id=episode.id,
+                local_media_profile_id=audio_profile.id,
+                artifact_status=(
+                    MediaDownloadArtifactStatus.ABSENT.value if index == 14
+                    else MediaDownloadArtifactStatus.MISSING.value if index == 13
+                    else MediaDownloadArtifactStatus.AVAILABLE.value
+                ),
+                file_path=str(path),
+            )
+            session.add(download)
+            session.flush()
+            if index not in (13, 14):
+                other_downloads.append((download, path))
+
+        result = service.request_show_download_delete(
+            session,
+            show.slug,
+            None,
+            delete_older_than="latest_downloads",
+            delete_older_than_latest_downloads=5,
+        )
+        target = session.query(TaskOperationTarget).filter_by(
+            operation_id=result["operation_id"],
+        ).one()
+        assert target.task_kwargs["selected_media_download_ids"] == []
+        assert result["download_profiles_disabled"] == 0
+        assert all(session.get(DownloadProfileBase, p.id).enable_profile for p in profiles)
+        assert audio_path.exists() and video_path.exists()
+        assert all(path.exists() for _, path in other_downloads)
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_latest_download_limit_is_scoped_to_selected_local_media_profile(tmp_path, monkeypatch):
+    from datetime import timedelta, timezone
+
+    from backend.api.endpoints.shows import service
+    from backend.db.models import Episode, Season
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
+    from backend.types.media_types import MediaType
+    from task_manager.scheduler.db import TaskOperationTarget
+
+    monkeypatch.setattr(service, "queue_operation_target_dispatch", lambda *_args, **_kwargs: None)
+    session, engine = _session()
+    try:
+        (
+            show,
+            audio_profile,
+            _unused_profile,
+            _profiles,
+            original_audio,
+            original_video,
+            _audio_path,
+            _video_path,
+        ) = _library(session, tmp_path)
+        original = session.get(Episode, original_audio.media_item_id)
+        original.published_date = datetime.now(timezone.utc) - timedelta(days=60)
+        season = session.query(Season).filter_by(show_id=show.id).one()
+        recent = Episode(
+            uuid="latest-download-recent",
+            type=MediaType.EPISODE.value,
+            show=show,
+            season=season,
+            index=2,
+            episode_identifier="ep.2",
+            slug="latest-download-recent",
+            title="Recent",
+            description="",
+            duration=60,
+            publish_status="published_final",
+            sharing_url="https://example.test/latest-download-recent",
+            published_date=datetime.now(timezone.utc) - timedelta(days=2),
+        )
+        session.add(recent)
+        session.flush()
+        recent_download = EpisodeMediaDownload(
+            type=MediaType.EPISODE.value,
+            media_item_id=recent.id,
+            local_media_profile_id=audio_profile.id,
+            artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+            file_path=str(tmp_path / "recent.m4a"),
+        )
+        session.add(recent_download)
+        session.flush()
+
+        result = service.request_show_download_delete(
+            session,
+            show.slug,
+            audio_profile.id,
+            delete_older_than="latest_downloads",
+            delete_older_than_latest_downloads=1,
+        )
+        target = session.query(TaskOperationTarget).filter_by(
+            operation_id=result["operation_id"],
+        ).one()
+        assert target.task_kwargs["selected_media_download_ids"] == [original_audio.id]
+        assert original_video.id not in target.task_kwargs["selected_media_download_ids"]
+        assert recent_download.id not in target.task_kwargs["selected_media_download_ids"]
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_bulk_delete_days_uses_publication_time_and_no_match_keeps_profiles(tmp_path, monkeypatch):
+    from datetime import timedelta, timezone
+
+    from backend.api.endpoints.shows import service
+    monkeypatch.setattr(service, "queue_operation_target_dispatch", lambda *_args, **_kwargs: None)
+    from backend.db.models import DownloadProfileBase, Episode
+    from task_manager.scheduler.db import TaskOperationTarget
+    from task_manager.tasks.workers.delete_show_downloads_worker.service import (
+        run_delete_show_downloads_worker,
+    )
+
+    session, engine = _session()
+    try:
+        (
+            show,
+            audio_profile,
+            _unused_profile,
+            profiles,
+            original_audio,
+            _original_video,
+            audio_path,
+            video_path,
+        ) = _library(session, tmp_path)
+        # This episode was downloaded earlier, but its publication is recent.
+        episode = session.get(Episode, original_audio.media_item_id)
+        episode.published_date = datetime.now(timezone.utc) - timedelta(days=2)
+        result = service.request_show_download_delete(
+            session,
+            show.slug,
+            audio_profile.id,
+            delete_older_than="days",
+            delete_older_than_days=30,
+        )
+        target = session.query(TaskOperationTarget).filter_by(
+            operation_id=result["operation_id"],
+        ).one()
+        assert target.task_kwargs["selected_media_download_ids"] == []
+        assert result["download_profiles_disabled"] == 0
+        assert all(session.get(DownloadProfileBase, p.id).enable_profile for p in profiles)
+        session.commit()
+
+        work = run_delete_show_downloads_worker(
+            session,
+            show_id=show.id,
+            local_media_profile_id=audio_profile.id,
+            selected_media_download_ids=[],
+        )
+        assert work["episode_files"] == 0
+        assert audio_path.exists()
+        assert video_path.exists()
+        assert all(session.get(DownloadProfileBase, p.id).enable_profile for p in profiles)
+
+        older_result = service.request_show_download_delete(
+            session,
+            show.slug,
+            audio_profile.id,
+            delete_older_than="days",
+            delete_older_than_days=1,
+        )
+        older_target = session.query(TaskOperationTarget).filter_by(
+            operation_id=older_result["operation_id"],
+        ).one()
+        assert older_target.task_kwargs["selected_media_download_ids"] == [original_audio.id]
+    finally:
+        session.close()
+        engine.dispose()
+
+
+@pytest.mark.parametrize("model_name", [
+    "ShowDeleteDownloadsAPIRequest",
+    "ShowRedownloadEpisodesAPIRequest",
+])
+def test_bulk_delete_limit_validation(model_name):
+    from pydantic import ValidationError
+    from backend.api.models import show as models
+
+    model = getattr(models, model_name)
+    assert model.model_validate({}).delete_older_than == "all"
+    assert model.model_validate({
+        "deleteOlderThan": "days",
+        "deleteOlderThanDays": 30,
+    }).delete_older_than_days == 30
+    assert model.model_validate({
+        "deleteOlderThan": "latest_downloads",
+        "deleteOlderThanLatestDownloads": 10,
+    }).delete_older_than_latest_downloads == 10
+    for invalid in (
+        {"deleteOlderThan": "days"},
+        {"deleteOlderThan": "days", "deleteOlderThanDays": 0},
+        {"deleteOlderThan": "latest_downloads"},
+        {"deleteOlderThan": "latest_downloads", "deleteOlderThanLatestDownloads": -1},
+        {"deleteOlderThan": "all", "deleteOlderThanDays": 10},
+        {"deleteOlderThan": "days", "deleteOlderThanDays": 10, "deleteOlderThanLatestDownloads": 5},
+        {"deleteOlderThan": "latest_downloads", "deleteOlderThanLatestDownloads": 5, "deleteOlderThanDays": 10},
+        {"deleteOlderThan": "invalid"},
+    ):
+        with pytest.raises(ValidationError):
+            model.model_validate(invalid)

@@ -25,13 +25,14 @@ class _SettingsCronOperation(OperationDefinition[_SettingsCronResource]):
 class _SingleTaskSettingsCronOperation(_SettingsCronOperation):
     task: ClassVar[str]
     target_resource_type: ClassVar[str]
+    target_resource_id: ClassVar[int | None] = 0
 
     def targets(self) -> tuple[OperationTargetSpec, ...]:
         return (
             OperationTargetSpec(
                 task_key=self.task,
                 resource_type=self.target_resource_type,
-                resource_id=0,
+                resource_id=self.target_resource_id,
             ),
         )
 
@@ -41,6 +42,7 @@ class FindEpisodesCronOperation(_SingleTaskSettingsCronOperation):
     title_text = "Find new episodes"
     task = "fetch_new_episodes"
     target_resource_type = "show"
+    target_resource_id = None
 
 
 class MonitorPendingEpisodesCronOperation(_SettingsCronOperation):

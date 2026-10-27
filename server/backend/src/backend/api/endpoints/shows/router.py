@@ -10,12 +10,14 @@ from .service import (
     delete_show,
     request_show_sync,
     request_show_metadata_refresh,
+    request_show_download_all,
     request_show_file_rename,
     request_show_download_delete,
     request_show_episode_redownload,
 )
 from ...models.operations import (
     ShowDeleteDownloadsOperationAccepted,
+    ShowDownloadAllOperationAccepted,
     ShowFileRenameOperationAccepted,
     ShowMetadataOperationAccepted,
     ShowRedownloadOperationAccepted,
@@ -26,6 +28,7 @@ from ...models.show import (
     ShowAPICreate,
     ShowAPIUpdate,
     ShowDeleteDownloadsAPIRequest,
+    ShowDownloadAllAPIRequest,
     ShowFileRenameAPIRequest,
     ShowRedownloadEpisodesAPIRequest,
 )
@@ -101,6 +104,23 @@ def show_metadata_refresh(show_slug: str):
 
 
 @router.post(
+    "/{show_slug}/download-all",
+    response_model=ShowDownloadAllOperationAccepted,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def show_download_all(show_slug: str, body: ShowDownloadAllAPIRequest):
+    """Queue all eligible indexed episodes for one Local Media Profile."""
+    with db_session() as s:
+        try:
+            result = request_show_download_all(s, show_slug, body)
+            s.commit()
+            return result
+        except Exception:
+            s.rollback()
+            raise
+
+
+@router.post(
     "/{show_slug}/rename-files",
     response_model=ShowFileRenameOperationAccepted,
     status_code=status.HTTP_202_ACCEPTED,
@@ -134,6 +154,9 @@ def show_delete_downloads(show_slug: str, body: ShowDeleteDownloadsAPIRequest):
                 s,
                 show_slug,
                 body.local_media_profile_id,
+                delete_older_than=body.delete_older_than,
+                delete_older_than_days=body.delete_older_than_days,
+                delete_older_than_latest_downloads=body.delete_older_than_latest_downloads,
             )
             s.commit()
             return result
@@ -155,6 +178,9 @@ def show_redownload_episodes(show_slug: str, body: ShowRedownloadEpisodesAPIRequ
                 s,
                 show_slug,
                 body.local_media_profile_id,
+                delete_older_than=body.delete_older_than,
+                delete_older_than_days=body.delete_older_than_days,
+                delete_older_than_latest_downloads=body.delete_older_than_latest_downloads,
             )
             s.commit()
             return result

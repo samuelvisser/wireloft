@@ -16,6 +16,7 @@ export type TaskLedgerCollectionQuery = {
   definitionKey?: string
   resourceType?: string
   resourceId?: number | readonly number[]
+  includeUnscoped?: boolean
   status?: readonly string[]
   startedAfter?: Date | string
   orderBy?: 'started_at' | 'finished_at' | 'created_at'
@@ -73,12 +74,14 @@ function taskLedgerEntryMatches(
     definitionKey,
     resourceType,
     resourceIds,
+    includeUnscoped,
     statuses,
     startedAfter,
   }: {
     definitionKey: string | undefined
     resourceType: string | undefined
     resourceIds: readonly number[] | undefined
+    includeUnscoped: boolean
     statuses: readonly string[] | undefined
     startedAfter: string | undefined
   },
@@ -87,7 +90,7 @@ function taskLedgerEntryMatches(
   if (resourceType !== undefined && entry.resourceType !== resourceType) return false
   if (
     resourceIds !== undefined
-    && (entry.resourceId == null || !resourceIds.includes(entry.resourceId))
+    && (entry.resourceId == null ? !includeUnscoped : !resourceIds.includes(entry.resourceId))
   ) {
     return false
   }
@@ -113,6 +116,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
     definitionKey,
     resourceType,
     resourceIds,
+    includeUnscoped = false,
     statuses,
     startedAfter,
     orderBy,
@@ -122,6 +126,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
     definitionKey: string | undefined
     resourceType: string | undefined
     resourceIds: readonly number[] | undefined
+    includeUnscoped?: boolean
     statuses: readonly string[] | undefined
     startedAfter: string | undefined
     orderBy: 'started_at' | 'finished_at' | 'created_at'
@@ -140,6 +145,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
     startedAfter ?? null,
     orderBy,
     order,
+    includeUnscoped,
   ]
   const candidates = queryClient.getQueryCache().findAll({
     queryKey: ['taskLedger', 'list'],
@@ -164,13 +170,14 @@ export function deriveTaskLedgerCollectionPlaceholder(
       || !optionalScalarFilterContains(key[2], definitionKey)
       || !optionalScalarFilterContains(key[3], resourceType)
       || !optionalArrayFilterContains(key[4], resourceIds)
+      || (includeUnscoped && key[4] !== null && key[9] !== true)
       || !optionalArrayFilterContains(key[5], statuses)
       || !startedAfterFilterContains(key[6], startedAfter)
     ) {
       continue
     }
 
-    const sourceDescriptor = key.slice(2, 9)
+    const sourceDescriptor = [...key.slice(2, 9), key[9] === true]
     if (JSON.stringify(sourceDescriptor) === JSON.stringify(targetDescriptor)) continue
 
     const source = query.state.data as InfiniteData<
@@ -188,6 +195,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
         definitionKey,
         resourceType,
         resourceIds,
+        includeUnscoped,
         statuses,
         startedAfter,
       },
@@ -234,6 +242,7 @@ export function useTaskLedgerInfinite({
   definitionKey,
   resourceType,
   resourceId,
+  includeUnscoped = false,
   status,
   startedAfter,
   orderBy = 'created_at',
@@ -256,6 +265,7 @@ export function useTaskLedgerInfinite({
       startedAfterValue ?? null,
       orderBy,
       order,
+      includeUnscoped,
     ] as const,
     initialCount: limit,
     batchSize: limit,
@@ -270,6 +280,7 @@ export function useTaskLedgerInfinite({
         definitionKey,
         resourceType,
         resourceIds,
+        includeUnscoped,
         statuses,
         startedAfter: startedAfterValue,
         orderBy,
@@ -287,6 +298,7 @@ export function useTaskLedgerInfinite({
       if (definitionKey) params.set('definition_key', definitionKey)
       if (resourceType) params.set('resource_type', resourceType)
       for (const id of resourceIds ?? []) params.append('resource_id', String(id))
+      if (includeUnscoped && resourceIds?.length) params.set('include_unscoped', 'true')
       for (const item of statuses ?? []) params.append('status', item)
       if (startedAfterValue) params.set('started_after', startedAfterValue)
 

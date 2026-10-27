@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-from typing import Optional, Union
-from datetime import datetime
+from typing import Literal, Optional, Union
+from datetime import date, datetime
 
-from pydantic import AliasChoices, AliasPath, computed_field, Field
+from pydantic import AliasChoices, AliasPath, computed_field, Field, model_validator
 
 from backend.api.models.base import RequestBase, response_model_config
 from backend.api.models.custom_metadata import CustomMetadataResponseBase
 from backend.types.dailywire_user_info import WlDwMembershipLevel
 from backend.types.show_types import ShowType, EpisodeIdentifier
+from backend.types.download_profile_types import EpIdType
 from backend.utils.helpers import generate_uuid
 
 
@@ -55,10 +56,47 @@ class ShowFileRenameAPIRequest(RequestBase):
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
 
 
+class ShowDownloadAllAPIRequest(RequestBase):
+    """Queue indexed episodes for one Local Media Profile and a show-specific filter."""
+
+    local_media_profile_id: int = Field(gt=0)
+    season_ids: list[int] = Field(default_factory=list)
+    episode_types: list[EpIdType] = Field(default_factory=list)
+    download_days_in_past: int = Field(default=0, ge=0)
+    download_episode_count: int = Field(default=0, ge=0)
+    download_starting_from: date | None = None
+
+    @model_validator(mode="after")
+    def validate_podcast_limits(self):
+        if self.download_days_in_past and self.download_episode_count:
+            raise ValueError("Choose either a date limit or an episode-count limit, not both")
+        if self.download_starting_from is not None and (
+            self.download_days_in_past or self.download_episode_count
+        ):
+            raise ValueError("Download starting from can only be used when Limit by is set to No limits")
+        return self
+
+
 class _ShowDownloadMaintenanceAPIRequest(RequestBase):
-    """Scope a destructive show download action to one or every profile in use."""
+    """Scope show download maintenance to selected profiles and older episodes."""
 
     local_media_profile_id: Optional[int] = Field(default=None, gt=0)
+    delete_older_than: Literal["all", "days", "latest_downloads"] = "all"
+    delete_older_than_days: int | None = Field(default=None, ge=1)
+    delete_older_than_latest_downloads: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_older_than_limit(self):
+        if self.delete_older_than == "all":
+            if self.delete_older_than_days is not None or self.delete_older_than_latest_downloads is not None:
+                raise ValueError("Delete all does not accept an age limit")
+        elif self.delete_older_than == "days":
+            if self.delete_older_than_days is None or self.delete_older_than_latest_downloads is not None:
+                raise ValueError("Delete older than days requires a number of days")
+        else:
+            if self.delete_older_than_latest_downloads is None or self.delete_older_than_days is not None:
+                raise ValueError("Delete older than latest downloads requires a number of downloads")
+        return self
 
 
 class ShowDeleteDownloadsAPIRequest(_ShowDownloadMaintenanceAPIRequest):

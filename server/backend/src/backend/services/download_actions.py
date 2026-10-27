@@ -305,6 +305,67 @@ def delete_unavailable_media_download_action(
             raise
 
 
+def delete_media_download_action(
+        media_download_id: int,
+        *,
+        missing_ok: bool = False,
+) -> bool:
+    """Remove one download and all of its owned files after stopping active work."""
+    cancel_media_download_action(
+        media_download_id,
+        allow_inactive=True,
+        missing_ok=missing_ok,
+    )
+
+    with serialize_download_attempt(media_download_id), db_session() as s:
+        try:
+            download = s.get(MediaDownloadBase, media_download_id)
+            if download is None:
+                if missing_ok:
+                    return False
+                raise DownloadActionError("missing", "Media download not found")
+            if get_active_media_download_operation(s, media_download_id) is not None:
+                raise DownloadActionError(
+                    "conflict",
+                    "This download still has an active operation; try again after it stops",
+                )
+
+            # An ABSENT record has not claimed an output file yet. Do not remove
+            # some other file that happens to occupy its planned destination.
+            if download.artifact_status == MediaDownloadArtifactStatus.ABSENT.value:
+                try:
+                    os.stat(download.file_path)
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    raise DownloadActionError(
+                        "conflict",
+                        f"Could not verify the download destination: {exc}",
+                    ) from exc
+                else:
+                    raise DownloadActionError(
+                        "conflict",
+                        "A file exists at this not-downloaded item's destination",
+                    )
+
+            # Resolve tracked renames and clean up media, temporary output and
+            # sidecars before deleting the row (and its durable action history).
+            # A removal failure must not silently leave an orphan on disk.
+            prepare_media_download_artifact(s, download, strict_cleanup=True)
+            s.delete(download)
+            s.commit()
+            return True
+        except OSError as exc:
+            s.rollback()
+            raise DownloadActionError(
+                "conflict",
+                f"Could not remove download files: {exc}",
+            ) from exc
+        except Exception:
+            s.rollback()
+            raise
+
+
 def delete_media_download_artifact_action(
         media_download_id: int,
         *,

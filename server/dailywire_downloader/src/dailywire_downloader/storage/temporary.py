@@ -503,7 +503,7 @@ def cleanup_abandoned_publication_locks(download_root: str | Path) -> int:
 
     if removed:
         logger.warning(
-            "Removed %s abandoned download publication lock(s) from a previous WireLoft process",
+            "Removed %s abandoned download publication lock(s) from a previous process",
             removed,
         )
     return removed
@@ -762,4 +762,34 @@ def cleanup_abandoned_temporary_downloads(
             "Removed %s abandoned temporary download workspace(s) from a previous WireLoft process",
             removed,
         )
+    return removed
+
+
+def cleanup_abandoned_destination_workspaces(
+    download_root: str | Path,
+    *,
+    is_committed: Callable[[Path, ArtifactIdentity], bool],
+) -> int:
+    """Reuse ordinary workspace cleanup for direct-mode replacement attempts.
+
+    Direct mode performs transfer and processing on the destination filesystem.
+    Its private attempt workspaces therefore live inside the downloads tree,
+    not necessarily under the configured temporary download root.
+    """
+    root = Path(download_root)
+    if not root.is_dir():
+        return 0
+    removed = 0
+
+    def onerror(error: OSError) -> None:
+        logger.warning("Could not scan direct-mode download workspaces: %s", error)
+
+    for directory, subdirs, _filenames in os.walk(root, followlinks=False, onerror=onerror):
+        if _STAGING_DIRECTORY_NAME in subdirs:
+            # The nested workspace is processed by the same reconciler as
+            # temporary-mode downloads; do not descend into it as library media.
+            subdirs.remove(_STAGING_DIRECTORY_NAME)
+            removed += cleanup_abandoned_temporary_downloads(
+                directory, root, is_committed=is_committed,
+            )
     return removed

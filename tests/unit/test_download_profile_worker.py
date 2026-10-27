@@ -1037,7 +1037,7 @@ def test_run_worker_does_not_recreate_a_deleted_download_record(db_session, monk
     assert db_session.query(EpisodeMediaDownload).filter_by(media_item_id=episode.id).count() == 0
 
 
-def test_run_worker_no_enabled_profiles_is_a_noop(db_session, monkeypatch):
+def test_run_worker_no_enabled_profiles_still_reconciles_manual_download_waits(db_session, monkeypatch):
     from task_manager.tasks.workers.download_profile_worker import service
 
     created = Mock()
@@ -1048,4 +1048,4 @@ def test_run_worker_no_enabled_profiles_is_a_noop(db_session, monkeypatch):
     asyncio.run(service.run_download_profile_worker(db_session, resource_id=0, resource_type="download_profile"))
 
     created.assert_not_called()
-    dispatched.assert_not_called()
+    dispatched.assert_called_once_with(db_session)

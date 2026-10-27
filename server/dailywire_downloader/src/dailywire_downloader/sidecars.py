@@ -13,6 +13,7 @@ from .http import http_get, wait_for_retry
 from .lifecycle import DownloadTracker
 from .models import DownloadProgress, _extension_for_direct_file
 from .plan import SidecarSpec
+from .subtitles import download_hls_webvtt
 
 _CHUNK_SIZE = 256 * 1024
 
@@ -48,6 +49,18 @@ def acquire_sidecar(spec: SidecarSpec, workspace: Path, tracker: DownloadTracker
                             os.fsync(out.fileno())
                         return AcquiredSidecar(spec, path, spec.target_suffix or f".{spec.extension}", len(spec.content))
                     assert spec.url is not None
+                    if spec.source_format == "hls_webvtt":
+                        content = download_hls_webvtt(
+                            spec.url, maximum_bytes=spec.maximum_bytes,
+                            should_cancel=tracker.is_canceled,
+                            progress=lambda value: tracker.progress(activity, value),
+                        )
+                        path = workspace / f"{spec.id}.srt"
+                        with path.open("xb") as out:
+                            out.write(content)
+                            out.flush()
+                            os.fsync(out.fileno())
+                        return AcquiredSidecar(spec, path, spec.target_suffix or ".srt", len(content))
                     with http_get(spec.url, retries=0) as response:
                         extension = _extension_for_direct_file(spec.url, response.headers.get("Content-Type"))
                         if extension == "bin":

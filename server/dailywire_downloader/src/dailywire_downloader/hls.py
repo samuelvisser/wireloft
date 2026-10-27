@@ -6,7 +6,7 @@ from typing import Optional
 from urllib.parse import urljoin
 
 from .errors import DownloadError, EncryptedMediaError
-from .models import VideoRendition
+from .models import SubtitleRendition, VideoRendition
 
 _ATTR_RE = re.compile(r'([A-Z0-9-]+)=("[^"]*"|[^,]*)')
 
@@ -25,6 +25,50 @@ def is_playlist(text: str) -> bool:
 
 def is_master_playlist(text: str) -> bool:
     return "#EXT-X-STREAM-INF" in text
+
+
+_SUBTITLE_LANGUAGE_RE = re.compile(r"[a-z]{2,3}(?:-[a-z0-9]{2,8})*")
+
+
+def parse_subtitle_renditions(text: str, base_url: str) -> list[SubtitleRendition]:
+    """Return unique, video-associated subtitle renditions from an HLS master.
+
+    Retain separate forced and SDH alternatives so media servers can recognize
+    them by their standard language-qualified sidecar filenames.
+    """
+    groups = {
+        attributes["SUBTITLES"]
+        for line in text.splitlines()
+        if line.startswith("#EXT-X-STREAM-INF:")
+        for attributes in (parse_attribute_list(line.split(":", 1)[1]),)
+        if attributes.get("SUBTITLES")
+    }
+    result: list[SubtitleRendition] = []
+    seen: set[tuple[str, bool, bool]] = set()
+    for line in text.splitlines():
+        if not line.startswith("#EXT-X-MEDIA:"):
+            continue
+        attrs = parse_attribute_list(line.split(":", 1)[1])
+        if attrs.get("TYPE") != "SUBTITLES" or not attrs.get("URI"):
+            continue
+        if attrs.get("GROUP-ID") not in groups:
+            continue
+        language = (attrs.get("LANGUAGE") or "und").replace("_", "-").lower()
+        if not _SUBTITLE_LANGUAGE_RE.fullmatch(language) and language != "und":
+            # Never use upstream text directly in a file suffix.
+            language = "und"
+        forced = attrs.get("FORCED") == "YES"
+        sdh = "public.accessibility.describes-music-and-sound" in attrs.get("CHARACTERISTICS", "")
+        key = (language, forced, sdh)
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(SubtitleRendition(
+            url=urljoin(base_url, attrs["URI"]),
+            language=language, name=attrs.get("NAME") or language,
+            forced=forced, sdh=sdh,
+        ))
+    return result
 
 
 def parse_master_playlist(text: str, base_url: str) -> list[VideoRendition]:

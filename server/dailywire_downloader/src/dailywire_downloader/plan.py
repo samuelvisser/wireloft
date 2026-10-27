@@ -13,6 +13,7 @@ from typing import Literal
 from uuid import uuid4
 
 from .errors import DownloadError
+from .models import SubtitleRendition
 from .storage.filesystem import FilesystemStorageKind, inspect_filesystem
 
 Phase = Literal["preparing", "transferring", "finishing", "complete"]
@@ -30,6 +31,7 @@ class ResolvedDownloadSource:
     hls_bundle: bool = False
     expected_bytes: int | None = None
     convert_video_to_m4a: bool = False
+    subtitles: tuple[SubtitleRendition, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,9 @@ class SidecarSpec:
     maximum_bytes: int = 32 * 1024 * 1024
     attempts: int = 3
     allowed_extensions: tuple[str, ...] = ()
+    source_format: Literal["direct", "hls_webvtt"] = "direct"
+    language: str | None = None
+    forced: bool = False
 
     def __post_init__(self) -> None:
         if not self.id or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789_-" for c in self.id):
@@ -71,6 +76,10 @@ class SidecarSpec:
             raise ValueError("Asset size limit and attempt count must be positive")
         if self.content is not None and len(self.content) > self.maximum_bytes:
             raise ValueError("Generated asset exceeds its size limit")
+        if self.source_format == "hls_webvtt" and (
+            self.url is None or self.extension != "srt" or self.kind != "subtitle"
+        ):
+            raise ValueError("HLS WebVTT assets must be remote subtitle playlists converted to SRT")
 
 
 @dataclass(frozen=True)
@@ -107,6 +116,7 @@ class DownloadPlan:
     stages: tuple[StageSpec, ...]
     publication_requires_copy: bool
     warnings: tuple[str, ...] = ()
+    subtitle_asset_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         stages = {stage.id: stage for stage in self.stages}
@@ -181,6 +191,7 @@ def build_download_plan(
     assets: tuple[SidecarSpec, ...] = (),
     metadata_tags: tuple[tuple[str, str], ...] = (),
     artwork_asset_id: str | None = None,
+    subtitle_asset_ids: tuple[str, ...] = (),
     attempt_id: str | None = None,
 ) -> DownloadPlan:
     """Resolve optional work once; the coordinator executes this plan verbatim."""
@@ -190,8 +201,15 @@ def build_download_plan(
         raise ValueError("Asset IDs must be unique within an attempt")
     if artwork_asset_id is not None and not any(a.id == artwork_asset_id for a in assets):
         raise ValueError("Embedded artwork must reference a planned asset")
-    if source.hls_bundle and (metadata_tags or artwork_asset_id):
+    if source.hls_bundle and (metadata_tags or artwork_asset_id or subtitle_asset_ids):
         raise DownloadError("HLS bundles support sidecars, not container embedding")
+    if len(set(subtitle_asset_ids)) != len(subtitle_asset_ids) or any(
+        not any(asset.id == asset_id and asset.kind == "subtitle" for asset in assets)
+        for asset_id in subtitle_asset_ids
+    ):
+        raise ValueError("Embedded subtitles must reference distinct planned subtitle assets")
+    if subtitle_asset_ids and (source.audio_only or source.extension not in {"mp4", "m4v", "mkv"}):
+        raise DownloadError("Embedding subtitles requires an MP4 or MKV video output")
     if source.remux_to_mp4 and source.convert_video_to_m4a:
         raise DownloadError("A source cannot be remuxed to MP4 and converted to M4A")
     if source.convert_video_to_m4a and (not source.audio_only or source.extension != "m4a"):
@@ -240,9 +258,18 @@ def build_download_plan(
             depends_on=(media_ready,), deadline_seconds=3600,
         ))
         media_ready = "convert_audio"
-    if metadata_tags or artwork_asset_id:
-        code = "embed_artwork_metadata" if metadata_tags and artwork_asset_id else "embed_artwork" if artwork_asset_id else "embed_metadata"
-        dependencies = (media_ready,) + ((f"acquire:{artwork_asset_id}",) if artwork_asset_id else ())
+    if metadata_tags or artwork_asset_id or subtitle_asset_ids:
+        parts = (
+            (["artwork"] if artwork_asset_id else [])
+            + (["metadata"] if metadata_tags else [])
+            + (["subtitles"] if subtitle_asset_ids else [])
+        )
+        code = "embed_" + "_".join(parts)
+        dependencies = (
+            (media_ready,)
+            + ((f"acquire:{artwork_asset_id}",) if artwork_asset_id else ())
+            + tuple(f"acquire:{asset_id}" for asset_id in subtitle_asset_ids)
+        )
         stages.append(StageSpec(
             "embed", code, "finishing", "processing", weight=embed_weight,
             depends_on=dependencies, deadline_seconds=3600,
@@ -272,4 +299,5 @@ def build_download_plan(
         attempt_id or str(uuid4()), source, str(requested_destination), download_mode,
         str(temporary_root), ffmpeg_path, tuple(assets), tuple(metadata_tags),
         artwork_asset_id, tuple(stages), copying,
+        subtitle_asset_ids=tuple(subtitle_asset_ids),
     )

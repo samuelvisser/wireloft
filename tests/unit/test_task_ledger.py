@@ -530,3 +530,60 @@ def test_task_cursor_uses_current_anchor_timestamp_for_unchanged_order():
     finally:
         session.close()
         engine.dispose()
+
+def test_task_ledger_can_include_unscoped_and_legacy_global_runs():
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.tasks.service import query_ledger
+    from backend.db import Base
+    from task_manager.scheduler.db import TaskDefinition, TaskRun
+    from task_manager.scheduler.types import ResourceType, TaskStatus
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        definition = TaskDefinition(
+            key="fetch_new_episodes",
+            title="Fetch episodes",
+            allowed_resource_types=["show"],
+        )
+        session.add(definition)
+        session.flush()
+        base = datetime(2026, 10, 14, tzinfo=timezone.utc)
+        for index, resource_id in enumerate((None, 0, 7, 8)):
+            session.add(TaskRun(
+                definition_id=definition.id,
+                resource_type=ResourceType.SHOW,
+                resource_id=resource_id,
+                status=TaskStatus.SUCCEEDED,
+                progress=100,
+                attempt_count=1,
+                max_retries=0,
+                started_at=base + timedelta(minutes=index),
+            ))
+        session.commit()
+
+        args = dict(
+            definition_key="fetch_new_episodes",
+            resource_type="show",
+            resource_ids=[0, 7],
+            order_by="started_at",
+            order="desc",
+        )
+        legacy = query_ledger(session, **args)
+        assert [run.resource_id for run in legacy.items] == [7, 0]
+
+        first = query_ledger(session, **args, include_unscoped=True, limit=2)
+        assert first.total == 3
+        assert [run.resource_id for run in first.items] == [7, 0]
+        assert first.next_cursor is not None
+
+        second = query_ledger(
+            session, **args, include_unscoped=True, cursor=first.next_cursor, limit=2,
+        )
+        assert [run.resource_id for run in second.items] == [None]
+        assert second.has_more is False
+
+        with pytest.raises(ValueError, match="Cursor does not match this task ledger"):
+            query_ledger(session, **args, cursor=first.next_cursor, limit=2)
+
+    engine.dispose()

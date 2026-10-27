@@ -179,6 +179,11 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
         return 3
 
     monkeypatch.setattr(get_settings().scheduler, "enabled", True)
+    monkeypatch.setattr(
+        __import__("backend.app", fromlist=["recover_abandoned_download_replacements"]),
+        "recover_abandoned_download_replacements",
+        lambda _root: calls.append("replacement-recovery") or 0,
+    )
     monkeypatch.setattr(scheduler_module, "start_scheduler", lambda: scheduler)
     monkeypatch.setattr(scheduler_module, "_scheduler", scheduler)
     monkeypatch.setattr(
@@ -214,6 +219,7 @@ def test_application_lifespan_is_ready_while_download_recovery_runs(monkeypatch)
     assert calls.index("pause") < calls.index("start")
     assert calls.index("start") < calls.index("running")
     assert calls.index("running") < calls.index("temporary-cleanup")
+    assert calls.index("replacement-recovery") < calls.index("reservation-cleanup")
     assert calls.index("reservation-cleanup") < calls.index("temporary-cleanup")
     assert calls.index("temporary-cleanup") < calls.index("resume")
     assert calls.index("resume") < calls.index("stop")

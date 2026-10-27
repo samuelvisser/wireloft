@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+from datetime import datetime, time, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import exists, select
+from sqlalchemy import exists, func, or_, select
+
 from sqlalchemy.orm import Session
 
 from backend.db.model_mapping import create_database_fields, update_database_fields
 from backend.api.models.show import *
 from fastapi import HTTPException
 
-from backend.db.models import Episode, Show
+from backend.db.models import Episode, Season, Show, ShowLocalMediaProfile
 from backend.db.models.media_download import EpisodeMediaDownload
+from backend.types.episode_types import EpisodePublishStatus
+from backend.types.local_media_profile_types import ShowLocalMediaProfileScope
+from backend.types.show_types import ShowType
+from backend.api.endpoints.media_downloads.service import create_new_episode_download
+from config import get_settings
 from backend.services.custom_indexes import request_show_custom_index_reconciliation
 from backend.types.download_profile_types import MediaDownloadArtifactStatus
 from backend.utils.episode_download_scope import EpisodeDownloadScope
@@ -24,10 +32,12 @@ from task_manager.tasks.helpers.download_profiles import (
     disable_download_profiles_for_episode_scope,
 )
 from task_manager.tasks.media_download_operations import attach_redownload_dependencies
+from task_manager.scheduler.types import OperationSource
 
 from .events import ShowAdded
 from .operations import (
     ShowDeleteDownloadsOperation,
+    ShowDownloadAllOperation,
     ShowFileRenameOperation,
     ShowIndexOperation,
     ShowMetadataRefreshOperation,
@@ -294,16 +304,202 @@ def request_show_metadata_refresh(
     }
 
 
+def request_show_download_all(
+        s: Session,
+        show_slug: str,
+        body: ShowDownloadAllAPIRequest,
+) -> dict[str, bool | int | str]:
+    """Download indexed, published episodes for one profile without replacing available files."""
+    show = s.scalar(select(Show).where(Show.slug == show_slug))
+    if show is None:
+        raise HTTPException(status_code=404, detail="Show not found")
+
+    profile = s.get(ShowLocalMediaProfile, body.local_media_profile_id)
+    if profile is None:
+        raise HTTPException(status_code=422, detail="Select a Show Local Media Profile")
+    if profile.show_scope not in (ShowLocalMediaProfileScope.BOTH, show.type):
+        raise HTTPException(status_code=422, detail="Local Media Profile is not available for this show type")
+
+    if not body.episode_types:
+        raise HTTPException(status_code=422, detail="Select at least one episode type")
+    published_at = func.coalesce(Episode.published_date, Episode.went_live_date)
+    statement = select(Episode).where(
+        Episode.show_id == show.id,
+        Episode.publish_status.in_((
+            EpisodePublishStatus.PUBLISHED_FINAL,
+            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+        )),
+        or_(*(
+            Episode.episode_identifier.like(f"{episode_type}.%")
+            for episode_type in set(body.episode_types)
+        )),
+    )
+    if show.type == ShowType.SERIES.value:
+        if not body.season_ids:
+            raise HTTPException(status_code=422, detail="Select at least one season")
+        if body.download_days_in_past or body.download_episode_count or body.download_starting_from:
+            raise HTTPException(status_code=422, detail="Podcast limits cannot be used for series")
+        selected_ids = set(body.season_ids)
+        valid_ids = set(s.scalars(
+            select(Season.id).where(Season.show_id == show.id, Season.id.in_(selected_ids))
+        ))
+        if selected_ids != valid_ids:
+            raise HTTPException(status_code=422, detail="A selected season does not belong to this show")
+        statement = (
+            statement.where(Episode.season_id.in_(selected_ids))
+            .order_by(Episode.season_id.asc(), Episode.index.asc(), Episode.id.asc())
+        )
+    else:
+        if body.season_ids:
+            raise HTTPException(status_code=422, detail="Podcast downloads cannot filter by season")
+        if body.download_days_in_past:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=body.download_days_in_past)
+            statement = statement.where(or_(published_at.is_(None), published_at >= cutoff))
+        elif body.download_starting_from is not None:
+            local_start = datetime.combine(
+                body.download_starting_from, time.min,
+                tzinfo=ZoneInfo(get_settings().timezone),
+            )
+            statement = statement.where(
+                published_at.is_not(None),
+                published_at >= local_start.astimezone(timezone.utc),
+            )
+        statement = statement.order_by(published_at.desc(), Episode.id.desc())
+        if body.download_episode_count:
+            statement = statement.limit(body.download_episode_count)
+
+    episodes = list(s.scalars(statement))
+    existing_by_episode = {
+        download.media_item_id: download
+        for download in s.scalars(
+            select(EpisodeMediaDownload).where(
+                EpisodeMediaDownload.local_media_profile_id == profile.id,
+                EpisodeMediaDownload.media_item_id.in_([episode.id for episode in episodes]),
+            )
+        )
+    }
+    downloads: list[EpisodeMediaDownload] = []
+    for episode in episodes:
+        download = existing_by_episode.get(episode.id)
+        if download is not None and download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value:
+            continue
+        if download is None:
+            download = create_new_episode_download(s, episode, profile)
+        downloads.append(download)
+
+    operation = create_operation(
+        s,
+        ShowDownloadAllOperation(
+            show,
+            local_media_profile_id=profile.id,
+            download_count=len(downloads),
+        ),
+    )
+    if downloads:
+        attach_redownload_dependencies(
+            s, operation, tuple(downloads),
+            source=OperationSource.SYSTEM.value,
+            respect_episode_publication=True,
+        )
+    else:
+        complete_operation(
+            s,
+            operation.id,
+            summary=f"No new episodes to download for {show.title}",
+            data={"downloads_completed": 0},
+        )
+
+    s.flush()
+    return {
+        "queued": bool(downloads),
+        "episodes_queued": len(downloads),
+        "operation_id": operation.id,
+    }
+
+
+def _select_show_downloads_older_than(
+        s: Session,
+        scope: EpisodeDownloadScope,
+        *,
+        delete_older_than: str,
+        delete_older_than_days: int | None,
+        delete_older_than_latest_downloads: int | None,
+) -> EpisodeDownloadScope:
+    """Select older downloads, excluding episodes that have never been downloaded.
+
+    The latest-downloads limit counts actual artifacts in the selected Local Media
+    Profile scope. AVAILABLE and CORRUPTED represent existing downloaded files;
+    ABSENT or MISSING records cannot consume retention slots. Downloads without
+    a usable episode publication date are preserved for filtered deletions.
+    """
+    if delete_older_than == "all":
+        return scope
+
+    published_at = func.coalesce(Episode.published_date, Episode.went_live_date)
+    published_episodes = (
+        Episode.show_id == scope.show.id,
+        Episode.publish_status.in_((
+            EpisodePublishStatus.PUBLISHED_FINAL,
+            EpisodePublishStatus.PUBLISHED_WITH_COUNTDOWN,
+        )),
+        published_at.is_not(None),
+    )
+
+    if delete_older_than == "latest_downloads":
+        if delete_older_than_latest_downloads is None or delete_older_than_latest_downloads <= 0:
+            raise HTTPException(status_code=422, detail="Specify a positive number of latest downloads")
+
+        # Count one slot per existing downloaded artifact, not per indexed episode.
+        # Keeping the first N artifacts preserves the newest downloads even when
+        # many more recent episodes have never been downloaded.
+        older_download_ids = (
+            select(EpisodeMediaDownload.id)
+            .join(Episode, Episode.id == EpisodeMediaDownload.media_item_id)
+            .where(
+                Episode.show_id == scope.show.id,
+                published_at.is_not(None),
+                EpisodeMediaDownload.local_media_profile_id.in_(scope.local_media_profile_ids),
+                EpisodeMediaDownload.artifact_status.in_(_PHYSICAL_ARTIFACT_STATUSES),
+            )
+            .order_by(published_at.desc(), Episode.id.desc(), EpisodeMediaDownload.id.desc())
+            .offset(delete_older_than_latest_downloads)
+        )
+        return scope.select(media_download_ids=set(s.scalars(older_download_ids)))
+
+    if delete_older_than == "days":
+        if delete_older_than_days is None or delete_older_than_days <= 0:
+            raise HTTPException(status_code=422, detail="Specify a positive number of days")
+        cutoff = datetime.now(timezone.utc) - timedelta(days=delete_older_than_days)
+        older_episode_ids = select(Episode.id).where(
+            *published_episodes,
+            published_at < cutoff,
+        )
+        return scope.select(episode_ids=set(s.scalars(older_episode_ids)))
+
+    raise HTTPException(status_code=422, detail="Invalid Delete older than option")
+
+
 def request_show_download_delete(
         s: Session,
         show_slug: str,
         local_media_profile_id: int | None,
+        *,
+        delete_older_than: str = "all",
+        delete_older_than_days: int | None = None,
+        delete_older_than_latest_downloads: int | None = None,
 ) -> dict[str, bool | int | str]:
     """Disable affected profiles and queue deletion in the same durable transaction."""
     show, scope = _resolve_show_download_maintenance_scope(
         s,
         show_slug,
         local_media_profile_id,
+    )
+    scope = _select_show_downloads_older_than(
+        s,
+        scope,
+        delete_older_than=delete_older_than,
+        delete_older_than_days=delete_older_than_days,
+        delete_older_than_latest_downloads=delete_older_than_latest_downloads,
     )
 
     # Disable before the operation can be dispatched. The router commits these
@@ -318,6 +514,10 @@ def request_show_download_delete(
             local_media_profile_id=local_media_profile_id,
             selected_profile_count=scope.local_media_profile_count,
             disabled_profile_count=disabled_profile_count,
+            selected_media_download_ids=(
+                tuple(download.id for download in scope.downloads)
+                if delete_older_than != "all" else None
+            ),
         ),
     )
     return {
@@ -330,12 +530,23 @@ def request_show_episode_redownload(
         s: Session,
         show_slug: str,
         local_media_profile_id: int | None,
+        *,
+        delete_older_than: str = "all",
+        delete_older_than_days: int | None = None,
+        delete_older_than_latest_downloads: int | None = None,
 ) -> dict[str, bool | int | str]:
     """Queue replacement downloads for existing show artifacts in the selected profile scope."""
     show, scope = _resolve_show_download_maintenance_scope(
         s,
         show_slug,
         local_media_profile_id,
+    )
+    scope = _select_show_downloads_older_than(
+        s,
+        scope,
+        delete_older_than=delete_older_than,
+        delete_older_than_days=delete_older_than_days,
+        delete_older_than_latest_downloads=delete_older_than_latest_downloads,
     )
     scope = scope.select(artifact_statuses=(
         MediaDownloadArtifactStatus.AVAILABLE.value,
