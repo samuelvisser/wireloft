@@ -1,5 +1,10 @@
 import {Controller, UseFormReturn} from 'react-hook-form'
 
+import {defaultSubtitleModeForProfile, type LocalMediaProfileType} from '../../types/local_media_profile'
+import type {LocalMediaProfileSubtitleMode} from '../../types/schemas/local_media_profile_base'
+import ShowLocalMediaProfileScopeField from './ShowLocalMediaProfileScopeField'
+import {useSubtitleModeDefaults} from './useSubtitleModeDefaults'
+
 import {useSettings} from '../../lib/settings'
 import ReadMore from '../../utils/ReadMore'
 import {createSelectRegistry} from '../../utils/selectRegistry'
@@ -19,8 +24,15 @@ const METADATA_MODE_LABELS = {
     embed_and_nfo: 'Both embed and download',
 } as const
 
-export default function LocalMediaProfileCommonFields({form}: { form: UseFormReturn<any> }) {
+export default function LocalMediaProfileCommonFields({
+    form, mode, isCreating,
+}: {
+    form: UseFormReturn<any>
+    mode: LocalMediaProfileType
+    isCreating: boolean
+}) {
     const {control, register, formState: {errors}} = form
+    const {onSubtitleModeChange, onScopeChange} = useSubtitleModeDefaults(form, mode, isCreating)
     const {data: settings} = useSettings()
     const systemDownloadModeLabel = !settings
         ? 'Loading system setting…'
@@ -54,6 +66,13 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
         embed_and_nfo: {label: 'Both embed and download'},
     })
 
+    const subtitleModeReg = createSelectRegistry('LocalMediaProfileSubtitleMode', {
+        no_subtitles: {label: 'No subtitles'},
+        embed: {label: 'Embed in media'},
+        sidecar: {label: 'Download besides media'},
+        embed_and_sidecar: {label: 'Both embed and download'},
+    })
+
     return (
         <>
             {errors.root && (
@@ -84,6 +103,14 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                     </div>
                 )}
             </div>
+
+            {mode === 'show' && (
+                <ShowLocalMediaProfileScopeField
+                    form={form}
+                    onScopeChange={onScopeChange}
+                    isCreating={isCreating}
+                />
+            )}
 
             <div className="form-row">
                 <label htmlFor="local-media-download-mode">Download behavior</label>
@@ -190,6 +217,46 @@ export default function LocalMediaProfileCommonFields({form}: { form: UseFormRet
                         <p><strong>Download as NFO</strong> writes the same metadata in a same-basename NFO file beside the media.</p>
                         <p><strong>Both embed and download</strong> does both.</p>
                         <p>HLS bundles cannot contain embedded file metadata, so only the NFO part applies when selected.</p>
+                    </ReadMore>
+                </div>
+            </div>
+
+            <div className="form-row">
+                <label htmlFor="local-media-subtitle-mode">Subtitle behavior</label>
+                <Controller
+                    control={control}
+                    name="subtitleMode"
+                    render={({field}) => (
+                        <SimpleSelect
+                            inputId="local-media-subtitle-mode"
+                            registry={subtitleModeReg}
+                            value={field.value ?? (isCreating
+                                ? defaultSubtitleModeForProfile(mode, form.getValues('showScope'))
+                                : undefined)}
+                            onChange={(value) => {
+                                onSubtitleModeChange(value as LocalMediaProfileSubtitleMode)
+                                field.onChange(value)
+                            }}
+                            onBlur={field.onBlur}
+                            aria-invalid={!!errors.subtitleMode}
+                            aria-describedby={errors.subtitleMode ? 'local-media-subtitle-mode-errors' : 'local-media-subtitle-mode-help'}
+                        />
+                    )}
+                />
+                {errors.subtitleMode && (
+                    <div id="local-media-subtitle-mode-errors" className="error" role="alert" aria-live="polite">
+                        {String(errors.subtitleMode.message)}
+                    </div>
+                )}
+                <div className="help" id="local-media-subtitle-mode-help">
+                    <ReadMore summary="Choose how subtitles provided by The Daily Wire are stored with this media.">
+                        <p><strong>No subtitles</strong> skips subtitle acquisition.</p>
+                        <p><strong>Embed in media</strong> adds available subtitles as selectable tracks in supported containers.</p>
+                        <p><strong>Download besides media</strong> saves language-specific SRT files, such as <code>Movie.en.srt</code>, beside the downloaded media for Plex and other media servers.</p>
+                        <p><strong>Both embed and download</strong> does both.</p>
+                        <p>New Movie profiles and Show profiles available for Series or Podcasts and Series default to sidecars. New Podcast-only profiles default to no subtitles. Changing availability on an existing profile never changes its saved subtitle choice.</p>
+                        {isCreating && <p>While creating a new profile, changing type or availability updates the suggested default until you select a subtitle option yourself.</p>}
+                        <p>Embedding requires a supported media container, not a raw HLS bundle.</p>
                     </ReadMore>
                 </div>
             </div>

@@ -31,6 +31,21 @@ class VideoRendition:
 
 
 @dataclass(frozen=True)
+class SubtitleRendition:
+    """A separate subtitle rendition advertised by an HLS master playlist."""
+    url: str
+    language: str
+    name: str
+    forced: bool = False
+    sdh: bool = False
+
+    @property
+    def target_suffix(self) -> str:
+        qualifier = ".forced" if self.forced else ".sdh" if self.sdh else ""
+        return f".{self.language}{qualifier}.srt"
+
+
+@dataclass(frozen=True)
 class MediaInfo:
     """Result of probing a media URL."""
 
@@ -38,6 +53,7 @@ class MediaInfo:
     kind: MediaKind
     # Present for HLS_MASTER, ordered as listed in the playlist
     renditions: tuple[VideoRendition, ...] = ()
+    subtitles: tuple[SubtitleRendition, ...] = ()
     # Present for DIRECT_FILE when the server reports them
     content_type: Optional[str] = None
     content_length: Optional[int] = None

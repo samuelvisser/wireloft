@@ -7,6 +7,7 @@ import {
     LocalMediaProfileSchemaRequest,
     LocalMediaProfileSchemaResponse,
     LocalMediaProfileUpdateBaseSchema,
+    LocalMediaProfileSubtitleModeSchema,
 } from './local_media_profile_base'
 
 
@@ -19,15 +20,17 @@ const MovieLocalMediaProfileBaseSchema = LocalMediaProfileSchemaRequest.extend({
     preferredFormat: z.enum(MoviePreferredFormatReg.values).default('format_1080p'),
 })
 
-export const MovieLocalMediaProfileCreateSchema = MovieLocalMediaProfileBaseSchema.extend(
-    LocalMediaProfileCreateBaseSchema.shape,
-)
+export const MovieLocalMediaProfileCreateSchema = MovieLocalMediaProfileBaseSchema.extend({
+    ...LocalMediaProfileCreateBaseSchema.shape,
+    subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
+})
 export type MovieLocalMediaProfileCreateIn = z.input<typeof MovieLocalMediaProfileCreateSchema>
 export type MovieLocalMediaProfileCreateOut = z.output<typeof MovieLocalMediaProfileCreateSchema>
 
-export const MovieLocalMediaProfileUpdateSchema = MovieLocalMediaProfileBaseSchema.extend(
-    LocalMediaProfileUpdateBaseSchema.shape,
-)
+export const MovieLocalMediaProfileUpdateSchema = MovieLocalMediaProfileBaseSchema.extend({
+    ...LocalMediaProfileUpdateBaseSchema.shape,
+    subtitleMode: LocalMediaProfileSubtitleModeSchema.default('sidecar'),
+})
 export type MovieLocalMediaProfileUpdateIn = z.input<typeof MovieLocalMediaProfileUpdateSchema>
 export type MovieLocalMediaProfileUpdateOut = z.output<typeof MovieLocalMediaProfileUpdateSchema>
 

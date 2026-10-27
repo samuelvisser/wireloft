@@ -8,7 +8,7 @@ from backend.api.models.local_media_profile import (
     LocalMediaProfileAPIBaseIn,
     LocalMediaProfileAPIBaseOut,
 )
-from backend.types.local_media_profile_types import LocalMediaProfileType, PreferredFormat
+from backend.types.local_media_profile_types import LocalMediaProfileSubtitleMode, LocalMediaProfileType, PreferredFormat
 from backend.utils.output_template import (
     MOVIE_OUTPUT_TEMPLATE_FIELDS,
     MOVIE_OUTPUT_TEMPLATE_METADATA_SCOPES,
@@ -26,6 +26,7 @@ _MOVIE_EXTRA_COLLISION_MESSAGE = (
 
 class _MovieLocalMediaProfileAPIBaseIn(LocalMediaProfileAPIBaseIn):
     type: Literal["movie"] = LocalMediaProfileType.MOVIE.value
+    subtitle_mode: LocalMediaProfileSubtitleMode = LocalMediaProfileSubtitleMode.SIDECAR
 
     @field_validator("preferred_format")
     @classmethod
