@@ -138,6 +138,7 @@ def prepare_cached_mp4(source_url: str, *, episode_uuid: str) -> Path:
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.PIPE,
                     text=True,
+                    errors="replace",
                     check=False,
                 )
             except FileNotFoundError as exc:

@@ -269,6 +269,11 @@ def delete_unavailable_media_download(
             "The download has an available artifact and cannot be deleted",
         )
 
+    if isinstance(download, EpisodeMediaDownload) and download.media is not None:
+        # Deleting a record is explicit user intent. Without this marker the
+        # next Download Profile run would recreate the record and download the
+        # episode again, so a failing download could never be removed.
+        download.media.set_download_dismissed(download.local_media_profile_id, True)
     session.delete(download)
     session.flush()
 

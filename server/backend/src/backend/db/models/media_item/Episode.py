@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, TYPE_CHECKING
 
 from .MediaItemBase import MediaItemBase
@@ -25,6 +25,9 @@ from backend.utils.episode_slug import is_no_show_today_slug
 
 if TYPE_CHECKING:
     from backend.db.models import Show, Season
+
+# A Download Profile does not recreate a download record the user deleted.
+DOWNLOAD_DISMISSED_META_PREFIX = "download_dismissed.local_media_profile."
 
 
 class Episode(
@@ -154,6 +157,17 @@ class Episode(
             self.publish_status == EpisodePublishStatus.NO_USABLE_MEDIA.value
             and self.get_meta("no_usable_media.reason") == "not_found"
         )
+
+    def download_dismissed(self, local_media_profile_id: int) -> bool:
+        """Whether the user deleted this episode's download record for the Local Media Profile."""
+        return self.get_meta(f"{DOWNLOAD_DISMISSED_META_PREFIX}{local_media_profile_id}") is not None
+
+    def set_download_dismissed(self, local_media_profile_id: int, dismissed: bool) -> None:
+        key = f"{DOWNLOAD_DISMISSED_META_PREFIX}{local_media_profile_id}"
+        if dismissed:
+            self.set_meta(key, datetime.now(timezone.utc).isoformat())
+        elif self.get_meta(key) is not None:
+            self.set_meta(key, None)
 
     def __repr__(self) -> str:
         return f"<Episode(id={self.id}, slug={self.slug}, show_id={self.show_id}, title={self.title}, created_at={self.created_at}, updated_at={self.updated_at})>"

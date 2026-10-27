@@ -84,6 +84,8 @@ async def run_download_profile_worker(
             profile,
             only_episode=only_episode,
         ):
+            if episode.download_dismissed(profile.local_media_profile_id):
+                continue
             ready_at = episode_download_delay_ready_at(episode)
             delayed = (
                 ready_at is not None

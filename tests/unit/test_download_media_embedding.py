@@ -53,3 +53,14 @@ def test_embedded_artwork_survives_the_actual_muxer(tmp_path: Path, audio_only: 
         assert details["format"]["tags"]["show"] == "Example Show"
         assert details["format"]["tags"]["season_number"] == "2"
     assert not Path(str(media) + ".metadata.part").exists()
+
+
+def test_embedding_tolerates_ffmpeg_output_cut_mid_character(tmp_path: Path):
+    # FFmpeg's log splits long metadata lines at a fixed byte length, which can
+    # cut a multi-byte character in half. That must not fail the download.
+    media = tmp_path / "episode.m4a"
+    ffmpeg("-f", "lavfi", "-i", "sine=frequency=440", "-t", "0.2", "-c:a", "aac",
+           "-metadata", "description=" + "x" * 14 + "\u2019" * 800, str(media))
+
+    embed_media(str(media), metadata={"title": "Example"}, should_cancel=lambda: False)
+    embed_media(str(media), metadata={"title": "Example 2"})
