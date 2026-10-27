@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -24,7 +25,10 @@ from config import get_settings
 from dailywire_api.pacing import RequestCancelled, request_context
 from dailywire_downloader import DownloadCancelled
 from dailywire_downloader.capacity import resources
-from dailywire_downloader.coordinator import execute_download_plan
+from dailywire_downloader.coordinator import DownloadExecution, execute_download_plan
+from dailywire_downloader.storage.replacement import (
+    PreviousDownload, capture_previous_download, retire_superseded_files,
+)
 from dailywire_downloader.lifecycle import (
     DownloadSnapshot,
     DownloadTracker,
@@ -33,10 +37,10 @@ from dailywire_downloader.lifecycle import (
 from dailywire_downloader.transfer_context import transfer_context
 from task_manager.scheduler.operation_context import current_operation_ids
 from task_manager.scheduler.results import TaskResult
-from task_manager.tasks.media_download_operations import (
-    on_media_download_transfer_complete,
-    prepare_media_download_artifact,
-)
+from task_manager.tasks.media_download_operations import on_media_download_transfer_complete
+
+
+logger = logging.getLogger(__name__)
 
 
 class DownloadProgressReporter:
@@ -82,6 +86,15 @@ class DownloadProgressReporter:
             self.progress.set(percent, message, meta=metadata)
 
 
+def _retire_previous_after_commit(previous: PreviousDownload, execution: DownloadExecution) -> None:
+    """Remove superseded paths only once the new download is fully committed."""
+    retained = frozenset((
+        execution.result.path,
+        *(asset.path for asset in execution.assets),
+    ))
+    retire_superseded_files(previous, retained_paths=retained)
+
+
 def run_download(
     session: Session, *, media_download_id: int, is_redownload: bool = False,
     prepare_existing_artifact: bool = False, progress=None,
@@ -105,17 +118,36 @@ def run_download(
     reporter = DownloadProgressReporter(progress)
     tracker = DownloadTracker(reporter, progress if callable(progress) else None)
     execution = None
+    previous: PreviousDownload | None = None
+    preserving_artifact = False
     committed = False
     resources.media.configure(get_settings().download_settings.max_concurrent_downloads)
     try:
         with tracker:
-            if prepare_existing_artifact:
+            if prepare_existing_artifact or download.artifact_status != MediaDownloadArtifactStatus.ABSENT.value:
                 tracker.ensure_active()
                 tracker.preparing("prepare_existing_artifact")
                 current = session.get(MediaDownloadBase, media_download_id)
                 if current is None:
                     raise DownloadCancelled("Media download was deleted before replacement preparation")
-                prepare_media_download_artifact(session, current)
+                preserving_artifact = (
+                    current.artifact_status != MediaDownloadArtifactStatus.ABSENT.value
+                )
+                if preserving_artifact:
+                    previous = capture_previous_download(
+                        current.file_path,
+                        size_bytes=current.artifact_size_bytes,
+                        fingerprint=current.artifact_fingerprint,
+                        assets=tuple(
+                            (asset.path, asset.size_bytes, asset.fingerprint)
+                            for asset in current.assets
+                        ),
+                    )
+                # An attempt owns none of the previous output paths until a new
+                # artifact is committed. Never delete or reset the old artifact
+                # merely because retry work is starting, including Missing or
+                # Corrupted records that may still have a physical file.
+                current.automatic_retry_suppressed = False
                 session.commit()
                 session.expire_all()
 
@@ -129,13 +161,17 @@ def run_download(
                 current = session.get(MediaDownloadBase, media_download_id)
                 if current is None:
                     raise DownloadCancelled("Download was deleted before reserving its destination")
-                current.file_path = destination
-                session.commit()
+                if not preserving_artifact:
+                    current.file_path = destination
+                    session.commit()
 
             execution = execute_download_plan(
                 plan, tracker=tracker, resources=resources,
                 on_destination_reserved=reserved,
                 on_media_transfer_complete=on_media_download_transfer_complete,
+                previous=previous,
+                media_download_id=media_download_id,
+                downloaded_publish_status=publish_status,
             )
             tracker.ensure_active()
             # Stop concurrent reporting before entering the final transaction;
@@ -187,6 +223,20 @@ def run_download(
                 progress.complete_transactionally(session, result)
             session.commit()
             committed = True
+            try:
+                if execution.replacement_journal is not None:
+                    # All final names were replaced before the database commit.
+                    # Startup recovery handles a crash or failure before cleanup.
+                    execution.replacement_journal.cleanup_committed()
+                elif previous is not None:
+                    # Changed output paths and local HLS bundles cannot be
+                    # replaced as a single file; publish first, retire second.
+                    _retire_previous_after_commit(previous, execution)
+            except Exception:
+                logger.exception(
+                    "Completed download %s but could not clean replacement files",
+                    media_download_id,
+                )
         return result
     except BaseException as exc:
         tracker.cancel(user_requested=isinstance(exc, (DownloadCancelled, RequestCancelled)))

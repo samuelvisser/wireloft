@@ -44,12 +44,17 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
     calls: list[str] = []
 
     monkeypatch.setattr(
+        backend_app,
+        "recover_abandoned_download_replacements",
+        lambda _root: calls.append("replacements") or 1,
+    )
+    monkeypatch.setattr(
         download_paths,
         "cleanup_abandoned_download_path_reservations",
         lambda _root: calls.append("reservations") or 1,
     )
     monkeypatch.setattr(
-        download_paths,
+        backend_app,
         "cleanup_abandoned_temporary_downloads",
         lambda _temporary, _downloads: calls.append("temporary") or 2,
     )
@@ -67,7 +72,7 @@ def test_download_filesystem_recovery_cleans_expired_rss_cache(monkeypatch, tmp_
 
     backend_app._recover_download_filesystem(download_settings, pause)
 
-    assert calls == ["reservations", "temporary", "rss-cache", "release"]
+    assert calls == ["replacements", "reservations", "temporary", "rss-cache", "release"]
 
 
 def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatch):

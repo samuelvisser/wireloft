@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from backend.services.download_recovery import cleanup_abandoned_temporary_downloads
+from backend.services.download_recovery import (
+    cleanup_abandoned_temporary_downloads,
+    recover_abandoned_download_replacements,
+)
 
 import logging
 import threading
@@ -49,6 +52,11 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
 
     try:
         logger.info("Starting background download filesystem recovery")
+        # Reconcile durable replacement journals while the scheduled-work
+        # pause is still held and before cleaning any interrupted workspaces.
+        replacement_count = recover_abandoned_download_replacements(
+            download_settings.download_root
+        )
         reservation_count = cleanup_abandoned_download_path_reservations(
             download_settings.download_root
         )
@@ -58,7 +66,8 @@ def _recover_download_filesystem(download_settings, scheduled_work_pause) -> Non
         )
         rss_cache_count = cleanup_expired_rss_cache()
         logger.info(
-            "Download filesystem recovery complete: cleaned %s stale path claim(s), %s temporary workspace(s), and %s expired RSS cache file(s)",
+            "Download filesystem recovery complete: reconciled %s replacement(s), cleaned %s stale path claim(s), %s temporary workspace(s), and %s expired RSS cache file(s)",
+            replacement_count,
             reservation_count,
             temporary_count,
             rss_cache_count,

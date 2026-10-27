@@ -23,6 +23,9 @@ from .storage.artifacts import remove_download_artifacts
 from .storage.copying import copy_file
 from .storage.identity import ArtifactIdentity, inspect_artifact
 from .storage.publication import PublicationJournal
+from .storage.replacement import (
+    PreviousDownload, ReplacementJournal, ReplacementSidecar, publish_replacement,
+)
 
 
 @dataclass(frozen=True)
@@ -40,12 +43,18 @@ class DownloadExecution:
     identity: ArtifactIdentity
     assets: tuple[PublishedSidecar, ...]
     workspace: TemporaryDownloadWorkspace
-    journal: PublicationJournal
+    journal: PublicationJournal | None
+    replacement_journal: ReplacementJournal | None = None
     preserve_workspace: bool = False
 
     def rollback(self) -> None:
+        # Once an in-place rename occurs its journal owns recovery. Removing the
+        # published media would leave a missing download and lose both versions.
+        if self.replacement_journal is not None:
+            return
         try:
-            self.journal.rollback()
+            if self.journal is not None:
+                self.journal.rollback()
             try:
                 current = inspect_artifact(self.result.path)
             except FileNotFoundError:
@@ -116,6 +125,9 @@ def execute_download_plan(
     resources: DownloadResources = default_resources,
     on_destination_reserved: Callable[[str], None] | None = None,
     on_media_transfer_complete: Callable[[], None] | None = None,
+    previous: PreviousDownload | None = None,
+    media_download_id: int | None = None,
+    downloaded_publish_status: str | None = None,
 ) -> DownloadExecution:
     """Keep all optional behavior, resource ownership and publication here.
 
@@ -124,17 +136,33 @@ def execute_download_plan(
     failed database commit must call rollback before cleanup_workspace.
     """
     tracker.install(plan)
-    workspace = create_temporary_download_workspace(plan.temporary_root, plan.requested_destination)
+    in_place = (
+        previous is not None
+        and str(previous.media.path) == plan.requested_destination
+        and not plan.source.hls_bundle
+    )
+    if in_place and media_download_id is None:
+        raise ValueError("In-place replacement requires the media download ID")
+    # Preserve the configured direct-mode processing filesystem while keeping
+    # the existing destination untouched. Its private workspace is cleaned by
+    # the established startup filesystem reconciler if the process crashes.
+    workspace_root = (
+        Path(plan.requested_destination).parent
+        if in_place and plan.download_mode == "direct"
+        else plan.temporary_root
+    )
+    workspace = create_temporary_download_workspace(workspace_root, plan.requested_destination)
     reservation = None
     assets = None
     destination: Path | None = None
     journal: PublicationJournal | None = None
+    replacement_journal: ReplacementJournal | None = None
     published: list[PublishedSidecar] = []
     successful = False
     owned_media: ArtifactIdentity | None = None
     transfer_path: Path | None = None
     try:
-        if plan.download_mode == "direct":
+        if plan.download_mode == "direct" and not in_place:
             reservation = reserve_unique_download_path(plan.requested_destination)
             media_path = reservation.path
             destination = media_path
@@ -201,31 +229,68 @@ def execute_download_plan(
             raise DownloadError("Auxiliary assets would collide with another planned output")
 
         with _local_activity(tracker, resources, "publish"):
-            if plan.download_mode == "temporary":
-                media_size = media_path.stat().st_size
-                total = media_size + (_tree_size(hls_asset_root(media_path)) if plan.source.hls_bundle else 0)
-                destination = publish_temporary_download(
-                    media_path, plan.requested_destination, should_cancel=tracker.is_canceled,
-                    progress=lambda value: tracker.progress("publish", DownloadProgress(value.bytes_downloaded, total)),
+            if in_place:
+                assert previous is not None and media_download_id is not None
+                tracker.ensure_active()
+                replacement_journal, _replacement_identity, replacement_assets = publish_replacement(
+                    media_download_id=media_download_id,
+                    previous=previous,
+                    media_source=media_path,
+                    sidecars=tuple(
+                        ReplacementSidecar(asset.spec.id, asset.spec.kind, asset.path, asset.target_suffix)
+                        for asset in acquired if asset.spec.publish
+                    ),
+                    downloaded_bytes=result.bytes_downloaded,
+                    format_downloaded=plan.source.format_downloaded,
+                    downloaded_publish_status=downloaded_publish_status,
+                    should_cancel=tracker.is_canceled,
+                    progress=lambda value: tracker.progress("publish", value),
                 )
-                # Record ownership before any subsequent HLS publication can
-                # fail, including when the main file crossed filesystems.
+                destination = previous.media.path
+                published.extend(
+                    PublishedSidecar(sidecar.asset_key, sidecar.kind, str(path), identity)
+                    for sidecar, path, identity in replacement_assets
+                )
+            else:
+                if plan.download_mode == "temporary":
+                    media_size = media_path.stat().st_size
+                    total = media_size + (_tree_size(hls_asset_root(media_path)) if plan.source.hls_bundle else 0)
+                    destination = publish_temporary_download(
+                        media_path, plan.requested_destination, should_cancel=tracker.is_canceled,
+                        progress=lambda value: tracker.progress("publish", DownloadProgress(value.bytes_downloaded, total)),
+                    )
+                    # Record ownership before any subsequent HLS publication can
+                    # fail, including when the main file crossed filesystems.
+                    owned_media = inspect_artifact(destination)
+                    if plan.source.hls_bundle:
+                        _publish_hls_assets(hls_asset_root(media_path), hls_asset_root(destination), tracker=tracker, transferred=media_size, total=total)
+                assert destination is not None
                 owned_media = inspect_artifact(destination)
-                if plan.source.hls_bundle:
-                    _publish_hls_assets(hls_asset_root(media_path), hls_asset_root(destination), tracker=tracker, transferred=media_size, total=total)
-            assert destination is not None
-            owned_media = inspect_artifact(destination)
-            journal = PublicationJournal(workspace.workspace, destination)
-        for asset in acquired:
-            if not asset.spec.publish:
-                continue
-            activity = f"publish:{asset.spec.id}"
-            with tracker.activity(activity):
-                path = journal.publish(
-                    asset.path, asset.target_suffix, should_cancel=tracker.is_canceled,
-                    progress=lambda value, activity=activity: tracker.progress(activity, value),
-                )
-                published.append(PublishedSidecar(asset.spec.id, asset.spec.kind, str(path), inspect_artifact(path)))
+                journal = PublicationJournal(workspace.workspace, destination)
+        if in_place:
+            # Publication staged and renamed all sidecars before the media.
+            # Report their completed lifecycle stages after the media publish
+            # stage, preserving the tracker dependency graph.
+            for asset in published:
+                activity = f"publish:{asset.id}"
+                with tracker.activity(activity):
+                    tracker.progress(
+                        activity, DownloadProgress(
+                            asset.identity.size_bytes, asset.identity.size_bytes,
+                        ),
+                    )
+        else:
+            assert journal is not None
+            for asset in acquired:
+                if not asset.spec.publish:
+                    continue
+                activity = f"publish:{asset.spec.id}"
+                with tracker.activity(activity):
+                    path = journal.publish(
+                        asset.path, asset.target_suffix, should_cancel=tracker.is_canceled,
+                        progress=lambda value, activity=activity: tracker.progress(activity, value),
+                    )
+                    published.append(PublishedSidecar(asset.spec.id, asset.spec.kind, str(path), inspect_artifact(path)))
         with tracker.activity("verify"):
             identity = inspect_artifact(destination)
             if identity.size_bytes <= 0:
@@ -238,6 +303,7 @@ def execute_download_plan(
         return DownloadExecution(
             DownloadResult(str(destination), result.bytes_downloaded, result.segments_downloaded),
             plan.source.format_downloaded, identity, tuple(published), workspace, journal,
+            replacement_journal=replacement_journal,
         )
     except BaseException as exc:
         tracker.cancel(user_requested=isinstance(exc, DownloadCancelled) and tracker.failure is None)
@@ -252,7 +318,7 @@ def execute_download_plan(
         if not successful:
             if journal is not None:
                 journal.rollback()
-            if destination is not None and owned_media is not None:
+            if not in_place and destination is not None and owned_media is not None:
                 try:
                     current = inspect_artifact(destination)
                 except FileNotFoundError:
