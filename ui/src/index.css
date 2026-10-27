@@ -751,6 +751,7 @@ select,
 }
 .wizard-sticky-region { padding-bottom: 24px; }
 .wizard-main { min-width: 0; }
+.wizard-sticky-region > .wizard-main { display: grid; gap: 16px; }
 .form-fluid { max-width: none; }
 .wizard-aside { position: sticky; top: 8px; }
 @media (min-width: 1060px) {
