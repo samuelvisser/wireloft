@@ -99,6 +99,7 @@ def remux_to_mp4(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                errors="replace",
             )
         )
         if result.returncode != 0:
@@ -154,6 +155,7 @@ def convert_video_to_m4a(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                errors="replace",
             )
         )
         if result.returncode != 0:
@@ -230,7 +232,7 @@ def embed_media(
             command += ["-movflags", flags]
         command += ["-f", muxer, part_path]
         result = (_run_cancellable(command, should_cancel) if should_cancel is not None
-                  else subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+                  else subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace"))
         if result.returncode != 0:
             raise DownloadError(f"ffmpeg embedding failed (exit {result.returncode}): {_tail_lines(result.stdout)}")
         os.replace(part_path, media_path)
@@ -245,6 +247,7 @@ def _run_cancellable(command: list[str], should_cancel: CancelCheck):
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
+        errors="replace",
     )
     try:
         while True:

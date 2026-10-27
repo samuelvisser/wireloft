@@ -1008,6 +1008,35 @@ def test_run_worker_creates_system_media_download_operation(db_session, monkeypa
     dispatched.assert_called_once()
 
 
+def test_run_worker_does_not_recreate_a_deleted_download_record(db_session, monkeypatch):
+    from backend.db.models.media_download import EpisodeMediaDownload
+    from backend.services.download_actions import delete_unavailable_media_download
+    from task_manager.tasks.workers.download_profile_worker import service
+    from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
+
+    show = _make_show(db_session)
+    season = _make_season(db_session, show)
+    lmp = _make_local_media_profile(db_session)
+    episode = _make_episode(db_session, show, season, slug="ep", ep_id="ep.1", status="published_final", published_at=_now(), index=1)
+    profile = _make_podcast_profile(db_session, show, lmp)
+    db_session.flush()
+    action = ensure_episode_download(db_session, profile, episode)
+    db_session.get(EpisodeMediaDownload, action.media_download_id).file_path = "/definitely/not/present/ep.m4a"
+    db_session.commit()
+
+    delete_unavailable_media_download(db_session, action.media_download_id)
+    db_session.commit()
+
+    created = Mock(return_value=SimpleNamespace(id="op-1"))
+    monkeypatch.setattr(service, "create_media_download_operation", created)
+    monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
+
+    asyncio.run(service.run_download_profile_worker(db_session, resource_id=episode.id, resource_type="episode"))
+
+    created.assert_not_called()
+    assert db_session.query(EpisodeMediaDownload).filter_by(media_item_id=episode.id).count() == 0
+
+
 def test_run_worker_no_enabled_profiles_is_a_noop(db_session, monkeypatch):
     from task_manager.tasks.workers.download_profile_worker import service
 

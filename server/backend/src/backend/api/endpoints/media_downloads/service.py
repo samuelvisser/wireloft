@@ -550,6 +550,8 @@ def create_episode_download(s: Session, episode_slug: str, body: EpisodeDownload
         and episode.publish_status == EpisodePublishStatus.PUBLISHED_FINAL
         and not episode_download_delay_passed(episode)
     )
+    # A manual download undoes an earlier deletion of this record.
+    episode.set_download_dismissed(profile.id, False)
     existing: Optional[EpisodeMediaDownload] = (
         s.query(EpisodeMediaDownload)
         .filter(
