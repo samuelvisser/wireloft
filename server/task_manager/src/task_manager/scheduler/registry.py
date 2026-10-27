@@ -26,7 +26,7 @@ class TriggerMeta:
     enabled: bool = True  # Whether this trigger should be registered
     event_name: Optional[str] = None  # For event triggers
     resource_type: Optional[str] = None  # Fixed resource type, or event payload when None
-    resource_id: Optional[int] = None  # Resource ID (0 = global, None = passed via event)
+    resource_id: Optional[int] = None  # Cron: None is unscoped; event ID is supplied at runtime
     coalesce: bool = True  # Whether to coalesce multiple pending jobs
     minimum_interval_ms: Optional[int] = None  # Optional policy minimum for this cron trigger
 
@@ -127,7 +127,7 @@ def task(
 def on_cron(
     cron: str,
     resource_type: str = "show",
-    resource_id: int = 0,
+    resource_id: Optional[int] = 0,
     coalesce: bool = True,
     enabled: bool = True,
     minimum_interval_ms: Optional[int] = None,
@@ -137,7 +137,7 @@ def on_cron(
     Args:
         cron: Cron expression (e.g., "*/30 * * * *") - must be actual value, not a settings reference
         resource_type: Resource type to run on
-        resource_id: Resource ID to run on
+        resource_id: Resource ID to run on; None for unscoped cron tasks
         coalesce: Whether to coalesce multiple pending jobs
         enabled: Whether this cron trigger should be registered
         minimum_interval_ms: Optional minimum interval enforced before registration

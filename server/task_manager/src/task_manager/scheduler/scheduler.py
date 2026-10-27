@@ -478,7 +478,7 @@ def cancel_pending_operation_jobs(
     return removed
 
 
-def schedule_retry(*, def_key: str, resource_type: str, resource_id: int, run_id: int, run_at: datetime) -> str:
+def schedule_retry(*, def_key: str, resource_type: str, resource_id: int | None, run_id: int, run_at: datetime) -> str:
     sch = _scheduler_for_task(def_key)
     run_at = utc_datetime(run_at)
     job = sch.add_job(

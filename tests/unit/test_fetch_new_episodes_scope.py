@@ -86,7 +86,7 @@ def test_global_scan_processes_every_show(monkeypatch, shows, show_id):
     fetch_show = AsyncMock(side_effect=[2, 1])
     monkeypatch.setattr(service, "_fetch_show", fetch_show)
 
-    # Exercise the real selector and service with the cron's exact resource ID;
+    # Exercise the real selector and service with both supported global scopes;
     # remote episode retrieval is intentionally isolated from this scope test.
     result = asyncio.run(service.run_fetch_new_episodes(session, show_id=show_id))
 

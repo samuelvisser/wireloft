@@ -11,7 +11,7 @@ def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -
         show = s.scalar(select(Show).where(Show.slug == show_slug))
         return [show] if show is not None else []
 
-    # Scheduled scans and Settings "Run now" use 0 for all shows.
+    # Keep supporting legacy zero-scoped calls; None is the preferred global scope.
     if show_id not in (None, 0):
         show = s.get(Show, show_id)
         return [show] if show is not None else []
