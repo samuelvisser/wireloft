@@ -181,7 +181,7 @@ def test_generic_endpoint_supports_movies_and_extras(examples, source, title):
 def test_index_diagnostics_are_preserved(examples):
     result = preview.get_local_media_profile_preview(examples.session, _body(
         output_template="/downloads/{{ show_title }}/{{ 'order' | custom_index }}-{{ 'missing' | custom_index }}.ext",
-        indexing_values=[{"key": "order"}],
+        indexing_values=[{"key": "order", "name": "Order"}],
     ))
     assert result.output.used_indexing_values == ["missing", "order"]
     assert result.output.missing_indexing_values == ["missing"]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import create_engine
@@ -69,13 +69,13 @@ def _add_episode(
         show=show,
         season=season,
         index=index,
-        episode_identifier=str(index),
+        episode_identifier=f"ep.{index}",
         slug=f"{show.slug}-episode-{index}",
         title=title or f"Episode {index}",
         duration=100.0,
         publish_status="published_final",
         sharing_url=f"https://example.test/{show.slug}/{index}",
-        published_date=datetime(2026, 9, index, 12, 0, 0),
+        published_date=datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc) + timedelta(days=index),
     )
     session.add(episode)
     session.flush()
@@ -229,7 +229,7 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
             title="Official Trailer",
             description=None,
             duration=120,
-            published_date=datetime(2024, 1, 3, 12, 0, 0),
+            published_date=datetime(2024, 1, 3, 12, 0, 0, tzinfo=timezone.utc),
         ),
         MovieExtra(
             uuid="alpha-interview",
@@ -239,7 +239,7 @@ def test_movie_sources_include_movies_and_every_extra_with_server_search(db_sess
             title="Cast Interview",
             description=None,
             duration=300,
-            published_date=datetime(2024, 1, 4, 12, 0, 0),
+            published_date=datetime(2024, 1, 4, 12, 0, 0, tzinfo=timezone.utc),
         ),
     ])
     db_session.add(movie)
@@ -298,7 +298,7 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
             title="Trump Gets It Right On Radical Islam",
             description=None,
             duration=120,
-            published_date=datetime(2024, 1, 3, 12, 0, 0),
+            published_date=datetime(2024, 1, 3, 12, 0, 0, tzinfo=timezone.utc),
         ),
         MovieExtra(
             uuid="radical-islam-march",
@@ -308,7 +308,7 @@ def test_movie_source_search_ranks_matching_extra_title_by_relevance(db_session)
             title="Radical Islam Is On The March",
             description=None,
             duration=300,
-            published_date=datetime(2024, 1, 4, 12, 0, 0),
+            published_date=datetime(2024, 1, 4, 12, 0, 0, tzinfo=timezone.utc),
         ),
     ])
     db_session.add(movie)

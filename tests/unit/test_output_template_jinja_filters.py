@@ -87,29 +87,35 @@ def test_invalid_regex_is_reported_as_template_error() -> None:
 def test_invalid_regex_replacement_is_reported_as_template_error() -> None:
     with pytest.raises(ValueError, match="Invalid regular expression replacement"):
         _render(
-            "/downloads/{{ title | regex_replace('(x)', '\\2') }}.ext",
+            "/downloads/{{ title | regex_replace('(x)', '\\\\2') }}.ext",
             "6x6",
         )
 
 
-def test_preview_returns_invalid_regex_as_field_validation_error() -> None:
-    from fastapi import HTTPException
+def test_preview_returns_invalid_regex_as_output_error() -> None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
 
-    from backend.api.endpoints.local_media_profiles.router import local_media_profile_template_preview
-    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+    import backend.db.models  # noqa: F401
+    from backend.api.endpoints.local_media_profiles.preview import get_local_media_profile_preview
+    from backend.api.models.local_media_profile_preview import LocalMediaProfilePreviewRequest
+    from backend.db import Base
 
-    body = LocalMediaProfileTemplatePreview(
+    body = LocalMediaProfilePreviewRequest(
         type="show",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ title | regex_search('(') }}.ext",
         values={"title": "Example"},
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        local_media_profile_template_preview(body)
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        result = get_local_media_profile_preview(session, body)
+    engine.dispose()
 
-    assert exc_info.value.status_code == 422
-    assert "Invalid regular expression" in exc_info.value.detail[0]["msg"]
+    assert result.output.output_path is None
+    assert "Invalid regular expression" in result.output.error
 
 
 def test_regex_filters_are_isolated_to_output_template_environment() -> None:

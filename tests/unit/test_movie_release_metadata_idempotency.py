@@ -11,7 +11,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
         create_movie_download,
         create_movie_extra_download,
     )
-    from backend.api.endpoints.movies import service as movie_service
+    from backend.services import movies as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import Movie, MovieLocalMediaProfile
@@ -45,7 +45,7 @@ def test_pending_movie_gets_one_lookup_after_tmdb_is_configured(tmp_path, monkey
         MovieLocalMediaProfile(
             slug=f"movies-{index}",
             name=f"Movies {index}",
-            output_template=f"/downloads/profile-{index}/{{title}}.ext",
+            output_template=f"/downloads/profile-{index}/{{{{ title }}}}.ext",
             preferred_format="format_1080p",
             append_media_type_to_filename=True,
         )

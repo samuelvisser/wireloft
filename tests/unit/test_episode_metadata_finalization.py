@@ -332,8 +332,8 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
         def flush(self):
             self.flushes += 1
 
-    def fake_create_operation(_session, **kwargs):
-        created.append(kwargs)
+    def fake_create_operation(_session, definition):
+        created.append({"kind": definition.kind, "targets": definition.targets()})
         return SimpleNamespace(id="operation-show-refresh")
 
     def fake_dispatch(_session, operation_id, slot_key):
@@ -365,49 +365,70 @@ def test_show_metadata_refresh_creates_one_operation_for_all_episode_targets(mon
 
 
 def test_startup_metadata_recovery_skips_live_and_active_operation_targets(monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    import backend.db.models  # noqa: F401
+    import task_manager.scheduler.db  # noqa: F401
+    from backend.db import Base
+    from backend.db.models import Episode, Season, Show
     from backend.types.episode_types import EpisodePublishStatus
+    from task_manager.scheduler.db import TaskOperation, TaskOperationTarget
+    from task_manager.scheduler.types import OperationSource, OperationStatus
     from task_manager.tasks.workers.refresh_episode_metadata import service
 
-    final_episode = SimpleNamespace(
-        id=31,
-        publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
-    )
-    final_with_operation = SimpleNamespace(
-        id=32,
-        publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
-    )
-    live_episode = SimpleNamespace(
-        id=33,
-        publish_status=EpisodePublishStatus.LIVE.value,
-    )
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        show = Show(
+            uuid="show-uuid", slug="show", title="Show", description=None,
+            sharing_url="https://example.test/show", membership_level="FREE",
+            type="podcast", episode_identifier="numbered",
+            author_name="Host", author_slug="host",
+        )
+        season = Season(show=show, index=1, slug="season-1", name="Season 1")
+        episodes = [
+            Episode(
+                uuid=f"episode-{index}", type="episode", show=show, season=season,
+                index=index, episode_identifier=f"ep.{index}", slug=f"episode-{index}",
+                title=f"Episode {index}", duration=60, publish_status=status,
+                sharing_url=f"https://example.test/episode-{index}",
+                metadata_is_final=False,
+            )
+            for index, status in (
+                (1, EpisodePublishStatus.PUBLISHED_FINAL.value),
+                (2, EpisodePublishStatus.PUBLISHED_FINAL.value),
+                (3, EpisodePublishStatus.LIVE.value),
+            )
+        ]
+        session.add_all([show, season, *episodes])
+        session.flush()
+        final_episode, final_with_operation, _live_episode = episodes
+        operation = TaskOperation(
+            id="active-refresh", kind="episode.refresh_metadata",
+            source=OperationSource.SYSTEM.value, resource_type="episode",
+            resource_id=final_with_operation.id, title="Refresh",
+            status=OperationStatus.RUNNING.value, progress=0, context={},
+        )
+        session.add_all([operation, TaskOperationTarget(
+            operation=operation, task_key="refresh_episode_metadata",
+            resource_type="episode", resource_id=final_with_operation.id,
+            slot_key=f"episode:{final_with_operation.id}", task_kwargs={"refresh": True},
+        )])
+        session.commit()
+        final_episode_id = final_episode.id
 
-    class ScalarResult:
-        def __iter__(self):
-            return iter((final_episode, final_with_operation, live_episode))
+        queued: list[dict] = []
+        monkeypatch.setattr(service, "trigger_now", lambda **kwargs: queued.append(kwargs))
 
-    class FakeSession:
-        def scalars(self, statement):
-            return ScalarResult()
+        service._queue_startup_recovery(session)
 
-    queued: list[dict] = []
-    monkeypatch.setattr(
-        service,
-        "_has_active_operation_target",
-        lambda _session, episode_id: episode_id == final_with_operation.id,
-    )
-    monkeypatch.setattr(
-        service,
-        "trigger_now",
-        lambda **kwargs: queued.append(kwargs),
-    )
-
-    service._queue_startup_recovery(FakeSession())
-
+    engine.dispose()
     assert queued == [
         {
             "def_key": "refresh_episode_metadata",
             "resource_type": "episode",
-            "resource_id": final_episode.id,
+            "resource_id": final_episode_id,
             "refresh": True,
         },
     ]

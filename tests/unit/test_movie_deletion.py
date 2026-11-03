@@ -1,3 +1,4 @@
+from conftest import available_artifact
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -84,7 +85,7 @@ def test_delete_movie_cascades_download_records_without_deleting_files(tmp_path)
                 type=MediaType.MOVIE.value,
                 media_item_id=movie.id,
                 local_media_profile_id=completed_profile.id,
-                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+                **available_artifact(),
                 file_path=str(completed_path),
                 downloaded_bytes=len(b"download data"),
                 format_downloaded="720p",

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def _episode(*, show, season, index: int, slug: str, published: datetime):
+def _episode(*, show, season, index: int, slug: str, published: datetime, number: int | None = None):
     from backend.db.models.media_item import Episode
     from backend.types.episode_types import EpisodePublishStatus
     from backend.types.media_types import MediaType
@@ -17,7 +17,7 @@ def _episode(*, show, season, index: int, slug: str, published: datetime):
         show_id=show.id,
         season_id=season.id,
         index=index,
-        episode_identifier=f"ep.{index}",
+        episode_identifier=f"ep.S{season.index:02d}E{number or index:02d}",
         dw_episode_number=str(index),
         slug=slug,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
@@ -75,21 +75,23 @@ def test_episode_view_page_is_bounded_and_season_filtered():
                 season=season_one,
                 index=1,
                 slug="season-1-episode-1",
-                published=datetime(2026, 1, 1),
-            ),
-            _episode(
-                show=show,
-                season=season_two,
-                index=1,
-                slug="season-2-episode-1",
-                published=datetime(2026, 2, 1),
+                published=datetime(2026, 1, 1, tzinfo=timezone.utc),
             ),
             _episode(
                 show=show,
                 season=season_two,
                 index=2,
+                number=1,
+                slug="season-2-episode-1",
+                published=datetime(2026, 2, 1, tzinfo=timezone.utc),
+            ),
+            _episode(
+                show=show,
+                season=season_two,
+                index=3,
+                number=2,
                 slug="season-2-episode-2",
-                published=datetime(2026, 2, 2),
+                published=datetime(2026, 2, 2, tzinfo=timezone.utc),
             ),
         ])
         session.commit()
@@ -171,25 +173,25 @@ def test_recently_indexed_episode_views_use_index_time_and_limit():
             season=season,
             index=1,
             slug="indexed-oldest",
-            published=datetime(2026, 4, 3),
+            published=datetime(2026, 4, 3, tzinfo=timezone.utc),
         )
         newest = _episode(
             show=show,
             season=season,
             index=2,
             slug="indexed-newest",
-            published=datetime(2026, 4, 1),
+            published=datetime(2026, 4, 1, tzinfo=timezone.utc),
         )
         middle = _episode(
             show=show,
             season=season,
             index=3,
             slug="indexed-middle",
-            published=datetime(2026, 4, 2),
+            published=datetime(2026, 4, 2, tzinfo=timezone.utc),
         )
-        oldest.created_at = datetime(2026, 4, 1, 10, 0)
-        newest.created_at = datetime(2026, 4, 3, 10, 0)
-        middle.created_at = datetime(2026, 4, 2, 10, 0)
+        oldest.created_at = datetime(2026, 4, 1, 10, 0, tzinfo=timezone.utc)
+        newest.created_at = datetime(2026, 4, 3, 10, 0, tzinfo=timezone.utc)
+        middle.created_at = datetime(2026, 4, 2, 10, 0, tzinfo=timezone.utc)
         session.add_all([oldest, newest, middle])
         session.commit()
 
@@ -241,15 +243,15 @@ def test_episode_cursor_survives_insert_and_delete_before_boundary():
 
         newest = _episode(
             show=show, season=season, index=3, slug="newest",
-            published=datetime(2026, 3, 3),
+            published=datetime(2026, 3, 3, tzinfo=timezone.utc),
         )
         boundary = _episode(
             show=show, season=season, index=2, slug="boundary",
-            published=datetime(2026, 3, 2),
+            published=datetime(2026, 3, 2, tzinfo=timezone.utc),
         )
         oldest = _episode(
             show=show, season=season, index=1, slug="oldest",
-            published=datetime(2026, 3, 1),
+            published=datetime(2026, 3, 1, tzinfo=timezone.utc),
         )
         session.add_all([newest, boundary, oldest])
         session.commit()
@@ -265,7 +267,7 @@ def test_episode_cursor_survives_insert_and_delete_before_boundary():
         session.delete(newest)
         session.add(_episode(
             show=show, season=season, index=4, slug="inserted-newest",
-            published=datetime(2026, 3, 4),
+            published=datetime(2026, 3, 4, tzinfo=timezone.utc),
         ))
         session.commit()
 
@@ -311,15 +313,15 @@ def test_episode_cursor_restarts_when_existing_sort_key_changes():
 
         first_episode = _episode(
             show=show, season=season, index=3, slug="first",
-            published=datetime(2026, 5, 3),
+            published=datetime(2026, 5, 3, tzinfo=timezone.utc),
         )
         boundary = _episode(
             show=show, season=season, index=2, slug="boundary-revision",
-            published=datetime(2026, 5, 2),
+            published=datetime(2026, 5, 2, tzinfo=timezone.utc),
         )
         last_episode = _episode(
             show=show, season=season, index=1, slug="last",
-            published=datetime(2026, 5, 1),
+            published=datetime(2026, 5, 1, tzinfo=timezone.utc),
         )
         session.add_all([first_episode, boundary, last_episode])
         session.commit()
@@ -331,7 +333,7 @@ def test_episode_cursor_restarts_when_existing_sort_key_changes():
 
         # Move the last episode ahead of the old cursor and explicitly advance
         # updated_at to model a metadata correction to an existing row.
-        last_episode.published_date = datetime(2026, 5, 4)
+        last_episode.published_date = datetime(2026, 5, 4, tzinfo=timezone.utc)
         last_episode.updated_at = last_episode.created_at + timedelta(minutes=1)
         session.commit()
 

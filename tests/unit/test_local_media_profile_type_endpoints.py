@@ -5,7 +5,7 @@ def _methods(router, path: str) -> set[str]:
     return {
         method
         for route in router.routes
-        if route.path == path
+        if getattr(route, "path", None) == path
         for method in route.methods
     }
 

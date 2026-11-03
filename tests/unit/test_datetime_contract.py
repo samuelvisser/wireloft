@@ -186,7 +186,8 @@ def test_scheduler_uses_application_timezone(monkeypatch) -> None:
     )
 
     assert str(cron_trigger.timezone) == "Europe/Amsterdam"
-    assert str(date_trigger.timezone) == "Europe/Amsterdam"
+    # APScheduler 3.11 dropped DateTrigger.timezone; the run date carries the zone.
+    assert str(date_trigger.run_date.tzinfo) == "Europe/Amsterdam"
     assert date_trigger.run_date.utcoffset().total_seconds() == 2 * 60 * 60
 
 

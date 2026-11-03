@@ -221,6 +221,8 @@ def _sanitize_restricted_component(value: str) -> str:
     cleaned = _to_ascii(value)
     cleaned = _RESTRICTED_UNSAFE_COMPONENT_CHARS.sub("_", cleaned)
     cleaned = re.sub(r"_+", "_", cleaned).strip(" _")
+    # Replaced punctuation right before an extension ("Test?.mp4") is not part of the name.
+    cleaned = re.sub(r"_+(?=\.[A-Za-z0-9]+$)", "", cleaned)
     return cleaned
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,7 @@ def _add_movie_download(
     session: Session,
     *,
     file_path: str = "/downloads/movies/movie.mp4",
-    artifact_status: str = "absent",
+    available: bool = False,
 ):
     from backend.db.models import Movie, MovieLocalMediaProfile, MovieMediaDownload
     from backend.types.media_types import MediaType
@@ -57,7 +58,7 @@ def _add_movie_download(
         media=movie,
         local_media_profile=profile,
         file_path=file_path,
-        artifact_status=artifact_status,
+        **(available_artifact() if available else {"artifact_status": "absent"}),
     )
     session.add(download)
     session.commit()
@@ -115,7 +116,6 @@ def test_delete_local_media_profile_rejects_physical_file_even_when_status_is_ab
         profile, download = _add_movie_download(
             session,
             file_path=str(media_file),
-            artifact_status="absent",
         )
         profile_id = profile.id
         download_id = download.id
@@ -152,7 +152,7 @@ def test_delete_local_media_profile_allows_stale_available_row_when_file_is_gone
         profile, download = _add_movie_download(
             session,
             file_path=str(missing_file),
-            artifact_status="available",
+            available=True,
         )
         profile_id = profile.id
         download_id = download.id

@@ -15,6 +15,7 @@ from backend.types.media_download_history_types import MediaDownloadHistoryActio
 from backend.types.episode_types import EpisodePublishStatus
 from backend.types.media_types import MediaType
 from backend.services.media_download_history import record_media_download_history
+from backend.services.notifications.emitters import episode_deleted
 from backend.utils.episode import episode_identifier_type_predicate
 from backend.utils.output_template import resolve_episode_output_path
 from config import get_settings
@@ -345,7 +346,11 @@ def cleanup_older_episodes(s: Session, profile: PodcastDownloadProfile) -> int:
 
     for row in rows:
         if profile.delete_older_episodes:
+            had_file = row.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+            path = row.file_path
             prepare_media_download_artifact(s, row)
+            if had_file:
+                episode_deleted(s, row.media, path=path, reason="It fell outside its Download Profile's limit.")
 
         # Retention cleanup is the end of this managed download's lifetime.
         s.delete(row)

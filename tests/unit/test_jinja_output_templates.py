@@ -260,7 +260,7 @@ def test_preview_does_not_apply_filename_restrictions(monkeypatch) -> None:
         FilenameRestrictionMode.WINDOWS,
     )
 
-    result = get_output_template_preview(LocalMediaProfileTemplatePreview(
+    result = get_output_template_preview(None, LocalMediaProfileTemplatePreview(
         type="show",
         preferred_format="format_audio_only",
         output_template="/downloads/{{ episode_type }}.ext",

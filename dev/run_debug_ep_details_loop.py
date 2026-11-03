@@ -4,7 +4,7 @@ import argparse
 import asyncio
 from datetime import datetime
 
-from wireloft_controller.tasks.workers.debug_ep_details.entrypoint import debug_ep_details
+from task_manager.tasks.workers.debug_ep_details.entrypoint import debug_ep_details
 
 
 async def run_once(slug: str) -> None:

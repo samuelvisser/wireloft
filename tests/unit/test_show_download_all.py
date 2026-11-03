@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from conftest import available_artifact
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -136,7 +138,7 @@ def test_podcast_download_all_uses_episode_types_and_skips_downloaded_files(libr
         type=MediaType.EPISODE.value,
         media_item_id=normal.id,
         local_media_profile_id=profile.id,
-        artifact_status="available",
+        **available_artifact(),
         file_path="/downloads/podcast/existing.mp3",
     )
     session.add(already_downloaded)
@@ -230,7 +232,7 @@ def test_download_all_retries_missing_artifact_without_replacing_other_profiles(
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=unrelated_profile.id,
-        artifact_status="available",
+        **available_artifact(),
         file_path="/downloads/podcast/unrelated.mp3",
     )
     session.add_all([missing, unaffected])
@@ -263,7 +265,7 @@ def test_download_all_is_noop_when_selected_episodes_are_downloaded(library):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
-        artifact_status="available",
+        **available_artifact(),
         file_path="/downloads/podcast/ep1.mp3",
     ))
     session.flush()
@@ -326,7 +328,7 @@ def test_podcast_download_all_latest_count_applies_before_skipping_downloaded(li
         type=MediaType.EPISODE.value,
         media_item_id=newest.id,
         local_media_profile_id=profile.id,
-        artifact_status="available",
+        **available_artifact(),
         file_path="/downloads/podcast/newest.mp3",
     ))
     session.flush()
@@ -503,7 +505,7 @@ def test_bulk_final_download_does_not_trigger_redundant_countdown_replacement(li
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
-        artifact_status="available",
+        **available_artifact(),
         file_path="/downloads/podcast/final.mp3",
         downloaded_publish_status="published_final",
         redownload_when_final=True,

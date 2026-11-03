@@ -20,6 +20,7 @@ type Props = {
     videoOutputMode?: string | null
     useDownloads: boolean
     useDwStream: boolean
+    streamLiveEpisodes?: boolean
     selectedEpisodeTypes: string[]
     downloadProfileDefaults?: StreamDownloadProfileDefault[]
     showSlug?: string
@@ -295,6 +296,7 @@ export default function StreamProfileAdvisory({
     videoOutputMode,
     useDownloads,
     useDwStream,
+    streamLiveEpisodes = false,
     selectedEpisodeTypes,
     downloadProfileDefaults,
     showSlug,
@@ -309,6 +311,9 @@ export default function StreamProfileAdvisory({
     const usesVideo = preferredFormat !== 'format_audio_only'
     const usesDirectMp4Video = usesVideo
         && (videoOutputMode === 'audio_mp4' || videoOutputMode === 'mp4')
+    const streamsLiveEpisodes = streamLiveEpisodes
+        && usesVideo
+        && (videoOutputMode === 'audio_hls' || videoOutputMode === 'mp4_hls')
 
     const requiredKinds = requiredDownloadKinds(preferredFormat, videoOutputMode)
     const requiredCoverage = requiredKinds.map((kind) => (
@@ -407,6 +412,11 @@ export default function StreamProfileAdvisory({
                         ? 'Daily Wire streaming is disabled, but the existing Download Profiles do not fully cover this Stream Profile.'
                         : 'Daily Wire streaming is disabled and no enabled Download Profile matches the media coverage this Stream Profile is setup to include.'}
                 </p>
+                {streamsLiveEpisodes ? (
+                    <p>
+                        <strong>Live episodes will not show in this feed.</strong> Without Daily Wire streaming, a live episode is only listed when all of its media is set to download once it is published.
+                    </p>
+                ) : null}
                 <div className="stream-profile-advisory-requirements">
                     {missingRequirements.map((coverage) => (
                         <CoverageRequirement

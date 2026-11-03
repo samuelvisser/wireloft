@@ -488,7 +488,7 @@ def request_show_download_delete(
         delete_older_than_days: int | None = None,
         delete_older_than_latest_downloads: int | None = None,
 ) -> dict[str, bool | int | str]:
-    """Disable affected profiles and queue deletion in the same durable transaction."""
+    """Queue deletion; deleting everything also disables the affected profiles first."""
     show, scope = _resolve_show_download_maintenance_scope(
         s,
         show_slug,
@@ -502,10 +502,13 @@ def request_show_download_delete(
         delete_older_than_latest_downloads=delete_older_than_latest_downloads,
     )
 
-    # Disable before the operation can be dispatched. The router commits these
-    # profile changes and the operation atomically, so no newly dispatched delete
-    # worker can ever observe the selected profiles still enabled.
-    disabled_profile_count = disable_download_profiles_for_episode_scope(s, scope)
+    # Deleting everything disables the profiles before the operation can be
+    # dispatched. The router commits these profile changes and the operation
+    # atomically, so no delete worker can observe the profiles still enabled.
+    # A partial delete leaves them on: the user may want those episodes
+    # downloaded again.
+    partial = delete_older_than != "all"
+    disabled_profile_count = 0 if partial else disable_download_profiles_for_episode_scope(s, scope)
     result = _queue_show_download_maintenance(
         s,
         scope,
@@ -516,7 +519,7 @@ def request_show_download_delete(
             disabled_profile_count=disabled_profile_count,
             selected_media_download_ids=(
                 tuple(download.id for download in scope.downloads)
-                if delete_older_than != "all" else None
+                if partial else None
             ),
         ),
     )

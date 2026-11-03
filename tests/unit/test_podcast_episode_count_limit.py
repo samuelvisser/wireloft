@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -165,7 +166,7 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
         media_item_id=episodes[0].id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(completed_file),
     )
     absent = EpisodeMediaDownload(
@@ -181,7 +182,7 @@ def test_episode_count_cleanup_removes_available_and_absent_artifacts_outside_li
         media_item_id=episodes[2].id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(tmp_path / "kept.m4a"),
     )
     db_session.add_all([completed, absent, kept])
@@ -222,7 +223,7 @@ def test_episode_count_cleanup_keeps_available_files_when_delete_older_is_off(db
         media_item_id=completed_episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(completed_file),
     )
     absent = EpisodeMediaDownload(

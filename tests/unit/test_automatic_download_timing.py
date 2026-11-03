@@ -116,7 +116,9 @@ def test_monitor_timing_uses_first_trusted_exit_from_live():
         new_status=EpisodePublishStatus.PUBLISHED_FINAL,
         observed_at=became_final + timedelta(minutes=2),
     )
-    assert episode.get_meta(TRUSTED_LIVE_ENDED_META_KEY) == marker
+    # Going back to LIVE starts a new publication lifecycle, which invalidates
+    # the old proof, and the unfollowed second live phase earns no new one.
+    assert episode.get_meta(TRUSTED_LIVE_ENDED_META_KEY).startswith("invalidated:")
 
 
 def test_monitor_timing_does_not_trust_first_observed_live_transition():

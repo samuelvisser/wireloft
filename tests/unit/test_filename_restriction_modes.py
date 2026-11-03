@@ -14,6 +14,7 @@ def _movie(title: str = "Amélie: Test?") -> SimpleNamespace:
         duration=7200,
         author_name="François",
         mature_rating="PG",
+        meta_items=[],
     )
 
 
@@ -31,7 +32,7 @@ def _resolve(tmp_path, monkeypatch, mode: FilenameRestrictionMode, title: str = 
 
 
 def test_filename_restriction_mode_defaults_to_windows():
-    defaults = AppSettings.model_fields["download_settings"].default
+    defaults = AppSettings.model_fields["download_settings"].get_default(call_default_factory=True)
     assert defaults.filename_restriction_mode == FilenameRestrictionMode.WINDOWS
     assert "ascii_only_filenames" not in DownloadSettings.model_fields
 

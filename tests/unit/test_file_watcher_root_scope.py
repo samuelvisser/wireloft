@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -20,16 +21,16 @@ def db_session():
         engine.dispose()
 
 
-def _download(session: Session, *, path: str):
+def _download(session: Session, *, path: str, media_item_id: int = 1):
     from backend.db.models.media_download import MediaDownloadBase
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
 
     download = MediaDownloadBase(
         type=MediaType.BASE.value,
-        media_item_id=1,
+        media_item_id=media_item_id,
         local_media_profile_id=1,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=path,
     )
     session.add(download)
@@ -59,6 +60,7 @@ def test_file_watcher_filters_foreign_roots_in_sql(
     foreign = _download(
         db_session,
         path=str(foreign_root / "shows" / "episode.m4a"),
+        media_item_id=2,
     )
     current_id, foreign_id = current.id, foreign.id
     db_session.commit()

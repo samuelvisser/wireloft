@@ -32,3 +32,6 @@ from .media_item import Movie
 from .media_item import MovieExtraSource
 from .media_item import MovieExtra
 from .stream_profile import RssStreamProfile
+from .Notification import (
+    NotificationDelivery, NotificationDestination, NotificationEvent, NotificationRule, PushSubscription, PushVapidKey,
+)

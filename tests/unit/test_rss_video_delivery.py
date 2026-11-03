@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 from types import SimpleNamespace
+
+from backend.utils.episode import EpisodeIdentifierInfo
 from xml.etree.ElementTree import Element
 
 import pytest
@@ -22,6 +24,8 @@ def _episode():
         thumbnail_landscape_path=None,
         thumbnail_square_path=None,
         thumbnail_portrait_path=None,
+        episode_identifier_info=EpisodeIdentifierInfo.from_identifier("ep.1"),
+        season=None,
     )
 
 
@@ -29,6 +33,7 @@ def _profile(mode: str):
     return SimpleNamespace(
         preferred_format="format_1080p",
         video_output_mode=mode,
+        show=SimpleNamespace(episode_identifier="numbered"),
     )
 
 
@@ -88,6 +93,7 @@ def test_audio_only_uses_stable_m4a_without_video_alternate():
     profile = SimpleNamespace(
         preferred_format="format_audio_only",
         video_output_mode=None,
+        show=SimpleNamespace(episode_identifier="numbered"),
     )
     channel = Element("channel")
     _append_item(

@@ -115,7 +115,15 @@ def test_identifier_change_is_handled_by_rename_worker():
 def test_identifier_change_event_limits_rename_to_identifier_fields(monkeypatch):
     from task_manager.tasks.workers.rename_file_worker import entrypoint
 
-    session = object()
+    class FakeSession:
+        # The episode lookup only decides which Custom Index pairs to wait for.
+        def get(self, _model, _resource_id):
+            return None
+
+        def scalars(self, _statement):
+            return iter(())
+
+    session = FakeSession()
     run = AsyncMock()
 
     class SessionContext:

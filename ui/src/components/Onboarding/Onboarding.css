@@ -480,15 +480,13 @@
     }
 
     .onboarding-stage-actions,
-    .onboarding-profile-list-heading,
+    .onboarding-profile-list-heading {
+        flex-wrap: wrap;
+    }
+
     .onboarding-env-example > div {
         align-items: stretch;
         flex-direction: column;
-    }
-
-    .onboarding-stage-actions .btn,
-    .onboarding-profile-list-heading .btn {
-        width: 100%;
     }
 
     .onboarding-security-card,

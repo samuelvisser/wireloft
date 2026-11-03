@@ -1,6 +1,6 @@
 [project]
 name = "backend"
-version = "0.6.0"
+version = "0.7.0"
 description = "WireLoft FastAPI backend API and DB utilities"
 authors = [{ name = "Samuël Visser", email = "samuvisser@gmail.com" }]
 requires-python = ">=3.13,<3.14"
@@ -21,6 +21,8 @@ dependencies = [
     "task-manager",
     "controller",
     "jinja2>=3.1,<4",
+    "apprise==2.0.1",
+    "requests>=2.32",
 ]
 
 [project.scripts]

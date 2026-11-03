@@ -75,7 +75,7 @@ def test_local_media_profile_api_enforces_type_specific_formats_and_placeholders
     assert movie.type == "movie"
     assert movie.output_template == "/downloads/movies/{{ movie_extended_title }}/{{ title }}.ext"
 
-    with pytest.raises(ValidationError, match="require a video format"):
+    with pytest.raises(ValidationError, match="require a normal video format"):
         MovieLocalMediaProfileAPICreate(
             name="Movie audio",
             output_template="/downloads/movies/{{ movie_slug }}.ext",

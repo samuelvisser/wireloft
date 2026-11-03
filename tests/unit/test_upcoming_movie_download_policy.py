@@ -13,7 +13,7 @@ def test_upcoming_movie_allows_extras_but_not_full_movie(tmp_path, monkeypatch):
         create_movie_download,
         create_movie_extra_download,
     )
-    from backend.api.endpoints.movies import service as movie_service
+    from backend.services import movies as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import MovieLocalMediaProfile

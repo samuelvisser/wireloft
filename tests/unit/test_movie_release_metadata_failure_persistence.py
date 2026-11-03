@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 
 def test_failed_lookup_uses_conditional_path_and_creates_download(tmp_path, monkeypatch):
     from backend.api.endpoints.media_downloads.service import create_movie_download
-    from backend.api.endpoints.movies import service as movie_service
+    from backend.services import movies as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import Movie, MovieLocalMediaProfile

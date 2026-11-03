@@ -11,7 +11,7 @@
     "build:pro-icons": "tsc --noEmit && vite build --mode pro-icons",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "test:download-progress": "node scripts/test-download-progress.mjs"
+    "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",

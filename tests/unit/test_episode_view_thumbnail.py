@@ -71,6 +71,6 @@ def test_episode_grid_view_uses_landscape_thumbnail():
         [episode] = get_episode_views_by_show_page(session, show.slug, cursor=None, limit=10).items
 
         assert episode.thumbnail_landscape_path == "landscape.jpg"
-        assert not hasattr(episode, "thumbnail_portrait_path")
+        assert episode.thumbnail_portrait_path == "portrait.jpg"
 
     engine.dispose()

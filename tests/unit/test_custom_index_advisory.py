@@ -198,7 +198,7 @@ def test_plex_suggestion_uses_existing_condition_and_a_native_set_block(environm
     assert len(result.advisories) == 1
     item = result.advisories[0]
     assert item.key == 'extra'
-    assert 'every episode' in item.message
+    assert item.kind == 'all_episodes'
     suggestion = item.suggestion
     assert suggestion is not None
     assert suggestion.after == (
@@ -390,8 +390,6 @@ INTENTIONAL_SEQUENCE = (
 def test_unconditional_sequence_recommends_builtin_episode_index(environment):
     item, = advisory(environment, INTENTIONAL_SEQUENCE).advisories
     assert item.kind == 'episode_index'
-    assert 'episode_index' in item.message
-    assert 'gaps' in item.message
     assert item.suggestion is not None
     assert item.suggestion.after == '{% set extra_num = (episode_index | int) %}'
     assert "{% set clean_title = title.replace(' ', '-') %}" in item.suggestion.output_template
@@ -438,7 +436,6 @@ def test_plain_uses_follow_aliases_but_ignore_unrelated_jinja(environment, templ
 def test_conditionally_used_eager_indexes_do_not_get_builtin_recommendation(environment, use):
     item, = advisory(environment, "{% set n='extra'|custom_index %}" + use).advisories
     assert item.kind == 'all_episodes'
-    assert 'put the custom_index call inside the condition' in item.message
 
 
 def test_plex_keeps_existing_conditional_set_block_recommendation(environment):

@@ -4,7 +4,7 @@ from sqlalchemy import create_engine, text
 
 
 migration = import_module(
-    "backend.db.alembic.versions.a4d7c2e9f610_canonicalize_episode_lifecycle_metadata"
+    "backend.db.alembic.versions.d8b4a1f6c203_wireloft_1_1"
 )
 
 

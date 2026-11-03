@@ -11,21 +11,25 @@ export function SettingsSection({
     description,
     children,
     className,
+    bodyClassName = 'settings-grid',
+    defaultOpen = true,
 }: {
     title: string
     description?: string
     children: ReactNode
     className?: string
+    bodyClassName?: string
+    defaultOpen?: boolean
 }) {
     return (
-        <details className={`settings-disclosure${className ? ` ${className}` : ''}`} open>
+        <details className={`settings-disclosure${className ? ` ${className}` : ''}`} open={defaultOpen}>
             <summary>
                 <span>
                     <strong>{title}</strong>
                     {description ? <small>{description}</small> : null}
                 </span>
             </summary>
-            <div className="settings-grid settings-disclosure__body">{children}</div>
+            <div className={`${bodyClassName} settings-disclosure__body`}>{children}</div>
         </details>
     )
 }

@@ -147,7 +147,7 @@ def test_movie_and_extra_downloads_share_one_persisted_release_lookup(tmp_path, 
         create_movie_download,
         create_movie_extra_download,
     )
-    from backend.api.endpoints.movies import service as movie_service
+    from backend.services import movies as movie_service
     from backend.api.models.media_download import MovieDownloadAPICreate
     from backend.db.core import Base
     from backend.db.models import Movie, MovieLocalMediaProfile
@@ -269,12 +269,14 @@ def test_show_date_component_placeholders_use_episode_publish_datetime(tmp_path,
 
     monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     episode = SimpleNamespace(
-        show=SimpleNamespace(slug="show", title="Show"),
-        season=SimpleNamespace(slug="season", name="Season"),
+        show=SimpleNamespace(slug="show", title="Show", meta_items=[]),
+        season=SimpleNamespace(slug="season", name="Season", index=1, season_type="normal", season_number=1),
         slug="episode",
+        index=1,
         title="Episode",
+        dw_episode_number="1",
         episode_identifier="ep.1",
-        published_date=datetime(2026, 8, 30, 12, 34, 56),
+        published_date=datetime(2026, 8, 30, 12, 34, 56, tzinfo=timezone.utc),
     )
 
     result = resolve_episode_output_path(

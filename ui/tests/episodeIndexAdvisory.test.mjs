@@ -29,7 +29,7 @@ function component(advisories) {
     // Execute the small SuggestionCode function too, so read-only assertions
     // inspect its CodeMirror props rather than an unrendered component node.
     const jsx = (type, props) => typeof type === 'function' ? type(props) : {type, props}
-    const {default: Advisory} = load('src/components/LocalMediaProfile/CustomIndexAdvisories.tsx', {
+    const mocks = {
         'react/jsx-runtime': {jsx, jsxs: jsx, Fragment: 'fragment'},
         react: {useMemo: (factory) => factory()},
         '@uiw/react-codemirror': {default: 'static-code'},
@@ -44,10 +44,15 @@ function component(advisories) {
         './outputTemplateCodeMirror': {outputTemplateSyntaxExtensions: ['jinja', 'highlighting']},
         './outputTemplateFormatting': {
             parseOutputTemplate: (source) => source,
+            renderCompactOutputTemplate: (source) => source,
             renderEditorOutputTemplate: (source) => ({value: source}),
         },
         './CustomIndexAdvisories.css': {},
-    })
+        './OutputTemplateEditor.css': {},
+        './ReadOnlyOutputTemplateCode.css': {},
+    }
+    mocks['./ReadOnlyOutputTemplateCode'] = load('src/components/LocalMediaProfile/ReadOnlyOutputTemplateCode.tsx', mocks)
+    const {default: Advisory} = load('src/components/LocalMediaProfile/CustomIndexAdvisories.tsx', mocks)
     const tree = Advisory({
         template: 'draft', indexingValues: advisories.map(({key}) => ({key})),
         onApply: (source) => applied.push(source),
@@ -103,8 +108,8 @@ test('mixed advisories remain independent and keep the existing conditional guid
     assert.equal(result.elements.filter(({props}) => props.role === 'status').length, 2)
     assert.equal(result.elements.filter(({type}) => type === 'button').length, 2)
     assert.match(result.text, /Custom Indexes are designed to apply an index to only some episodes/)
-    assert.match(result.text, /With this code/)
-    assert.match(result.text, /Keep the existing output logic/)
+    assert.match(result.text, /With this/)
+    assert.match(result.text, /keep your existing output path logic/)
     assert.match(result.text, /With the built-in variable/)
 })
 
@@ -119,7 +124,7 @@ test('episode_index is exposed in the shared show variable reference, not movies
     const variable = getOutputTemplateVariables('show').find(({name}) => name === 'episode_index')
     assert.ok(variable)
     assert.match(variable.description, /whole show/)
-    assert.match(variable.readMore.paragraphs.join(' '), /gaps/)
+    assert.match(variable.readMore.paragraphs.join(' '), /gaps/i)
     assert.ok(!getOutputTemplateVariables('movie').some(({name}) => name === 'episode_index'))
 })
 
@@ -130,7 +135,7 @@ for (const after of [
     test('non-capture replacement remains static and explicitly applied: ' + after, () => {
         const suggestion = {before: 'original source', after, outputTemplate: 'complete replacement ' + after}
         const result = component([{key: 'extra', kind: 'all_episodes', suggestion}])
-        assert.match(result.text, /With this code/)
+        assert.match(result.text, /With this/)
         assert.doesNotMatch(result.text, /With this set block/)
         assert.deepEqual(result.applied, [])
         const examples = result.elements.filter(({type}) => type === 'static-code')

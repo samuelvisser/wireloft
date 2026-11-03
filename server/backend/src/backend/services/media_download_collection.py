@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import blake2b
 
-from sqlalchemy import and_, case, exists, func, or_, select
+from sqlalchemy import String, and_, case, exists, func, or_, select, type_coerce
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.selectable import Subquery
 
@@ -510,13 +510,23 @@ class MediaDownloadCollectionQuery:
         return statement.order_by(*self._ordering(order))
 
     def cursor_anchor_statement(self, *, media_download_id: int, statuses: Sequence[str], order: str):
-        """Retrieve the current sort values of an ID in the filtered collection."""
-        return self.page_statement(
-            statuses=statuses,
-            order=order,
-            after=self.source.c.id == media_download_id,
-            limit=1,
-        )
+        """Retrieve the current sort values of an ID in the filtered collection.
+
+        Timestamps come back as their stored SQLite text, for comparison
+        against ``stored_sort_text`` columns.
+        """
+        predicates = [self.source.c.id == media_download_id]
+        if statuses:
+            predicates.append(self.source.c.status.in_(statuses))
+        return select(
+            self.source.c.id,
+            self.source.c.workflow_bucket,
+            self.source.c.workflow_queue,
+            *(
+                stored_sort_text(self.source.c[name]).label(name)
+                for name in ("recent_at", "workflow_active_started_at", "workflow_terminal_at")
+            ),
+        ).where(*predicates)
 
     def page_statement(
         self,
@@ -599,6 +609,16 @@ class MediaDownloadCollectionQuery:
             .where(*predicates)
             .order_by(self.source.c.id)
         )
+
+
+def stored_sort_text(expression):
+    """A timestamp sort key as the text SQLite actually stores and orders by.
+
+    Server-side defaults store ``2026-10-25 15:32:50`` while bound datetimes
+    become ``2026-10-25 15:32:50.000000``. Compared as datetimes, a cursor's
+    own boundary row would sort after itself and repeat on the next page.
+    """
+    return type_coerce(expression, String)
 
 
 def media_download_collection_revision(

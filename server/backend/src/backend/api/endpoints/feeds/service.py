@@ -309,9 +309,28 @@ def _profile_keeps_live_handoff(profile: RssStreamProfile) -> bool:
     )
 
 
-def _has_hls_download_profile_for_episode(
+def _download_profile_format_filter(kind: Literal["audio", "mp4", "hls"]):
+    preferred = LocalMediaProfileBase.preferred_format
+    if kind == "audio":
+        return preferred == PreferredFormat.FORMAT_AUDIO_ONLY
+    if kind == "hls":
+        return preferred == PreferredFormat.FORMAT_HLS
+    return preferred.notin_((PreferredFormat.FORMAT_AUDIO_ONLY, PreferredFormat.FORMAT_HLS))
+
+
+def _required_live_download_kinds(
+        profile: RssStreamProfile,
+) -> tuple[Literal["audio", "mp4", "hls"], ...]:
+    """Every enclosure kind a live HLS episode needs once its downloads land."""
+    if profile.video_output_mode == RssVideoOutputMode.AUDIO_HLS.value:
+        return "audio", "hls"
+    return "mp4", "hls"
+
+
+def _has_download_profile_for_episode(
         s: Session,
         episode: Episode,
+        kind: Literal["audio", "mp4", "hls"],
 ) -> bool:
     episode_type = _episode_type_prefix(episode)
     if not episode_type:
@@ -370,7 +389,7 @@ def _has_hls_download_profile_for_episode(
         .where(
             DownloadProfileBase.show_id == episode.show_id,
             DownloadProfileBase.enable_profile.is_(True),
-            LocalMediaProfileBase.preferred_format == PreferredFormat.FORMAT_HLS,
+            _download_profile_format_filter(kind),
             profile_episode_type.c.value == episode_type,
             series_allows_episode,
         )
@@ -387,9 +406,11 @@ def _can_stream_live_episode(
         return False
     if profile.use_dw_stream:
         return True
-    return (
-        profile.use_downloads
-        and _has_hls_download_profile_for_episode(s, episode)
+    # A download-only feed lists a live episode only when its Download Profiles
+    # will provide every enclosure the feed needs once the episode is published.
+    return profile.use_downloads and all(
+        _has_download_profile_for_episode(s, episode, kind)
+        for kind in _required_live_download_kinds(profile)
     )
 
 

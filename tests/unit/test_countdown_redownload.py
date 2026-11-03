@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -27,7 +28,7 @@ def final_download(tmp_path, monkeypatch):
     session = Session(engine)
     monkeypatch.setattr(
         get_settings().download_settings,
-        "automatic_episode_download_delay_minutes",
+        "episode_download_delay_minutes",
         0,
     )
 
@@ -72,7 +73,7 @@ def final_download(tmp_path, monkeypatch):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(path),
         downloaded_publish_status="published_with_countdown",
         redownload_when_final=True,
         file_path=str(path),
@@ -105,7 +106,7 @@ def test_final_publication_queues_replacement(final_download, monkeypatch):
     dispatched = Mock(return_value=1)
 
     monkeypatch.setattr(service, "get_active_media_download_operation", Mock(return_value=None))
-    monkeypatch.setattr(service, "queue_final_episode_redownload_if_ready", queued)
+    monkeypatch.setattr(service, "queue_episode_redownload_if_ready", queued)
     monkeypatch.setattr(service, "dispatch_queued_media_download_operations", dispatched)
 
     result = asyncio.run(service.run_finalize_countdown_downloads(session, episode_id=episode.id))
@@ -128,7 +129,7 @@ def test_final_publication_cancels_countdown_attempt_and_waits_for_terminal(fina
 
     monkeypatch.setattr(service, "get_active_media_download_operation", Mock(return_value=countdown_operation))
     monkeypatch.setattr(service, "cancel_media_download_operation", canceled)
-    monkeypatch.setattr(service, "queue_final_episode_redownload_if_ready", queued)
+    monkeypatch.setattr(service, "queue_episode_redownload_if_ready", queued)
     monkeypatch.setattr(service, "dispatch_queued_media_download_operations", Mock(return_value=0))
 
     result = asyncio.run(service.run_finalize_countdown_downloads(session, episode_id=episode.id))
@@ -153,7 +154,7 @@ def test_terminal_reconciliation_queues_pending_final_intent(final_download, mon
     monkeypatch.setattr(media_download_operations, "_has_active_media_download_run", Mock(return_value=False))
     monkeypatch.setattr(media_download_operations, "create_media_download_operation", created)
 
-    assert media_download_operations.queue_final_episode_redownload_if_ready(session, download.id) is True
+    assert media_download_operations.queue_episode_redownload_if_ready(session, download.id) is True
     session.flush()
 
     assert download.redownload_when_final is False

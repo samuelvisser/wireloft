@@ -247,6 +247,8 @@ def test_subtitle_mp4_embedding_uses_mov_text_and_three_letter_language(tmp_path
     assert commands[0][commands[0].index("-c:s") + 1] == "mov_text"
     assert "language=eng" in commands[0]
     assert "1:s:0" in commands[0]
+    # Subtitle tracks already in the media are replaced, so labels line up.
+    assert "-0:s?" in commands[0]
 
 
 @pytest.mark.parametrize("publish,embed", [

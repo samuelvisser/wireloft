@@ -43,7 +43,7 @@ export const EpisodeReadSchema = z.looseObject({
     earlyDeleteAvailable: z.boolean().optional().default(false),
     downloadDelayPassed: z.boolean(),
     downloadDelayReadyAt: ApiDateTimeSchema.nullable(),
-    description: z.string(),
+    description: z.string().nullable(),
     sharingUrl: z.string(),
     duration: z.number(),
     backgroundImagePath: z.string().nullable().optional(),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -159,7 +160,7 @@ def _make_available_download(
         media_item_id=episode.id,
         local_media_profile_id=profile.id,
         file_path=str(path),
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         downloaded_bytes=path.stat().st_size,
         downloaded_at=datetime.now(timezone.utc),
         downloaded_publish_status=episode.publish_status,

@@ -74,11 +74,12 @@ def test_write_intent_transaction_waits_for_existing_sqlite_writer(tmp_path):
 
 
 def test_integrity_migration_repairs_legacy_orphans(tmp_path):
-    from backend.db.alembic.versions.a4e7d18c2f90_sqlite_foreign_key_integrity import (
-        _delete_broken_scheduler_foreign_keys,
-        _delete_orphaned_media_download_subtypes,
-        _delete_orphaned_polymorphic_resources,
-    )
+    from importlib import import_module
+
+    migration = import_module("backend.db.alembic.versions.6d4a8c1f2b90_wireloft_1_2")
+    _delete_broken_scheduler_foreign_keys = migration._delete_broken_scheduler_foreign_keys
+    _delete_orphaned_media_download_subtypes = migration._delete_orphaned_media_download_subtypes
+    _delete_orphaned_polymorphic_resources = migration._delete_orphaned_polymorphic_resources
 
     engine = create_engine(f"sqlite:///{(tmp_path / 'legacy-orphans.db').as_posix()}")
     try:

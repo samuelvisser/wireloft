@@ -19,6 +19,7 @@ import {
 import { loadAppConfig } from './general_utils.js'
 import { loadPublicConfig } from './lib/publicConfig'
 import { router } from './router'
+import { registerServiceWorker } from './lib/registerServiceWorker'
 
 async function bootstrap() {
   // Load app config before anything renders
@@ -54,6 +55,9 @@ async function bootstrap() {
 
   // Warm the existing core cache without blocking the first render.
   prefetchCoreData(queryClient)
+
+  // The installable app: offline page, and push messages from Settings › Messages and actions.
+  registerServiceWorker()
 
   const rootEl = document.getElementById('root') as HTMLElement
   createRoot(rootEl).render(

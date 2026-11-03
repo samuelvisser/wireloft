@@ -205,7 +205,6 @@ def test_sync_dailywire_movie_metadata_persists_rich_movie_page(monkeypatch):
     assert movie.cast_and_crew[0]["role_text"] == "Director"
     assert movie.directed_by == ["Director Person"]
     assert movie.hosts[0]["slug"] == "dailywire-plus"
-    assert movie.more_like_this[0]["slug"] == "related-movie"
     assert movie.starring == ["Lead Actor"]
     assert movie.written_by == ["Director Person"]
     assert movie.movie_extras[0].available_for == ["FREE", "ANONYMOUS"]

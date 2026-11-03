@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -99,8 +100,7 @@ def test_local_media_profile_view_reports_managed_download_statistics() -> None:
                 media=downloaded_movie,
                 local_media_profile=profile,
                 file_path="/downloads/movies/downloaded.mp4",
-                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
-                artifact_size_bytes=1024,
+                **(available_artifact() | {"artifact_size_bytes": 1024}),
                 downloaded_bytes=2048,
             ),
             MovieMediaDownload(

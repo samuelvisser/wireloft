@@ -57,6 +57,20 @@ function optionalArrayFilterContains<T extends string | number>(
   return target.every((value) => sourceValues.has(value))
 }
 
+/** Resource scope: a list of IDs (plus unscoped runs when asked), all runs, or only unscoped runs. */
+function resourceScopeContains(
+  sourceIds: unknown,
+  sourceUnscoped: boolean,
+  targetIds: readonly number[] | undefined,
+  targetUnscoped: boolean,
+): boolean {
+  if (sourceIds === null) {
+    return !sourceUnscoped || (targetIds === undefined && targetUnscoped)
+  }
+  if (targetIds === undefined) return targetUnscoped && sourceUnscoped
+  return optionalArrayFilterContains(sourceIds, targetIds) && (!targetUnscoped || sourceUnscoped)
+}
+
 function startedAfterFilterContains(source: unknown, target: string | undefined): boolean {
   if (target === undefined) return source === null
   if (source === null) return true
@@ -88,10 +102,9 @@ function taskLedgerEntryMatches(
 ): boolean {
   if (definitionKey !== undefined && entry.definitionKey !== definitionKey) return false
   if (resourceType !== undefined && entry.resourceType !== resourceType) return false
-  if (
-    resourceIds !== undefined
-    && (entry.resourceId == null ? !includeUnscoped : !resourceIds.includes(entry.resourceId))
-  ) {
+  if (resourceIds !== undefined) {
+    if (entry.resourceId == null ? !includeUnscoped : !resourceIds.includes(entry.resourceId)) return false
+  } else if (includeUnscoped && entry.resourceId != null) {
     return false
   }
   if (statuses !== undefined && !statuses.includes(entry.status)) return false
@@ -169,8 +182,7 @@ export function deriveTaskLedgerCollectionPlaceholder(
       || key[8] !== order
       || !optionalScalarFilterContains(key[2], definitionKey)
       || !optionalScalarFilterContains(key[3], resourceType)
-      || !optionalArrayFilterContains(key[4], resourceIds)
-      || (includeUnscoped && key[4] !== null && key[9] !== true)
+      || !resourceScopeContains(key[4], key[9] === true, resourceIds, includeUnscoped)
       || !optionalArrayFilterContains(key[5], statuses)
       || !startedAfterFilterContains(key[6], startedAfter)
     ) {
@@ -298,7 +310,7 @@ export function useTaskLedgerInfinite({
       if (definitionKey) params.set('definition_key', definitionKey)
       if (resourceType) params.set('resource_type', resourceType)
       for (const id of resourceIds ?? []) params.append('resource_id', String(id))
-      if (includeUnscoped && resourceIds?.length) params.set('include_unscoped', 'true')
+      if (includeUnscoped) params.set('include_unscoped', 'true')
       for (const item of statuses ?? []) params.append('status', item)
       if (startedAfterValue) params.set('started_after', startedAfterValue)
 

@@ -110,7 +110,7 @@
     }
 
     .downloads-action-row .progress-button-root {
-        flex: 1 1 auto;
+        flex: 0 1 auto;
     }
 
     /* Match ActionMenu's operation progress treatment: the completed portion

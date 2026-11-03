@@ -6,7 +6,7 @@
 - Simple registry API to declare capabilities like default max retries and whether a task tracks progress.
 
 ### What’s included
-- A thin registry wrapper: wireloft_controller.registry.task
+- A thin registry wrapper: task_manager.scheduler.registry.task
 - A sample task: download_series_thumbnail
   - definition key: download_series_thumbnail
   - allowed resource types: ["download_profile_series"]
@@ -15,7 +15,7 @@
 
 ### Install/enable
 - This package is part of the workspace (server/*). No separate install is required in dev.
-- The backend app imports wireloft_controller on startup so that task definitions are registered before syncing to the DB.
+- The backend app imports task_manager on startup so that task definitions are registered before syncing to the DB.
 
 ### CLI
 - A small CLI is available to list and run controller workers directly.
@@ -24,9 +24,9 @@
   - Run a task by key: `controller run --key <definition_key> [--resource-id <id>] [--show-slug <slug>] [--arg name=value --arg other=123]`
 
 ### Defining a new task
-- Create a new module under wireloft_controller/tasks and decorate a function:
+- Create a new module under task_manager/tasks and decorate a function:
 
-  from wireloft_controller.registry import task
+  from task_manager.scheduler.registry import task
 
   @task(
       key="my_task",
@@ -59,7 +59,7 @@
 
 ### Programmatic trigger (library use)
 
-  from wireloft_scheduler.executor import trigger_now
+  from task_manager.scheduler.executor import trigger_now
   job_id = trigger_now(
       def_key="download_series_thumbnail",
       resource_type="download_profile_series",

@@ -135,16 +135,8 @@
 
 @media (max-width: 460px) {
     .local-media-profile-page-actions {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        width: 100%;
-    }
-
-    .local-media-profile-page-actions > .btn,
-    .local-media-profile-page-actions > .action-menu,
-    .local-media-profile-page-actions .action-menu-trigger {
-        width: 100%;
-        justify-content: center;
+        display: flex;
+        flex-wrap: wrap;
     }
 
     .local-media-profile-statistics {

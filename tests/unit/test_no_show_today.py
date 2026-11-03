@@ -68,7 +68,7 @@ def _make_episode(
     from backend.db.models import Episode
     from backend.utils.helpers import generate_uuid
 
-    published_at = published_at or datetime.now(timezone.utc).replace(tzinfo=None)
+    published_at = published_at or datetime.now(timezone.utc)
     episode = Episode(
         uuid=generate_uuid(),
         type="episode",
@@ -336,7 +336,7 @@ def _mark_unusable_at(session, episode, reason, observed_at):
 def test_monitor_keeps_recent_no_show_today(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -349,7 +349,7 @@ def test_monitor_keeps_recent_no_show_today(db_session, monkeypatch):
         ep_id="aux.1",
         title="No Show Today",
         index=1,
-        published_at=(now - timedelta(hours=1)).replace(tzinfo=None),
+        published_at=(now - timedelta(hours=1)),
     )
     _mark_unusable_at(
         db_session,
@@ -369,7 +369,7 @@ def test_monitor_keeps_recent_no_show_today(db_session, monkeypatch):
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     assert db_session.get(Episode, episode_id) is not None
 
@@ -377,7 +377,7 @@ def test_monitor_keeps_recent_no_show_today(db_session, monkeypatch):
 def test_monitor_keeps_old_no_show_today_while_dailywire_still_returns_it(db_session, monkeypatch):
     from backend.db.models import Episode
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -390,7 +390,7 @@ def test_monitor_keeps_old_no_show_today_while_dailywire_still_returns_it(db_ses
         ep_id="aux.1",
         title="No Show Today",
         index=1,
-        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+        published_at=(now - timedelta(hours=5)),
     )
     _mark_unusable_at(
         db_session,
@@ -410,7 +410,7 @@ def test_monitor_keeps_old_no_show_today_while_dailywire_still_returns_it(db_ses
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     assert db_session.get(Episode, episode_id) is not None
 
@@ -419,7 +419,7 @@ def test_monitor_recovers_no_show_placeholder_that_became_real_episode(db_sessio
     from backend.db.models import Episode
     from backend.types.episode_types import EpisodePublishStatus
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -432,7 +432,7 @@ def test_monitor_recovers_no_show_placeholder_that_became_real_episode(db_sessio
         ep_id="ep.1",
         title="No Show Today",
         index=1,
-        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+        published_at=(now - timedelta(hours=5)),
     )
     _mark_unusable_at(
         db_session,
@@ -453,7 +453,7 @@ def test_monitor_recovers_no_show_placeholder_that_became_real_episode(db_sessio
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
     _patch_usable_hls(monkeypatch)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     stored = db_session.get(Episode, episode_id)
     assert stored is not None
@@ -467,7 +467,7 @@ def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch
     from backend.db.models import Episode
     from dailywire_api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -480,7 +480,7 @@ def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch
         ep_id="ep.1",
         title="Real episode",
         index=1,
-        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+        published_at=(now - timedelta(hours=5)),
     )
     _mark_unusable_at(
         db_session,
@@ -500,7 +500,7 @@ def test_monitor_deletes_continuous_404_after_four_hours(db_session, monkeypatch
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     assert db_session.get(Episode, episode_id) is None
 
@@ -509,7 +509,7 @@ def test_monitor_verifies_recent_404_but_does_not_delete_it(db_session, monkeypa
     from backend.db.models import Episode
     from dailywire_api.dw_api.client import MiddlewareAPIError
     from task_manager.tasks.helpers.episodes.unusable_media import NoUsableMediaReason
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -522,7 +522,7 @@ def test_monitor_verifies_recent_404_but_does_not_delete_it(db_session, monkeypa
         ep_id="ep.1",
         title="Real episode",
         index=1,
-        published_at=(now - timedelta(hours=10)).replace(tzinfo=None),
+        published_at=(now - timedelta(hours=10)),
     )
     _mark_unusable_at(
         db_session,
@@ -544,7 +544,7 @@ def test_monitor_verifies_recent_404_but_does_not_delete_it(db_session, monkeypa
 
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     calls.assert_called_once_with("temporarily-missing")
     assert db_session.get(Episode, episode_id) is not None
@@ -557,7 +557,7 @@ def test_monitor_recovers_episode_when_404_endpoint_has_usable_media(db_session,
         NoUsableMediaReason,
         episode_no_usable_media_reason,
     )
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     now = datetime.now(timezone.utc)
     show = _make_show(db_session)
@@ -570,7 +570,7 @@ def test_monitor_recovers_episode_when_404_endpoint_has_usable_media(db_session,
         ep_id="ep.1",
         title="Real episode",
         index=1,
-        published_at=(now - timedelta(hours=5)).replace(tzinfo=None),
+        published_at=(now - timedelta(hours=5)),
     )
     _mark_unusable_at(
         db_session,
@@ -591,7 +591,7 @@ def test_monitor_recovers_episode_when_404_endpoint_has_usable_media(db_session,
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
     _patch_no_token(monkeypatch, service)
     _patch_usable_hls(monkeypatch)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     stored = db_session.get(Episode, episode_id)
     assert stored is not None
@@ -603,7 +603,7 @@ def test_monitor_recovers_episode_when_404_endpoint_has_usable_media(db_session,
 def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
     from backend.db.models import Episode
     from backend.types.episode_types import EpisodePublishStatus
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     show = _make_show(db_session)
     season = _make_season(db_session, show)
@@ -616,7 +616,7 @@ def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
         title="Real processing episode",
         index=1,
         publish_status=EpisodePublishStatus.DW_PROCESSING.value,
-        published_at=(datetime.now(timezone.utc) - timedelta(hours=10)).replace(tzinfo=None),
+        published_at=(datetime.now(timezone.utc) - timedelta(hours=10)),
     )
     db_session.commit()
     episode_id = episode.id
@@ -624,18 +624,18 @@ def test_monitor_ignores_genuine_dw_processing(db_session, monkeypatch):
     called = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", called)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     assert db_session.get(Episode, episode_id) is not None
     called.assert_not_called()
 
 
 def test_monitor_noop_when_nothing_is_unusable(db_session, monkeypatch):
-    from task_manager.tasks.workers.cleanup_episodes_stuck_without_media import service
+    from task_manager.tasks.workers.monitor_no_usable_media_episode import service
 
     called = Mock()
     monkeypatch.setattr(service, "MiddlewareClient", called)
     _patch_no_token(monkeypatch, service)
-    asyncio.run(service.run_cleanup_episodes_stuck_without_media(db_session))
+    asyncio.run(service.run_monitor_no_usable_media_episode(db_session))
 
     called.assert_not_called()

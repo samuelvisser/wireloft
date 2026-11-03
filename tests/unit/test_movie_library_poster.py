@@ -45,7 +45,7 @@ def test_reliable_catalog_poster_is_persisted_when_movie_is_indexed(monkeypatch)
 
     class FakeMovieClient:
         def __init__(self, **kwargs):
-            assert kwargs == {"access_token": None, "pace_requests": False}
+            assert kwargs == {"access_token": None, "request_priority": "interactive"}
 
         def get_movie_page(self, slug: str):
             assert slug == "run-hide-fight-infidels"

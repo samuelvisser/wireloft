@@ -51,7 +51,13 @@ def writer(tmp_path, monkeypatch):
             return self.session.get(model, key)
 
         def scalars(self, statement):
-            if list(statement.selected_columns.keys()) == ["file_path"]:
+            # Only the media-download path lookup is faked; artwork rows also
+            # select file_path and must come from the real table.
+            columns = list(statement.selected_columns)
+            if (
+                [column.key for column in columns] == ["file_path"]
+                and columns[0].table is not ShowLocalAsset.__table__
+            ):
                 return state.media_paths
             return self.session.scalars(statement)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
+from conftest import available_artifact
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -59,7 +60,7 @@ def _library(session: Session, tmp_path: Path):
         duration=60,
         publish_status="published_final",
         sharing_url="https://example.test/episode-1",
-        published_date=datetime(2026, 9, 1, 12, 0, 0),
+        published_date=datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc),
     )
     audio_profile = LocalMediaProfile(
         slug="audio",
@@ -113,11 +114,11 @@ def _library(session: Session, tmp_path: Path):
         media_item_id=episode.id,
         local_media_profile_id=audio_profile.id,
         download_profile_id=audio_download_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(audio_path),
         downloaded_bytes=5,
         format_downloaded="audio",
-        downloaded_at=datetime(2026, 9, 2, 12, 0, 0),
+        downloaded_at=datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc),
         downloaded_publish_status="published_final",
     )
     video_download = EpisodeMediaDownload(
@@ -125,11 +126,11 @@ def _library(session: Session, tmp_path: Path):
         media_item_id=episode.id,
         local_media_profile_id=video_profile.id,
         download_profile_id=video_download_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(video_path),
         downloaded_bytes=5,
         format_downloaded="video",
-        downloaded_at=datetime(2026, 9, 2, 12, 0, 0),
+        downloaded_at=datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc),
         downloaded_publish_status="published_final",
     )
     session.add_all([audio_download, video_download])
@@ -335,7 +336,7 @@ def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, 
 
     from backend.api.endpoints.shows import service
     monkeypatch.setattr(service, "queue_operation_target_dispatch", lambda *_args, **_kwargs: None)
-    from backend.db.models import Episode, Season
+    from backend.db.models import DownloadProfileBase as DownloadProfile, Episode, Season
     from backend.db.models.media_download import EpisodeMediaDownload
     from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from backend.types.media_types import MediaType
@@ -387,7 +388,7 @@ def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, 
                 media_item_id=media.id,
                 local_media_profile_id=audio_profile.id,
                 download_profile_id=original_audio.download_profile_id,
-                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+                **available_artifact(),
                 file_path=str(path),
                 downloaded_bytes=10,
             )
@@ -417,7 +418,10 @@ def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, 
         }
         assert middle_download.id not in selected_ids
         assert recent_download.id not in selected_ids
-        assert result["download_profiles_disabled"] == 2
+        # A partial delete leaves Download Profiles on: the user may want the
+        # deleted episodes downloaded again.
+        assert result["download_profiles_disabled"] == 0
+        assert all(profile.enable_profile for profile in session.query(DownloadProfile))
 
         # A newly indexed older download must not expand a queued delete's scope.
         _, later_download, later_path = episode(5, 120, "later-added.m4a")
@@ -429,6 +433,8 @@ def test_bulk_delete_latest_download_limit_freezes_exact_download_ids(tmp_path, 
             download_profiles_disabled=result["download_profiles_disabled"],
         )
         assert work["episode_files"] == 2
+        assert work["download_profiles_disabled"] == 0
+        assert all(profile.enable_profile for profile in session.query(DownloadProfile))
         assert not audio_path.exists()
         assert not video_path.exists()
         assert middle_path.exists()
@@ -500,10 +506,10 @@ def test_latest_five_downloads_are_kept_despite_ten_newer_undownloaded_episodes(
                 type=MediaType.EPISODE.value,
                 media_item_id=episode.id,
                 local_media_profile_id=audio_profile.id,
-                artifact_status=(
-                    MediaDownloadArtifactStatus.ABSENT.value if index == 14
-                    else MediaDownloadArtifactStatus.MISSING.value if index == 13
-                    else MediaDownloadArtifactStatus.AVAILABLE.value
+                **(
+                    {"artifact_status": MediaDownloadArtifactStatus.ABSENT.value} if index == 14
+                    else {"artifact_status": MediaDownloadArtifactStatus.MISSING.value} if index == 13
+                    else available_artifact()
                 ),
                 file_path=str(path),
             )
@@ -579,7 +585,7 @@ def test_latest_download_limit_is_scoped_to_selected_local_media_profile(tmp_pat
             type=MediaType.EPISODE.value,
             media_item_id=recent.id,
             local_media_profile_id=audio_profile.id,
-            artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+            **available_artifact(),
             file_path=str(tmp_path / "recent.m4a"),
         )
         session.add(recent_download)

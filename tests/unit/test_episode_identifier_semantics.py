@@ -688,7 +688,7 @@ def test_background_reindex_downgrade_restores_previous_identifier_grammar():
     from importlib import import_module
 
     migration = import_module(
-        "backend.db.alembic.versions.7c2a9e5d4b10_normalize_episode_identifiers"
+        "backend.db.alembic.versions.6d4a8c1f2b90_wireloft_1_2"
     )
     _identifier_for_previous_release = migration._identifier_for_previous_release
 
@@ -759,7 +759,9 @@ def test_episode_read_view_derives_identifier_fields_during_model_validation():
             "publish_status": "published_final",
             "title": "Episode",
             "slug": "episode",
+            "thumbnail_landscape_path": None,
             "thumbnail_portrait_path": None,
+            "thumbnail_square_path": None,
         }
     )
 
@@ -815,11 +817,10 @@ def test_compact_episode_view_includes_identifier_semantics():
         slug="season-3-episode-12-trailer",
         title="Episode 12 Trailer",
         description=None,
-        downloaded_date=None,
         duration=60,
         publish_status="published_final",
         sharing_url="https://example.test/episode",
-        published_date=datetime(2026, 9, 18, 12, 0, 0),
+        published_date=datetime(2026, 9, 18, 12, 0, 0, tzinfo=timezone.utc),
     )
     session.add_all([show, season, episode])
     session.commit()

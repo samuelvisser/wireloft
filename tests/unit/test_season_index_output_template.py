@@ -42,7 +42,6 @@ def test_show_output_template_supports_season_index(tmp_path, monkeypatch):
         slug="episode-2497",
         title="Example Episode",
         description=None,
-        downloaded_date=None,
         duration=60,
         publish_status="published_final",
         sharing_url="https://example.test/episode-2497",

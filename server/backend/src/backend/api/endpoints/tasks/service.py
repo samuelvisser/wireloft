@@ -208,6 +208,8 @@ def query_ledger(
             or_(scoped_ids, TaskRun.resource_id.is_(None))
             if include_unscoped else scoped_ids
         )
+    elif include_unscoped:
+        filters.append(TaskRun.resource_id.is_(None))
     if statuses:
         filters.append(TaskRun.status.in_([TaskStatus(status) for status in statuses]))
     if started_after is not None:

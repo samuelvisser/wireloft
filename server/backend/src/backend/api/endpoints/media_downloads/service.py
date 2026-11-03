@@ -58,6 +58,7 @@ from backend.services.media_download_collection import (
     latest_download_runs,
     media_download_collection_revision,
     media_download_queue_positions,
+    stored_sort_text,
 )
 from backend.services.media_download_history import record_media_download_history
 from backend.utils.output_template import resolve_episode_output_path, resolve_movie_output_path
@@ -392,16 +393,19 @@ def get_media_downloads_page(
             raise HTTPException(status_code=422, detail="Invalid download cursor key")
         if order == "recent":
             after = keyset_after([
-                KeysetField(source.c.recent_at, anchor["recent_at"], descending=True),
+                KeysetField(stored_sort_text(source.c.recent_at), anchor["recent_at"], descending=True),
                 KeysetField(source.c.id, cursor_id, descending=True),
             ])
         else:
             after = keyset_after([
                 KeysetField(source.c.workflow_bucket, anchor["workflow_bucket"]),
                 KeysetField(source.c.workflow_queue, anchor["workflow_queue"]),
-                KeysetField(source.c.workflow_active_started_at, anchor["workflow_active_started_at"]),
                 KeysetField(
-                    source.c.workflow_terminal_at,
+                    stored_sort_text(source.c.workflow_active_started_at),
+                    anchor["workflow_active_started_at"],
+                ),
+                KeysetField(
+                    stored_sort_text(source.c.workflow_terminal_at),
                     anchor["workflow_terminal_at"],
                     descending=True,
                 ),

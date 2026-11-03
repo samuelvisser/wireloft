@@ -284,7 +284,7 @@ def _make_show_and_episode(session, *, identifier: str):
         title="BREAKING: Judge Threatens Mistrial", duration=2500,
         publish_status="published_final", metadata_is_final=False,
         sharing_url="https://example.test/episode",
-        published_date=datetime.now(timezone.utc).replace(tzinfo=None),
+        published_date=datetime.now(timezone.utc),
     )
     session.add(episode)
     session.commit()
@@ -294,7 +294,7 @@ def _make_show_and_episode(session, *, identifier: str):
 def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
     import backend.db.models  # noqa: F401
     from backend.db import Base
-    from task_manager.tasks.workers.refresh_episode_metadata_worker import service
+    from task_manager.tasks.workers.refresh_episode_metadata import service
     engine = create_engine("sqlite+pysqlite:///:memory:")
     Base.metadata.create_all(engine)
     session = Session(engine)
@@ -306,10 +306,13 @@ def test_metadata_refresh_repairs_wrong_main_episode_identifier(monkeypatch):
             assert slug == episode.slug
             return detail
 
+    from task_manager.tasks.helpers.episodes import status
+
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(status, "get_vod_info", lambda _url: SimpleNamespace(seconds=3600))
     monkeypatch.setattr(service, "schedule_remaining_metadata_checks", lambda **kwargs: ["pending"])
     monkeypatch.setattr(service, "remove_episode_metadata_jobs", Mock())
-    asyncio.run(service.run_refresh_episode_metadata_worker(session, episode_id=episode.id, refresh=True))
+    asyncio.run(service.run_refresh_episode_metadata(session, episode_id=episode.id, refresh=True))
     session.expire_all()
     stored = session.get(type(episode), episode.id)
     assert stored.episode_identifier == "ep.2500"
