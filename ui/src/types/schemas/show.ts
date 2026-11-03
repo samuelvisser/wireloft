@@ -118,7 +118,7 @@ export const ShowReadSchema = z.looseObject({
     episodeIdentifier: z.union([z.enum(EpisodeIdentifierReg.values), z.string()]),
     authorSlug: z.string(),
     title: z.string(),
-    description: z.string(),
+    description: z.string().nullable(),
     sharingUrl: z.string(),
     backgroundImagePath: z.string().nullable().optional(),
     logoImagePath: z.string().nullable().optional(),

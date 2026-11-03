@@ -1,4 +1,4 @@
-import {CSSProperties, ReactNode, useId} from 'react'
+import {CSSProperties, ReactNode, useId, useLayoutEffect, useRef, useState} from 'react'
 
 export type SegmentedOptionValue = string | number
 
@@ -66,12 +66,36 @@ export default function SegmentedOptions<T extends SegmentedOptionValue = Segmen
   const indicatorWidth = count > 0 ? `${100 / count}%` : '0%'
   const translateX = selectedIndex <= -1 ? -1 : selectedIndex
 
+  // Options share the width equally only while every label fits; a longer label makes its
+  // option wider. So the selection follows the selected option's measured box.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const optionRefs = useRef<(HTMLLabelElement | null)[]>([])
+  const [measured, setMeasured] = useState<{left: number; width: number} | null>(null)
+  useLayoutEffect(() => {
+    if (isMulti || selectedIndex < 0) return
+    const measure = () => {
+      const option = optionRefs.current[selectedIndex]
+      if (!option) return
+      setMeasured((previous) => (
+        previous && previous.left === option.offsetLeft && previous.width === option.offsetWidth
+          ? previous
+          : {left: option.offsetLeft, width: option.offsetWidth}
+      ))
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined' || !rootRef.current) return
+    const observer = new ResizeObserver(measure)
+    observer.observe(rootRef.current)
+    return () => observer.disconnect()
+  }, [isMulti, selectedIndex, count])
+
   return (
     <div
       role={isMulti ? 'group' : 'radiogroup'}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabel ? undefined : ariaLabelledBy}
       aria-disabled={disabled || undefined}
+      ref={rootRef}
       className={`segmented-options ${className ?? ''}`.trim()}
       style={style}
       data-disabled={disabled ? '' : undefined}
@@ -83,8 +107,8 @@ export default function SegmentedOptions<T extends SegmentedOptionValue = Segmen
         <div
           className="segmented-selection"
           style={{
-            width: indicatorWidth,
-            transform: `translateX(${translateX * 100}%)`,
+            width: measured ? `${measured.width}px` : indicatorWidth,
+            transform: measured ? `translateX(${measured.left}px)` : `translateX(${translateX * 100}%)`,
             opacity: selectedIndex === -1 ? 0 : 1,
           }}
           aria-hidden
@@ -99,6 +123,7 @@ export default function SegmentedOptions<T extends SegmentedOptionValue = Segmen
         return (
           <label
             key={String(opt.value)}
+            ref={(element) => { optionRefs.current[idx] = element }}
             className={`segmented-option${checked ? ' is-checked' : ''}`}
             data-checked={checked ? '' : undefined}
             data-disabled={optDisabled ? '' : undefined}

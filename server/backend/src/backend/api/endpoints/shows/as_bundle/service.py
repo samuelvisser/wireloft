@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, Request
+from fastapi import Request
 
-from backend.db.model_mapping import create_database_fields, update_database_fields
+from backend.db.model_mapping import create_database_fields
 from backend.api.models.show import ShowAPIRead
+from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate, ShowLocalMediaProfileAPIUpdate
 from backend.api.models.show_as_bundle import (
     ShowLocalMediaProfileAPIUpsert,
     ShowLocalMediaProfileCreateNew,
@@ -25,6 +26,7 @@ from backend.utils.season_ordering import order_initial_seasons, season_type_fro
 from task_manager.events.transactional import queue_event
 from task_manager.scheduler.operation_factory import create_operation
 
+from ...show_local_media_profiles.service import create_show_local_media_profile, update_show_local_media_profile
 from ..events import ShowAdded
 from ..operations import ShowIndexOperation
 
@@ -33,33 +35,17 @@ def upsert_show_local_media_profile(
     s: Session,
     mp_input: ShowLocalMediaProfileAPIUpsert,
 ) -> ShowLocalMediaProfile:
+    """Create or update the profile the way the profile endpoints do, indexing values included."""
+    fields = mp_input.model_dump(exclude={"op", "slug_selector"})
     if isinstance(mp_input, ShowLocalMediaProfileCreateNew):
-        local_media_profile = create_database_fields(
-            ShowLocalMediaProfile,
-            mp_input,
-            exclude_fields={"op"},
+        saved = create_show_local_media_profile(s, ShowLocalMediaProfileAPICreate.model_validate(fields))
+    elif isinstance(mp_input, ShowLocalMediaProfileUpdateBySlug):
+        saved = update_show_local_media_profile(
+            s, mp_input.slug_selector, ShowLocalMediaProfileAPIUpdate.model_validate(fields),
         )
-        s.add(local_media_profile)
-        return local_media_profile
-
-    if isinstance(mp_input, ShowLocalMediaProfileUpdateBySlug):
-        local_media_profile: Optional[ShowLocalMediaProfile] = (
-            s.query(ShowLocalMediaProfile)
-            .filter_by(slug=mp_input.slug_selector)
-            .one_or_none()
-        )
-        if local_media_profile is None:
-            raise HTTPException(status_code=404, detail="Media profile not found")
-
-        update_database_fields(
-            local_media_profile,
-            mp_input,
-            exclude_fields={"op", "slug_selector"},
-        )
-        return local_media_profile
-
-    raise TypeError(f"Unsupported media profile input {type(mp_input).__name__}")
-
+    else:
+        raise TypeError(f"Unsupported media profile input {type(mp_input).__name__}")
+    return s.get(ShowLocalMediaProfile, saved.id)
 
 
 def create_show_bundle(s: Session, request: Request, payload: ShowAPICreateBundle) -> ShowAPIRead:

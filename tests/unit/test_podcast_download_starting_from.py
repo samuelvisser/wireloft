@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
@@ -187,7 +188,7 @@ def test_starting_from_never_deletes_older_downloads(db_session, tmp_path):
         media_item_id=old_episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(existing_file),
     )
     db_session.add(existing)

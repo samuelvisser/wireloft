@@ -88,9 +88,11 @@ def _db_with_download(tmp_path, *, file_name="episode.m4a", write_bytes: bytes |
 
 
 @pytest.fixture(autouse=True)
-def _enable_file_watcher(monkeypatch):
+def _enable_file_watcher(monkeypatch, tmp_path):
     from config import get_settings
 
+    # The watcher only reconciles artifacts under the configured download root.
+    monkeypatch.setattr(get_settings().download_settings, "download_root", tmp_path)
     monkeypatch.setattr(get_settings().file_watcher, "enabled", True)
     monkeypatch.setattr(get_settings().file_watcher, "verify_file_size", True)
     yield

@@ -20,6 +20,11 @@ crypto:
   defaultSecretFile: /config/wl_secret.key
 
 downloadSettings:
+  # Directory the '/downloads/' prefix of output templates maps to. Keep this
+  # on the /downloads volume: anything outside a mounted volume is lost when
+  # the container is recreated.
+  downloadRoot: /downloads
+
   # Stage downloads locally before publishing the completed media.
   downloadMode: temporary
 

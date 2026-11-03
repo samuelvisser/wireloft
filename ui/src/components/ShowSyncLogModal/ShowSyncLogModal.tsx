@@ -30,7 +30,7 @@ function resultData(run: TaskLedgerEntryRead): Record<string, unknown> {
 function showResult(run: TaskLedgerEntryRead, showId: number): Record<string, unknown> | null {
   const data = resultData(run)
   if (run.resourceId === showId) return data
-  if (run.resourceId !== 0 && run.resourceId !== null) return null
+  if (run.resourceId !== null) return null
 
   const shows = Array.isArray(data.shows) ? data.shows : []
   const matching = shows.find((item) => {
@@ -67,11 +67,11 @@ export default function ShowSyncLogModal({showSlug, showTitle, open, syncing, on
     if (open) setPage(1)
   }, [open, showSlug])
 
-  // Include historical global runs (ID 0) alongside the new unscoped runs.
+  // Global scans have no resource; their results list each show they scanned.
   const ledger = useTaskLedgerInfinite({
     definitionKey: 'fetch_new_episodes',
     resourceType: 'show',
-    resourceId: showId === undefined ? undefined : [0, showId],
+    resourceId: showId === undefined ? undefined : [showId],
     includeUnscoped: true,
     status: TERMINAL_STATUSES,
     startedAfter: show?.createdAt,

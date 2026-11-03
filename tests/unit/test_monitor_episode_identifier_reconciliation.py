@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 
-def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
+def test_monitor_reconciles_identifier_while_episode_stays_pending(monkeypatch):
     import backend.db.models  # noqa: F401
     from backend.db import Base
     from backend.db.models import Episode, Season, Show
@@ -17,10 +17,9 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
     from backend.utils.helpers import generate_uuid
     from dailywire_api.records import DwEpisodeDetailRecord
     from task_manager.tasks.helpers.episodes import events as episode_events
-    from task_manager.tasks.workers.monitor_episode_worker import service
-    from task_manager.tasks.workers.monitor_episode_worker.scheduling import (
+    from task_manager.tasks.workers.monitor_pending_episode import service
+    from task_manager.tasks.workers.monitor_pending_episode.scheduling import (
         MONITOR_COMPLETED_EVENT,
-        MONITOR_REQUESTED_EVENT,
     )
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
@@ -57,7 +56,7 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
         publish_status=EpisodePublishStatus.LIVE.value,
         metadata_is_final=False,
         sharing_url="https://example.test/episode",
-        published_date=datetime.now(timezone.utc).replace(tzinfo=None),
+        published_date=datetime.now(timezone.utc),
     )
     session.add(episode)
     session.commit()
@@ -101,7 +100,7 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
     monkeypatch.setattr(episode_events, "queue_event", Mock())
 
     result = asyncio.run(
-        service.run_monitor_episode_worker(
+        service.run_monitor_pending_episode(
             session,
             episode_id=episode.id,
             episode_slug=episode.slug,
@@ -119,21 +118,14 @@ def test_monitor_reconciles_identifier_and_rekeys_recurring_job(monkeypatch):
     assert stored.episode_identifier == "ep.2500"
     assert stored.dw_episode_number == "2500.00"
 
+    # Monitor jobs are keyed by episode id, so an identifier change needs no
+    # re-keying, and a still-live episode keeps its monitor.
     completed = [
         call.args[2]
         for call in monitor_events.call_args_list
         if call.args[1] == MONITOR_COMPLETED_EVENT
     ]
-    requested = [
-        call.args[2]
-        for call in monitor_events.call_args_list
-        if call.args[1] == MONITOR_REQUESTED_EVENT
-    ]
-    assert len(completed) == 1
-    assert completed[0]["episode_identifier"] == old_identifier
-    assert len(requested) == 1
-    assert requested[0]["episode_identifier"] == "ep.2500"
-    assert requested[0]["resource_id"] == episode.id
+    assert completed == []
 
     session.close()
     engine.dispose()

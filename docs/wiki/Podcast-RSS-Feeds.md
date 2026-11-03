@@ -106,6 +106,13 @@ These video-delivery choices only matter when WireLoft needs the Daily Wire fall
 
 A useful video setup is to keep a small number of recent episodes downloaded while allowing older episodes to use Daily Wire.
 
+## Live episodes
+
+A video feed that uses HLS can also list episodes while they are still live, so you can listen or watch along.
+
+- With Daily Wire streaming enabled, live episodes always appear.
+- Without Daily Wire streaming, the feed only shows what your downloads can provide. A live episode is then listed only when your Download Profiles will download all of its media once it is published, for example both the audio and the HLS video for **Podcasting 2.0 direct stream with audio fallback**. If only part of the media is set to download, live episodes do not appear, and the Stream Profile shows a warning.
+
 ## Copy and edit the feed URL
 
 After a Stream Profile is created, WireLoft shows its private RSS URL with **Copy** and **Regenerate** actions.

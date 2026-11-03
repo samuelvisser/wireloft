@@ -8,8 +8,8 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-PREVIOUS_REVISION = "b6f3c8a1d2e4"
-HEAD_REVISION = "3f7b6a2c9d10"
+PREVIOUS_REVISION = "d8b4a1f6c203"  # WireLoft 1.1
+HEAD_REVISION = "6d4a8c1f2b90"  # WireLoft 1.2
 
 
 def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
@@ -68,9 +68,8 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
                 }).lastrowid
                 connection.execute(text(
                     "INSERT INTO stream_profiles_rss "
-                    "(id, feed_url, dw_video_method, max_items, "
-                    "stream_live_episodes, live_episode_handoff_ids) VALUES "
-                    "(:id, :feed_url, :method, 0, 0, '[]')"
+                    "(id, feed_url, dw_video_method, max_items) VALUES "
+                    "(:id, :feed_url, :method, 0)"
                 ), {
                     "id": profile_id,
                     "feed_url": (
@@ -107,7 +106,7 @@ def test_rss_output_mode_migration_rewrites_methods_and_stabilizes_feed_urls(
         by_token = {row["token"]: row for row in rows}
         for index, (_old_method, new_mode, _preferred_format) in enumerate(cases):
             row = by_token[f"profile-{index}"]
-            assert row["prefer_exact_match"] is False
+            assert not row["prefer_exact_match"]
             assert row["video_output_mode"] == new_mode
             parts = urlsplit(row["feed_url"])
             assert parse_qs(parts.query) == {"custom": ["value"]}

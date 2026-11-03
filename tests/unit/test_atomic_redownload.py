@@ -381,8 +381,6 @@ def _publish_without_database_commit(
                 return
             return original_replace(source, destination)
 
-        assert monkeypatch is not None
-        monkeypatch.setattr(replacement.os, "replace", interrupt)
 
     kwargs = dict(
         media_download_id=download_id,
@@ -395,7 +393,11 @@ def _publish_without_database_commit(
         should_cancel=lambda: False,
     )
     if interrupt_at is not None:
-        with pytest.raises(OSError, match="simulated crash"):
+        assert monkeypatch is not None
+        # Only the rename is patched, and only for this call, so the fixtures'
+        # database stays in place for the "new process" that recovers it.
+        with monkeypatch.context() as patched, pytest.raises(OSError, match="simulated crash"):
+            patched.setattr(replacement.os, "replace", interrupt)
             replacement.publish_replacement(**kwargs)
     else:
         replacement.publish_replacement(**kwargs)
@@ -416,9 +418,6 @@ def test_startup_recovery_finishes_atomic_replacement_and_database(
         old_download, tmp_path, monkeypatch=monkeypatch,
         interrupt_at=interrupt_at,
     )
-    if interrupt_at is not None:
-        # Simulate a new process, with the original OS rename function restored.
-        monkeypatch.undo()
 
     with factory() as session:
         stale = session.get(MediaDownloadBase, media_download_id)
@@ -574,3 +573,133 @@ def test_stale_journal_cannot_replace_database_owner(
     assert recover_abandoned_download_replacements(old.parent) == 0
     assert old.read_bytes() == b"existing complete media"
     assert list(old.parent.glob(".wireloft-replacement-*.json"))
+
+
+@pytest.mark.parametrize("mode", ["direct", "temporary"])
+def test_redownload_of_corrupted_file_replaces_it_instead_of_duplicating(
+    old_download, monkeypatch, mode,
+):
+    from backend.db.models.media_download import MediaDownloadBase
+    from dailywire_downloader import coordinator
+    from task_manager.tasks import download_adapter
+
+    factory, media_download_id, old, sidecar, _downloaded_at = old_download
+    original_prepare = download_adapter.prepare_download_plan
+
+    def prepare(session, media_id, tracker):
+        return original_prepare(session, media_id, tracker, mode=mode)
+
+    monkeypatch.setattr(download_adapter, "prepare_download_plan", prepare)
+    # The File Watcher marks a truncated file Corrupted; it no longer matches
+    # the recorded identity, so it cannot be kept as the previous version.
+    old.write_bytes(b"trunc")
+    with factory() as session:
+        session.get(MediaDownloadBase, media_download_id).artifact_status = "corrupted"
+        session.commit()
+
+    def download(_url, path, *, progress, should_cancel):
+        Path(path).write_bytes(b"new raw media")
+        return DownloadResult(path, len(b"new raw media"))
+
+    def embed(path, **kwargs):
+        Path(path).write_bytes(b"new fully processed media")
+
+    monkeypatch.setattr(coordinator, "download_file", download)
+    monkeypatch.setattr(coordinator, "embed_media", embed)
+
+    with factory() as session:
+        download_adapter.run_download(
+            session, media_download_id=media_download_id,
+            is_redownload=True, prepare_existing_artifact=True,
+        )
+
+    assert old.read_bytes() == b"new fully processed media"
+    assert sorted(path.name for path in old.parent.iterdir() if not path.name.startswith(".")) == [
+        "Episode.mp4", "Episode.nfo",
+    ]
+    with factory() as session:
+        current = session.get(MediaDownloadBase, media_download_id)
+        assert current.file_path == str(old)
+        assert current.artifact_status == "available"
+
+
+def test_redownload_replaces_an_edited_sidecar(old_download, monkeypatch):
+    from dailywire_downloader import coordinator
+    from task_manager.tasks import download_adapter
+
+    factory, media_download_id, old, sidecar, _ = old_download
+    sidecar.write_bytes(b"<edited by hand />")
+
+    def download(_url, path, **kwargs):
+        Path(path).write_bytes(b"new raw media")
+        return DownloadResult(path, len(b"new raw media"))
+
+    monkeypatch.setattr(coordinator, "download_file", download)
+    monkeypatch.setattr(coordinator, "embed_media", lambda path, **kwargs: None)
+
+    with factory() as session:
+        download_adapter.run_download(
+            session, media_download_id=media_download_id,
+            is_redownload=True, prepare_existing_artifact=True,
+        )
+
+    assert old.read_bytes() == b"new raw media"
+    assert sidecar.read_bytes() == b"<new />"
+
+
+def test_startup_recovery_drops_an_unpublished_attempt_it_cannot_finish(
+    old_download, tmp_path, monkeypatch,
+):
+    from backend.db.models.media_download import MediaDownloadBase
+    from backend.services.download_recovery import recover_abandoned_download_replacements
+    from dailywire_downloader.storage import replacement
+
+    factory, media_download_id, old, sidecar, _ = old_download
+    with factory() as session:
+        download = session.get(MediaDownloadBase, media_download_id)
+        previous = replacement.capture_previous_download(
+            download.file_path,
+            size_bytes=download.artifact_size_bytes,
+            fingerprint=download.artifact_fingerprint,
+            assets=tuple((a.path, a.size_bytes, a.fingerprint) for a in download.assets),
+        )
+    media = tmp_path / "prepared.mp4"
+    media.write_bytes(b"verified replacement media")
+    nfo = tmp_path / "prepared.nfo"
+    nfo.write_bytes(b"<new />")
+
+    original_replace = replacement.os.replace
+
+    def crash(source, destination):
+        if Path(source).name.startswith(".wireloft-replace-"):
+            raise OSError("simulated crash before the first rename")
+        return original_replace(source, destination)
+
+    # A killed process skips the in-process cleanup, so keep the journal and
+    # its staged files exactly as a crash would leave them.
+    with monkeypatch.context() as patched, pytest.raises(OSError, match="simulated crash"):
+        patched.setattr(replacement.os, "replace", crash)
+        patched.setattr(replacement.ReplacementJournal, "discard_unpublished", lambda self: None)
+        replacement.publish_replacement(
+            media_download_id=media_download_id,
+            previous=previous,
+            media_source=media,
+            sidecars=(replacement.ReplacementSidecar("nfo", "nfo", nfo, ".nfo"),),
+            downloaded_bytes=1,
+            format_downloaded="new",
+            downloaded_publish_status=None,
+            should_cancel=lambda: False,
+        )
+    assert list(old.parent.glob(".wireloft-replacement-*.json"))
+
+    # The user canceled the download before the restart, so recovery must not
+    # finish it; the unpublished attempt is dropped instead of kept forever.
+    with factory() as session:
+        session.get(MediaDownloadBase, media_download_id).automatic_retry_suppressed = True
+        session.commit()
+
+    assert recover_abandoned_download_replacements(old.parent) == 0
+    assert old.read_bytes() == b"existing complete media"
+    assert sidecar.read_bytes() == b"<old />"
+    assert not list(old.parent.glob(".wireloft-replacement-*.json"))
+    assert not list(old.parent.glob(".wireloft-replace-*.part"))

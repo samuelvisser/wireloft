@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 def _episode(identifier: str, *, dw_episode_number: str | None = None):
     return SimpleNamespace(
-        show=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", custom_metadata=None),
+        show=SimpleNamespace(slug="chip-chilla", title="Chip Chilla", meta_items=[]),
         season=SimpleNamespace(
             slug="season-1",
             name="Season 1",
@@ -17,6 +17,7 @@ def _episode(identifier: str, *, dw_episode_number: str | None = None):
         dw_episode_number=dw_episode_number,
         published_date=None,
         index=42,
+        meta_items=[],
     )
 
 

@@ -12,6 +12,7 @@
 - [[Download-Profiles]]
 - [[Downloads-and-File-Integrity]]
 - [[Podcast-RSS-Feeds]]
+- [[Messages-and-Actions]]
 
 **How WireLoft stays current**
 - [[Daily-Wire-Integration]]

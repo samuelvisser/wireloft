@@ -11,11 +11,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
 // Test-only loader: exercise the actual TypeScript without requiring a browser
 // or adding a second application test framework. TypeScript is a UI devDependency.
-function loadTs(relative, mocks = {}) {
+function loadTs(relative, mocks = {}, compilerOptions = {}) {
     const filename = resolve(root, relative)
     const source = readFileSync(filename, 'utf8')
     const js = ts.transpileModule(source, {
-        compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022},
+        compilerOptions: {module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, ...compilerOptions},
         fileName: filename,
     }).outputText
     const module = {exports: {}}
@@ -197,7 +197,8 @@ function componentTree(props, advisoryState = {advisories: [], unavailable: fals
     }).outputText
     const exports = {}
     let sentRequest
-    const jsx = (type, props, key) => ({type, props, key})
+    // Render the read-only code component too, so assertions see its CodeMirror props.
+    const jsx = (type, props, key) => typeof type === 'function' ? type(props) : {type, props, key}
     const dependencies = {
         'react/jsx-runtime': {jsx, jsxs: jsx},
         react: {useMemo: (factory) => factory()},
@@ -211,7 +212,12 @@ function componentTree(props, advisoryState = {advisories: [], unavailable: fals
         './outputTemplateCodeMirror': {outputTemplateSyntaxExtensions: ['jinja', 'highlighting']},
         './outputTemplateFormatting': formatting,
         './CustomIndexAdvisories.css': {},
+        './OutputTemplateEditor.css': {},
+        './ReadOnlyOutputTemplateCode.css': {},
     }
+    dependencies['./ReadOnlyOutputTemplateCode'] = loadTs(
+        'src/components/LocalMediaProfile/ReadOnlyOutputTemplateCode.tsx', dependencies, {jsx: ts.JsxEmit.ReactJSX},
+    )
     new Function('require', 'exports', js)((name) => dependencies[name], exports)
     const tree = exports.default(props)
     const elements = []

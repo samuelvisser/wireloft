@@ -2,9 +2,9 @@ from __future__ import annotations
 
 
 def test_output_template_expression_spacing_is_canonicalized_on_profile_input() -> None:
-    from backend.api.models.local_media_profile import LocalMediaProfileAPICreate
+    from backend.api.models.show_local_media_profile import ShowLocalMediaProfileAPICreate
 
-    profile = LocalMediaProfileAPICreate.model_validate({
+    profile = ShowLocalMediaProfileAPICreate.model_validate({
         "type": "show",
         "name": "Canonical spacing",
         "outputTemplate": "/downloads/{{show_title}}/{{  episode_title  }}.ext",

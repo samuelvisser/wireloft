@@ -18,7 +18,7 @@ class _ShowAPIBaseIn(RequestBase):
     """Fields for requests: validate here if needed."""
 
     title: str
-    description: str
+    description: Optional[str] = None
     sharing_url: str
     membership_level: str
     author_name: str
@@ -129,7 +129,7 @@ class _ShowAPIBaseOut(CustomMetadataResponseBase):
     episode_identifier: Union[EpisodeIdentifier, str]
     author_slug: str
     title: str
-    description: str
+    description: Optional[str] = None
     sharing_url: str
     author_name: str
     author_headshot_path: Optional[str] = None

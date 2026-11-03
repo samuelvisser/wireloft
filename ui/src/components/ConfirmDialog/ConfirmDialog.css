@@ -12,7 +12,8 @@
     margin-top: 0.5lh;
 }
 
-.confirm-dialog-content > p + :not(p) {
+/* Fields and other blocks after the description sit 16px apart, like the rows of a .form. */
+.confirm-dialog-content > * + :not(p) {
     margin-top: 16px;
 }
 

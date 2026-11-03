@@ -2,5 +2,7 @@
   "fas:circle-video": "fas:video",
   "fas:floppy-disk-circle-xmark": "fas:floppy-disk",
   "fass:books": "fas:book-bookmark",
+  "fass:circle-video": "fas:video",
+  "fass:floppy-disk-circle-xmark": "fas:floppy-disk",
   "fass:rectangle-history": "fas:clock-rotate-left"
 }

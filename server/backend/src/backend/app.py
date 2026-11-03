@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.api.errors import integrity_error_handler
 from backend.utils.custom_index import CustomIndexNotReadyError
+from backend.services.notifications.errors import NotificationError
 from backend.db import get_session
 from backend.security.auth import is_authenticated
 from config import get_settings
@@ -111,6 +112,7 @@ async def application_lifespan(app: FastAPI):
 
     started = False
     recovery_started = False
+    notification_worker = None
     try:
         controller.start_controller()
         started = True
@@ -123,8 +125,15 @@ async def application_lifespan(app: FastAPI):
         )
         recovery_thread.start()
         recovery_started = True
+
+        from backend.services.notifications.worker import start_notification_worker
+        notification_worker = start_notification_worker()
         yield
     finally:
+        if notification_worker is not None:
+            stop_event, worker_thread = notification_worker
+            stop_event.set()
+            worker_thread.join(timeout=10)
         if not recovery_started:
             filesystem_pause.release()
         if started:
@@ -189,6 +198,15 @@ def create_app() -> FastAPI:
                 session.commit()
         return JSONResponse({"detail": str(error)}, status_code=409)
 
+    @app.exception_handler(NotificationError)
+    async def _notification_error(_request: Request, error: NotificationError):
+        if error.field is None:
+            return JSONResponse({"detail": str(error)}, status_code=error.status_code)
+        return JSONResponse(
+            {"detail": [{"loc": ["body", error.field], "msg": str(error), "type": "value_error"}]},
+            status_code=error.status_code,
+        )
+
     # Auth middleware to protect all API endpoints except /api/auth/*
     @app.middleware("http")
     async def _auth_guard(request: Request, call_next):
@@ -243,6 +261,8 @@ def create_app() -> FastAPI:
         task_router,
         feeds_router,
         custom_metadata_router,
+        notification_router,
+        push_router,
         logs_router,
     )
     from backend.api.endpoints.auth.router import router as auth_router
@@ -277,5 +297,7 @@ def create_app() -> FastAPI:
     app.include_router(stream_profile_router, prefix="/api")
     app.include_router(task_router, prefix="/api")
     app.include_router(logs_router, prefix="/api")
+    app.include_router(notification_router, prefix="/api")
+    app.include_router(push_router, prefix="/api")
 
     return app

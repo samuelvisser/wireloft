@@ -66,6 +66,7 @@ export default function StreamProfileForm({
     const useDwStream = watch('useDwStream')
     const preferredFormat = watch('preferredFormat')
     const videoOutputMode = watch('videoOutputMode')
+    const streamLiveEpisodes = watch('streamLiveEpisodes')
     const selectedEpisodeTypes: string[] = watch('epIdTypeList') || []
     const internalEpisodeTypesManuallyChanged = useRef(false)
     const episodeTypeDefaultsInitialized = useRef(false)
@@ -181,6 +182,7 @@ export default function StreamProfileForm({
             videoOutputMode={videoOutputMode}
             useDownloads={!!useDownloads}
             useDwStream={!!useDwStream}
+            streamLiveEpisodes={!!streamLiveEpisodes}
             selectedEpisodeTypes={selectedEpisodeTypes}
             downloadProfileDefaults={downloadProfileDefaults}
             showSlug={showSlug}

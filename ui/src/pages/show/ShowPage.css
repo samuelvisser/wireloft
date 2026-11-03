@@ -258,16 +258,8 @@
 
 @media (max-width: 460px) {
     .show-page-actions {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, auto));
-        justify-content: stretch;
-    }
-
-    .show-page-actions > .btn,
-    .show-page-actions > .action-menu,
-    .show-page-actions .action-menu-trigger {
-        width: 100%;
-        justify-content: center;
+        display: flex;
+        flex-wrap: wrap;
     }
 
     .show-profile-links {

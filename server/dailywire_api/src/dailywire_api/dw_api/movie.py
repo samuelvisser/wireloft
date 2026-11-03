@@ -65,8 +65,10 @@ class MovieMiddlewareClient(MiddlewareClient):
             if not matched:
                 extras.insert(0, trailer)
 
+        # Drop the raw "extras" key: it is an earlier alias choice than
+        # "movie_extras" and would otherwise replace the merged, typed list.
         return DwMovieRecord.model_validate({
-            **payload,
+            **{key: value for key, value in payload.items() if key not in {"extras", "movieExtras"}},
             "movie_extras": extras,
             "trailer": trailer,
         })

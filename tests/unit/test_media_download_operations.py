@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import mark_artifact_available
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import create_engine, select
@@ -1048,7 +1049,7 @@ def test_prioritize_queued_download_records_the_click_time():
         engine.dispose()
 
 
-def test_prioritized_downloads_dispatch_first_in_click_order(monkeypatch):
+def test_prioritized_downloads_dispatch_first_latest_click_in_front(monkeypatch):
     from task_manager.tasks import media_download_operations
 
     session, engine = _session()
@@ -1074,7 +1075,8 @@ def test_prioritized_downloads_dispatch_first_in_click_order(monkeypatch):
         monkeypatch.setattr(media_download_operations, "_reserve_target_dispatch", capture_dispatch)
 
         assert media_download_operations.dispatch_queued_media_download_operations(session, budget=3) == 3
-        assert dispatched == [first.id, second.id, normal.id]
+        # Each click moves a download to the front of the queue.
+        assert dispatched == [second.id, first.id, normal.id]
     finally:
         session.close()
         engine.dispose()
@@ -1210,9 +1212,9 @@ def test_redownload_dependencies_freeze_weights_and_preserve_child_ownership(mon
         first = _make_download(session, slug="dependency-existing")
         second = _make_download(session, slug="dependency-new-known")
         third = _make_download(session, slug="dependency-new-unknown")
-        first.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
-        second.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
-        third.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(first)
+        mark_artifact_available(second)
+        mark_artifact_available(third)
         first.downloaded_bytes = 100
         second.downloaded_bytes = 300
         third.downloaded_bytes = None
@@ -1365,7 +1367,7 @@ def test_delete_unavailable_media_download_rejects_available_record():
     session, engine = _session()
     try:
         download = _make_download(session, slug="delete-available")
-        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(download)
         download_id = download.id
         session.commit()
 
@@ -1437,12 +1439,13 @@ def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, 
         nfo.write_text("metadata")
         leftover = tmp_path / "episode.m4a.part"
         leftover.write_bytes(b"temporary data")
-        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(download)
         download.file_path = str(media)
         download.set_asset_path("artwork", "thumbnail", str(artwork))
         download.set_asset_path("nfo", "nfo", str(nfo))
         record_media_download_history(session, download.id, MediaDownloadHistoryAction.CREATED)
         download_id = download.id
+        episode, profile_id = download.media, download.local_media_profile_id
         session.commit()
 
         @contextmanager
@@ -1452,6 +1455,8 @@ def test_delete_media_download_action_removes_owned_files_and_history(tmp_path, 
         monkeypatch.setattr(download_actions, "db_session", test_db_session)
 
         assert download_actions.delete_media_download_action(download_id)
+        # A Download Profile may download it again.
+        assert not episode.download_dismissed(profile_id)
         assert not media.exists()
         assert not artwork.exists()
         assert not nfo.exists()
@@ -1547,7 +1552,7 @@ def test_delete_media_download_action_keeps_record_if_file_cleanup_fails(tmp_pat
         media = tmp_path / "protected.m4a"
         media.write_bytes(b"protected data")
         download.file_path = str(media)
-        download.artifact_status = MediaDownloadArtifactStatus.AVAILABLE.value
+        mark_artifact_available(download)
         download_id = download.id
         session.commit()
 
@@ -1571,3 +1576,31 @@ def test_delete_media_download_action_keeps_record_if_file_cleanup_fails(tmp_pat
     finally:
         session.close()
         engine.dispose()
+
+
+def test_download_delete_routes_keep_files_unless_asked(monkeypatch):
+    from backend.api.endpoints.media_downloads import router as media_downloads_router
+
+    calls = []
+    monkeypatch.setattr(
+        media_downloads_router,
+        "delete_unavailable_media_download_action",
+        lambda media_download_id: calls.append(("unavailable", media_download_id)),
+    )
+    monkeypatch.setattr(
+        media_downloads_router,
+        "delete_media_download_action",
+        lambda media_download_id: calls.append(("with_files", media_download_id)),
+    )
+
+    media_downloads_router.media_downloads_delete(7)
+    media_downloads_router.media_downloads_delete_with_files(8)
+
+    assert calls == [("unavailable", 7), ("with_files", 8)]
+    paths = {
+        (route.path, method)
+        for route in media_downloads_router.router.routes
+        for method in getattr(route, "methods", ())
+    }
+    assert ("/media-downloads/{media_download_id}", "DELETE") in paths
+    assert ("/media-downloads/{media_download_id}/files", "DELETE") in paths

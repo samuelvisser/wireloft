@@ -16,6 +16,7 @@ from backend.services.episode_download_delay import (
     episode_download_delay_ready_at,
 )
 from backend.services.media_download_history import record_media_download_history
+from backend.services.notifications.emitters import episode_deleted
 from task_manager.scheduler.types import OperationSource
 from task_manager.tasks.media_download_operations import (
     cancel_media_download_operation,
@@ -351,7 +352,14 @@ def delete_media_download_action(
             # Resolve tracked renames and clean up media, temporary output and
             # sidecars before deleting the row (and its durable action history).
             # A removal failure must not silently leave an orphan on disk.
+            had_file = download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
+            path = download.file_path
             prepare_media_download_artifact(s, download, strict_cleanup=True)
+            if had_file and isinstance(download.media, Episode):
+                episode_deleted(s, download.media, path=path, reason="It was deleted by hand.")
+            # Unlike Delete unavailable, the episode is not dismissed: a Download
+            # Profile that still covers it may download it again, which can be
+            # the reason for deleting it.
             s.delete(download)
             s.commit()
             return True

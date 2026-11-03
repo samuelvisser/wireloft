@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from backend.db.models import Episode
 from backend.db.models.media_download import MediaDownloadAsset, MediaDownloadBase
 from backend.services.download_plans import prepare_download_plan
+from backend.services.notifications.emitters import episode_downloaded
 from backend.services.media_download_history import (
     download_attempt_metadata, record_media_download_history,
     record_media_download_history_if_exists, record_media_download_operation_history_once,
@@ -143,6 +144,18 @@ def run_download(
                             for asset in current.assets
                         ),
                     )
+                    if previous is None:
+                        # The file at the recorded path no longer matches its
+                        # recorded identity (Corrupted, changed or never
+                        # fingerprinted). Replace it in place rather than
+                        # publishing the new download next to it as a duplicate.
+                        previous = capture_previous_download(
+                            current.file_path,
+                            size_bytes=None,
+                            fingerprint=None,
+                            assets=tuple((asset.path, None, None) for asset in current.assets),
+                            claim_current=True,
+                        )
                 # An attempt owns none of the previous output paths until a new
                 # artifact is committed. Never delete or reset the old artifact
                 # merely because retry work is starting, including Missing or
@@ -204,6 +217,7 @@ def run_download(
             download.downloaded_at = finished
             if isinstance(download.media, Episode):
                 download.downloaded_publish_status = publish_status
+                episode_downloaded(session, download.media, path=execution.result.path, replaced=is_redownload)
             result_data = {
                 "media_download_id": media_download_id, "is_redownload": is_redownload,
                 "file_path": execution.result.path, "downloaded_bytes": execution.result.bytes_downloaded,

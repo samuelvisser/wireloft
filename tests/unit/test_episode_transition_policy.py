@@ -93,7 +93,7 @@ def test_unusable_remote_snapshot_can_move_final_episode_to_quarantine(monkeypat
     from task_manager.tasks.helpers.episodes import status
 
     monkeypatch.setattr(status, "get_settings", _settings)
-    detail = _detail(video_url=None)
+    detail = _detail(video_url="")
     observed = status.observe_episode_detail(detail)
     resolved = status.resolve_episode_status(
         detail,

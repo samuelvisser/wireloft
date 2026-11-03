@@ -57,7 +57,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
         setDeleteBusy(true)
         try {
             const base = (window as any).appConfig.API_URL
-            const response = await fetch(`${base}/media-downloads/${row.id}`, {
+            const response = await fetch(`${base}/media-downloads/${row.id}/files`, {
                 method: 'DELETE',
                 credentials: 'include',
             })
@@ -222,7 +222,7 @@ export default function DownloadLogDialog({row, onClose}: Props) {
                     This will stop any active download and remove its record, download history,
                     media file and associated downloaded files from the filesystem.
                 </p>
-                <p>This action cannot be undone. Automatic Download Profiles may download the media again later.</p>
+                <p>This action cannot be undone. A Download Profile that covers this episode may download it again.</p>
             </ConfirmDialog>
         </>
     )

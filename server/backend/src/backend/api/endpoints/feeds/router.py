@@ -65,8 +65,9 @@ def _cached_mp4_head_response(file_path: Path | None, *, filename: str) -> Respo
         headers["Content-Length"] = str(file_path.stat().st_size)
 
     response = Response(content=b"", media_type="video/mp4", headers=headers)
-    if file_path is None:
-        response.headers.pop("content-length", None)
+    if file_path is None and "content-length" in response.headers:
+        # Response adds Content-Length: 0 for the empty body; an uncached file has no known size.
+        del response.headers["content-length"]
     return response
 
 

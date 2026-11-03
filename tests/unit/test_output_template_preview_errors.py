@@ -1,28 +1,35 @@
 import pytest
-from fastapi import HTTPException
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 
-def test_template_preview_reports_unknown_jinja_filter_as_validation_error() -> None:
-    from backend.api.endpoints.local_media_profiles.router import local_media_profile_template_preview
-    from backend.api.models.local_media_profile import LocalMediaProfileTemplatePreview
+@pytest.fixture
+def db_session():
+    import backend.db.models  # noqa: F401
+    from backend.db import Base
 
-    body = LocalMediaProfileTemplatePreview(
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as session:
+        yield session
+    engine.dispose()
+
+
+def test_template_preview_reports_unknown_jinja_filter_as_output_error(db_session) -> None:
+    from backend.api.endpoints.local_media_profiles.preview import get_local_media_profile_preview
+    from backend.api.models.local_media_profile_preview import LocalMediaProfilePreviewRequest
+
+    body = LocalMediaProfilePreviewRequest(
         type="show",
         preferred_format="format_audio_only",
-        output_template="/downloads/{{ title | regex_replace('x', 'y') }}.ext",
+        output_template="/downloads/{{ title | not_a_filter('x', 'y') }}.ext",
         values={"title": "Example"},
     )
 
-    with pytest.raises(HTTPException) as exc_info:
-        local_media_profile_template_preview(body)
+    result = get_local_media_profile_preview(db_session, body)
 
-    assert exc_info.value.status_code == 422
-    assert exc_info.value.detail == [{
-        "loc": ["body", "outputTemplate"],
-        "msg": "No filter named 'regex_replace'.",
-        "type": "value_error",
-    }]
-
+    assert result.output.output_path is None
+    assert result.output.error.startswith("No filter named 'not_a_filter'.")
 
 
 def test_preview_plan_treats_incomplete_jinja_as_expected_editor_state(db_session) -> None:

@@ -121,7 +121,8 @@ def test_movie_extra_playback_uses_clip_endpoint_and_retains_metadata(monkeypatc
     assert playback.video_url == "https://stream.example/extra/master.m3u8"
     assert playback.metadata.slug == "making-of-a-movie"
     assert playback.metadata.thumbnail_landscape_path == thumbnail_url
-    assert playback.metadata.thumbnail_portrait_path == thumbnail_url
+    # The portrait slot only duplicated the landscape default, so it is dropped.
+    assert playback.metadata.thumbnail_portrait_path is None
     assert playback.metadata.thumbnail_square_path == ""
     assert playback.metadata.sharing_url == "https://www.dailywire.com/clips/making-of-a-movie"
     assert playback.metadata.available_for == ["FREE", "ALL_ACCESS"]

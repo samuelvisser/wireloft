@@ -23,7 +23,7 @@ def test_catalog_ui_read_bypasses_background_pacing(monkeypatch):
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
 
     assert service.get_catalog() is catalog
-    assert captured["pace_requests"] is False
+    assert captured["request_priority"] == "interactive"
 
 
 def test_show_preview_ui_read_bypasses_background_pacing(monkeypatch):
@@ -50,7 +50,7 @@ def test_show_preview_ui_read_bypasses_background_pacing(monkeypatch):
 
     assert service.get_show("example-show", membership_plan="ALL_ACCESS") is show
     assert captured["access_token"] == "token"
-    assert captured["pace_requests"] is False
+    assert captured["request_priority"] == "interactive"
 
 
 def test_movie_ui_read_bypasses_background_pacing(monkeypatch):
@@ -72,10 +72,11 @@ def test_movie_ui_read_bypasses_background_pacing(monkeypatch):
             return movie
 
     monkeypatch.setattr(service, "DeviceAuthClient", FakeAuth)
-    monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
+    monkeypatch.setattr(service, "MovieMiddlewareClient", FakeClient)
+    monkeypatch.setattr(service, "_prefer_reliable_catalog_poster", lambda record: record)
 
-    assert service.get_movie("example-movie") is movie
-    assert captured["pace_requests"] is False
+    assert service.get_live_movie("example-movie") is movie
+    assert captured["request_priority"] == "interactive"
 
 
 def test_user_info_ui_read_bypasses_background_pacing(monkeypatch):
@@ -94,4 +95,4 @@ def test_user_info_ui_read_bypasses_background_pacing(monkeypatch):
     monkeypatch.setattr(service, "MiddlewareClient", FakeClient)
 
     assert service.get_user_info() is user_info
-    assert captured["pace_requests"] is False
+    assert captured["request_priority"] == "interactive"

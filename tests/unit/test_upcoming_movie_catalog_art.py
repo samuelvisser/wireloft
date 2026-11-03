@@ -54,7 +54,7 @@ def test_catalog_promotional_movie_uses_canonical_movie_page_art(monkeypatch) ->
 
     class FakeMovieClient:
         def __init__(self, **kwargs):
-            assert kwargs == {"access_token": "token", "pace_requests": False}
+            assert kwargs == {"access_token": "token", "request_priority": "interactive"}
 
         def get_movie_page(self, slug: str):
             calls.append(slug)

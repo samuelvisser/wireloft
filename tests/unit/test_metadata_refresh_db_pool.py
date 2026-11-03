@@ -11,6 +11,7 @@ def _final_episode(*, episode_id: int = 71):
 
     return SimpleNamespace(
         id=episode_id,
+        show_id=5,
         slug="test-episode",
         metadata_is_final=False,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
@@ -71,6 +72,7 @@ def test_metadata_refresh_releases_read_transaction_before_dailywire_request(mon
         lambda **_kwargs: ["future-refresh"],
     )
     monkeypatch.setattr(service, "metadata_watch_expired", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(service, "request_show_custom_index_reconciliation", lambda *_args: None)
 
     did_refresh = asyncio.run(
         service.run_refresh_episode_metadata(

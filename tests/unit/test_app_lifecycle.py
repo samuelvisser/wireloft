@@ -100,16 +100,17 @@ def test_app_factory_is_side_effect_free_and_lifespan_owns_controller(monkeypatc
         async with app.router.lifespan_context(app):
             assert start.call_count == expected_start_count
             assert stop.call_count == expected_stop_count
+        # The mocked stop_controller does not stop the scheduler the lifespan
+        # started, so stop it while its event loop is still running.
+        scheduler_module.shutdown_scheduler(wait=False)
 
     asyncio.run(run_lifespan(first_app, 1, 0))
     assert stop.call_count == 1
-    scheduler_module.shutdown_scheduler(wait=False)
 
     second_app = backend_app.create_app()
     asyncio.run(run_lifespan(second_app, 2, 1))
     assert start.call_count == 2
     assert stop.call_count == 2
-    scheduler_module.shutdown_scheduler(wait=False)
 
 
 def test_controller_uses_asgi_loop_and_resets_scheduler(task_database, monkeypatch):

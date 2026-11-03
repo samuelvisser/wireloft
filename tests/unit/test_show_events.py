@@ -15,4 +15,5 @@ def test_show_added_payload_contains_canonical_show_identity():
         "id": 42,
         "slug": "test-show",
         "title": "Test Show",
+        "initial_index": True,
     }

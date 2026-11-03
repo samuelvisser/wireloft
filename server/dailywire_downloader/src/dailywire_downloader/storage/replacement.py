@@ -70,28 +70,37 @@ def capture_previous_download(
     size_bytes: int | None,
     fingerprint: str | None,
     assets: tuple[tuple[str, int | None, str | None], ...],
+    claim_current: bool = False,
 ) -> PreviousDownload | None:
-    """Only claim previous files whose content matches recorded ownership."""
+    """Only claim previous files whose content matches recorded ownership.
+
+    With ``claim_current`` the media at the recorded path is claimed as it is
+    now. The caller uses that for a record whose file no longer matches
+    (Corrupted, changed, or never fingerprinted): WireLoft used to delete those
+    files before a re-download, so replacing them in place is no worse, and
+    leaving them would put the new download next to them under another name.
+    """
     path = Path(media_path)
-    if path.suffix == ".ext" or size_bytes is None or not fingerprint:
+    if path.suffix == ".ext" or (not claim_current and (size_bytes is None or not fingerprint)):
         return None
     try:
         media = OwnedFile(path, inspect_artifact(path))
     except (OSError, ValueError):
         return None
-    if media.identity.size_bytes != size_bytes or media.identity.fingerprint != fingerprint:
+    if not claim_current and (
+        media.identity.size_bytes != size_bytes or media.identity.fingerprint != fingerprint
+    ):
         return None
 
+    # Sidecars at their recorded paths are claimed as they are now. Artwork,
+    # NFO and subtitles are rewritten on every download, so an edited or
+    # never-fingerprinted one must not make the replacement refuse to publish.
     sidecars: list[OwnedFile] = []
-    for asset_path, size, asset_fingerprint in assets:
-        if size is None or not asset_fingerprint:
-            continue
+    for asset_path, _size, _fingerprint in assets:
         try:
-            asset = OwnedFile(Path(asset_path), inspect_artifact(asset_path))
+            sidecars.append(OwnedFile(Path(asset_path), inspect_artifact(asset_path)))
         except (OSError, ValueError):
             continue
-        if asset.identity.size_bytes == size and asset.identity.fingerprint == asset_fingerprint:
-            sidecars.append(asset)
     return PreviousDownload(media, tuple(sidecars))
 
 
@@ -487,7 +496,12 @@ def reconcile_abandoned_replacements(
             # filesystem changes, then persists the new identity. An interrupted
             # database commit is recoverable by replaying this same journal.
             if not recover(record, lambda: _replay_record(record)):
-                logger.warning("Replacement journal '%s' could not be reconciled safely", journal)
+                # Nothing to finish (the record was deleted or canceled, or a
+                # newer download owns it). Drop the attempt only while every
+                # final path still holds its old file; otherwise keep it all.
+                ReplacementJournal(journal, record).discard_unpublished()
+                if journal.exists():
+                    logger.warning("Replacement journal '%s' could not be reconciled safely", journal)
                 continue
             _cleanup_committed_record(journal, record)
             recovered += 1

@@ -28,7 +28,8 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
     from backend.db.models import Movie, MovieExtra, MovieExtraSource
     from backend.types.media_types import MediaType
     from dailywire_api.records import DwMovieExtraDetailRecord
-    from task_manager.tasks.workers.download_movie.service import _persist_movie_extra_metadata
+    from backend.services.download_metadata import select_thumbnail_url
+    from backend.services.movies import update_movie_extra_source_metadata
 
     engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
@@ -89,23 +90,22 @@ def test_download_clip_metadata_refresh_updates_canonical_source() -> None:
             video_url="https://stream.example/extra/master.m3u8",
         )
 
-        thumbnail_refreshed, selected_thumbnail = _persist_movie_extra_metadata(
-            session,
-            extra_id=extra.id,
-            metadata=playback.metadata,
-        )
+        # The download plan applies clip metadata this way after resolving playback.
+        update_movie_extra_source_metadata(extra.source, playback.metadata)
+        selected_thumbnail = select_thumbnail_url(playback.metadata)
+        session.commit()
 
         session.expire_all()
         source = session.query(MovieExtraSource).one()
         placement = session.query(MovieExtra).one()
 
-        assert thumbnail_refreshed is True
         assert selected_thumbnail == thumbnail_url
         assert source.title == playback.metadata.title
         assert source.description == "Fresh description"
         assert source.duration == 513.095922
         assert source.thumbnail_landscape_path == thumbnail_url
-        assert source.thumbnail_portrait_path == thumbnail_url
+        # The portrait slot only duplicated the landscape default, so it is dropped.
+        assert source.thumbnail_portrait_path is None
         assert source.thumbnail_square_path == ""
         assert source.sharing_url == playback.metadata.sharing_url
         assert source.available_for == ["FREE", "READER", "ALL_ACCESS"]

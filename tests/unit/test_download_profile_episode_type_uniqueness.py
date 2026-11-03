@@ -46,7 +46,7 @@ def _make_local_media_profile(session: Session, slug: str):
     profile = LocalMediaProfile(
         slug=slug,
         name=slug,
-        output_template="/downloads/{{ show }}/{{ episode }}.ext",
+        output_template=f"/downloads/{slug}/{{{{ show }}}}/{{{{ episode }}}}.ext",
         preferred_format="format_1080p",
     )
     session.add(profile)
@@ -159,7 +159,7 @@ def test_profile_update_does_not_conflict_with_its_own_episode_types(db_session:
 
 def test_existing_download_moves_to_profile_that_now_owns_episode_type(db_session: Session):
     from backend.db.models.media_download import EpisodeMediaDownload
-    from backend.types.download_profile_types import MediaDownloadStatus
+    from backend.types.download_profile_types import MediaDownloadArtifactStatus
     from task_manager.tasks.workers.download_profile_worker._helpers import ensure_episode_download
 
     show = _make_show(db_session)
@@ -173,9 +173,10 @@ def test_existing_download_moves_to_profile_that_now_owns_episode_type(db_sessio
         media_item_id=episode.id,
         local_media_profile_id=local_media_profile.id,
         download_profile_id=previous_profile.id,
-        download_status=MediaDownloadStatus.DOWNLOADED.value,
+        artifact_status=MediaDownloadArtifactStatus.ABSENT.value,
         file_path="/downloads/episode.mp4",
-        progress=100,
+        # Suppressed, so the check stays about ownership and queues nothing.
+        automatic_retry_suppressed=True,
         downloaded_publish_status="published_final",
     )
     db_session.add(download)
@@ -183,5 +184,5 @@ def test_existing_download_moves_to_profile_that_now_owns_episode_type(db_sessio
 
     action = ensure_episode_download(db_session, current_profile, episode)
 
-    assert action.needs_trigger is False
+    assert action.needs_operation is False
     assert download.download_profile_id == current_profile.id

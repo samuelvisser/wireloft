@@ -22,12 +22,12 @@ def test_missing_artifact_without_identity_recovers_when_file_reappears(tmp_path
         artifact_fingerprint=None,
     )
 
-    assert _reconcile(download, verify_file_size=True) is True
+    updates = _reconcile(download, verify_file_size=True)
 
     expected = inspect_artifact(artifact)
-    assert download.artifact_status == MediaDownloadArtifactStatus.AVAILABLE.value
-    assert download.artifact_error is None
-    assert download.artifact_stat_dev == expected.stat_dev
-    assert download.artifact_stat_ino == expected.stat_ino
-    assert download.artifact_size_bytes == expected.size_bytes
-    assert download.artifact_fingerprint == expected.fingerprint
+    assert updates["artifact_status"] == MediaDownloadArtifactStatus.AVAILABLE.value
+    assert updates["artifact_error"] is None
+    assert updates["artifact_stat_dev"] == expected.stat_dev
+    assert updates["artifact_stat_ino"] == expected.stat_ino
+    assert updates["artifact_size_bytes"] == expected.size_bytes
+    assert updates["artifact_fingerprint"] == expected.fingerprint

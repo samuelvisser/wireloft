@@ -6,13 +6,12 @@ from backend.db.models import Show, Season, Episode
 
 
 def get_shows(s: Session, *, show_id: Optional[int], show_slug: Optional[str]) -> Sequence[Show]:
-    """Resolve one Show, or all shows for the None/0 global scope."""
+    """Resolve one Show, or all shows when no show is given."""
     if show_slug:
         show = s.scalar(select(Show).where(Show.slug == show_slug))
         return [show] if show is not None else []
 
-    # Keep supporting legacy zero-scoped calls; None is the preferred global scope.
-    if show_id not in (None, 0):
+    if show_id is not None:
         show = s.get(Show, show_id)
         return [show] if show is not None else []
 

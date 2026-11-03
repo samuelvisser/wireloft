@@ -43,7 +43,6 @@ def test_same_dailywire_clip_uses_one_source_across_multiple_movies() -> None:
             slug="run-hide-fight",
             title="Run Hide Fight",
             description=None,
-            downloaded_date=None,
             duration=6540,
         )
         sequel = Movie(
@@ -52,7 +51,6 @@ def test_same_dailywire_clip_uses_one_source_across_multiple_movies() -> None:
             slug="run-hide-fight-infidels",
             title="Run Hide Fight: Infidels",
             description=None,
-            downloaded_date=None,
             duration=0,
         )
         session.add_all([original, sequel])
@@ -138,7 +136,7 @@ def test_rotating_dailywire_ids_do_not_change_persisted_movie_identity() -> None
             title="A Movie",
             extras=[old_trailer],
         )
-        first.trailer = old_trailer
+        first = first.model_copy(update={"trailer": old_trailer})
 
         movie, created = index_dailywire_movie(session, first)
         session.commit()
@@ -159,7 +157,7 @@ def test_rotating_dailywire_ids_do_not_change_persisted_movie_identity() -> None
             title="A Movie Updated",
             extras=[new_trailer],
         )
-        second.trailer = new_trailer
+        second = second.model_copy(update={"trailer": new_trailer})
 
         same_movie, created_again = index_dailywire_movie(session, second)
         session.commit()

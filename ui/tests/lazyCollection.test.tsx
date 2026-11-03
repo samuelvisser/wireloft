@@ -750,3 +750,48 @@ test('scoped task cache cannot seed unscoped-inclusive ledger without global row
         initialCount: 10,
     }), undefined)
 })
+
+test('unscoped-only task ledger keeps global runs and never seeds the full ledger', () => {
+    const queryClient = new QueryClient()
+    const all = lazyCollectionQueryKey(
+        ['taskLedger'],
+        ['fetch_new_episodes', 'show', null, null, null, 'created_at', 'desc', false],
+        10,
+        10,
+    )
+    queryClient.setQueryData(all, {
+        pages: [{
+            items: [taskLedgerEntry(2, {resourceId: 7}), taskLedgerEntry(1, {resourceId: null})],
+            total: 2,
+            limit: 10,
+            nextCursor: null,
+        }],
+        pageParams: [{cursor: null, limit: 10}],
+    })
+    const query = {
+        definitionKey: 'fetch_new_episodes',
+        resourceType: 'show',
+        resourceIds: undefined,
+        statuses: undefined,
+        startedAfter: undefined,
+        orderBy: 'created_at' as const,
+        order: 'desc' as const,
+        initialCount: 10,
+    }
+    const unscoped = deriveTaskLedgerCollectionPlaceholder(queryClient, {...query, includeUnscoped: true})
+    assert.ok(unscoped)
+    assert.deepEqual(unscoped.pages[0].items.map((entry) => entry.resourceId), [null])
+
+    queryClient.clear()
+    const unscopedKey = lazyCollectionQueryKey(
+        ['taskLedger'],
+        ['fetch_new_episodes', 'show', null, null, null, 'created_at', 'desc', true],
+        10,
+        10,
+    )
+    queryClient.setQueryData(unscopedKey, {
+        pages: [{items: [taskLedgerEntry(1, {resourceId: null})], total: 1, limit: 10, nextCursor: null}],
+        pageParams: [{cursor: null, limit: 10}],
+    })
+    assert.equal(deriveTaskLedgerCollectionPlaceholder(queryClient, query), undefined)
+})

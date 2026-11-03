@@ -36,7 +36,7 @@ def _make_episode(session, show, *, slug="episode", identifier="ep.2"):
         episode_identifier=identifier, slug=slug, title="Unavailable episode", duration=100.0,
         publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
         sharing_url=f"https://example.test/{slug}",
-        published_date=(datetime.now(timezone.utc) - timedelta(hours=6)).replace(tzinfo=None),
+        published_date=(datetime.now(timezone.utc) - timedelta(hours=6)),
     )
     session.add(episode)
     session.flush()
@@ -157,7 +157,7 @@ def test_mark_no_usable_media_refreshes_existing_metadata_rows(db_session):
 
     rows = list(db_session.scalars(
         select(Metadata).where(
-            Metadata.parent_table == "episodes",
+            Metadata.parent_table == type(episode).__tablename__,
             Metadata.parent_id == episode.id,
             Metadata.key.in_({NO_USABLE_MEDIA_REASON_META_KEY, NO_USABLE_MEDIA_SINCE_META_KEY}),
         )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -85,7 +86,7 @@ def _library(session: Session, tmp_path: Path):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=audio_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(audio_path),
         downloaded_bytes=5,
         format_downloaded="audio",
@@ -96,7 +97,7 @@ def _library(session: Session, tmp_path: Path):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=video_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path=str(video_path),
         downloaded_bytes=15,
         format_downloaded="video",
@@ -282,7 +283,7 @@ def test_bulk_redownload_selects_only_episodes_older_than_latest_download_limit(
                 type=MediaType.EPISODE.value,
                 media_item_id=episode.id,
                 local_media_profile_id=audio_profile.id,
-                artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+                **available_artifact(),
                 file_path=str(path),
                 downloaded_bytes=5,
             )

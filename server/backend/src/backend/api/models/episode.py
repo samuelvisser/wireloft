@@ -96,7 +96,7 @@ class _EpisodeAPIBaseOut(_EpisodeIdentifierAPIOut):
     download_delay_ready_at: Optional[datetime]
 
     title: str
-    description: str
+    description: Optional[str]
     duration: float
     uuid: str
     slug: str

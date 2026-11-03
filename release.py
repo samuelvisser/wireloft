@@ -418,6 +418,31 @@ def tags_to_publish() -> tuple[list[str], str]:
     return package_tags, app_release_tag
 
 
+def deploy_command() -> list[str]:
+    """Return the command that runs deploy.sh on this platform.
+
+    Windows cannot execute a shell script directly, so run it through the bash that ships
+    with Git for Windows. The bash in System32 is WSL's and runs in a different environment.
+    """
+    if sys.platform != "win32":
+        return ["./deploy.sh"]
+    candidates: list[Path] = []
+    git_executable = shutil.which("git")
+    if git_executable:
+        git_root = Path(git_executable).resolve().parent.parent
+        candidates += [git_root / "bin" / "bash.exe", git_root / "usr" / "bin" / "bash.exe"]
+    bash = shutil.which("bash")
+    if bash and "system32" not in bash.lower():
+        candidates.append(Path(bash))
+    for candidate in candidates:
+        if candidate.is_file():
+            return [str(candidate), "./deploy.sh"]
+    raise ReleaseError(
+        "deploy.sh needs bash. Install Git for Windows (it includes Git Bash) or run "
+        "publish with --skip-container after deploying the image yourself."
+    )
+
+
 def push_release_tags(package_tags: list[str], app_release_tag: str) -> None:
     if package_tags:
         run("git", "push", "--atomic", "origin", *package_tags, capture_output=False)
@@ -426,6 +451,8 @@ def push_release_tags(package_tags: list[str], app_release_tag: str) -> None:
 
 def publish_release(args: argparse.Namespace) -> None:
     verify_publish_state()
+    if not args.skip_container:
+        deploy_command()
     package_tags, app_release_tag = tags_to_publish()
     tags = [*package_tags, app_release_tag]
     app_version = app_release_tag.removeprefix("v")
@@ -452,7 +479,7 @@ def publish_release(args: argparse.Namespace) -> None:
 
     if not args.skip_container:
         run(
-            "./deploy.sh",
+            *deploy_command(),
             "--tag-level",
             "main",
             *image_tags,

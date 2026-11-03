@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -140,8 +140,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         duration=1200,
         publish_status="published_final",
         sharing_url="https://example.test/normal",
-        published_date=datetime(2026, 9, 1),
-        is_no_show_today=False,
+        published_date=datetime(2026, 9, 1, tzinfo=timezone.utc),
     )
     auxiliary = Episode(
         uuid="aux-uuid",
@@ -156,8 +155,7 @@ def test_feed_items_respect_stream_profile_episode_types(db_session):
         duration=600,
         publish_status="published_final",
         sharing_url="https://example.test/auxiliary",
-        published_date=datetime(2026, 8, 31),
-        is_no_show_today=False,
+        published_date=datetime(2026, 8, 31, tzinfo=timezone.utc),
     )
     profile = RssStreamProfile(
         show=show,

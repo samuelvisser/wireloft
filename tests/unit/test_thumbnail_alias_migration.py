@@ -25,7 +25,7 @@ def _rows_by_id(connection, table: Table):
 
 def test_thumbnail_alias_migration_uses_media_type_default_orientations():
     migration = importlib.import_module(
-        "backend.db.alembic.versions.4e6c9a1b7d2f_normalize_thumbnail_aliases"
+        "backend.db.alembic.versions.6d4a8c1f2b90_wireloft_1_2"
     )
 
     engine = create_engine("sqlite+pysqlite:///:memory:")

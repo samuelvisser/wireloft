@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session
 
@@ -66,7 +67,7 @@ def _library(session: Session):
         type=MediaType.EPISODE.value,
         media_item_id=episode.id,
         local_media_profile_id=audio_profile.id,
-        artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+        **available_artifact(),
         file_path="/downloads/audio.m4a",
     )
     video_download = EpisodeMediaDownload(
@@ -186,7 +187,11 @@ def test_show_scope_selection_uses_one_query_on_the_success_path():
         assert [download.id for download in scope.downloads] == [
             audio_download_id
         ]
-        assert len(statements) == 1
+        # Model-level selectin relationships (assets, metadata) add one batched
+        # "IN (...)" load each; the selection itself must stay a single query.
+        selection = [statement for statement in statements if " IN (" not in statement]
+        assert len(selection) == 1
+        assert "EXISTS" not in " ".join(statements)
     finally:
         session.close()
         engine.dispose()

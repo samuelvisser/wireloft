@@ -10,6 +10,7 @@ import AutomationSettingsTab from '../components/Settings/AutomationSettingsTab'
 import DailyWireSettingsTab from '../components/Settings/DailyWireSettingsTab'
 import DownloadsSettingsTab from '../components/Settings/DownloadsSettingsTab'
 import GeneralSettingsTab from '../components/Settings/GeneralSettingsTab'
+import MessagesActionsSettingsTab from '../components/Notifications/MessagesActionsSettingsTab'
 import {SettingsLoading} from '../components/Settings/SettingsControls'
 import {saveSettingsRequest, useSettings} from '../lib/settings'
 import {
@@ -26,7 +27,7 @@ import './SettingsPage.css'
 import './SettingsEnvironmentOverrides.css'
 
 
-type SettingsTab = 'general' | 'downloads' | 'automation' | 'dailywire' | 'advanced'
+type SettingsTab = 'general' | 'downloads' | 'automation' | 'notifications' | 'dailywire' | 'advanced'
 
 type SettingsTabDefinition = {
     id: SettingsTab
@@ -38,6 +39,7 @@ const SETTINGS_TABS: SettingsTabDefinition[] = [
     {id: 'general', label: 'General', description: 'Application behaviour and sessions'},
     {id: 'downloads', label: 'Downloads', description: 'Storage, naming, processing and verification'},
     {id: 'automation', label: 'Automation', description: 'Scheduler and episode monitoring'},
+    {id: 'notifications', label: 'Messages and actions', description: 'Notifications, media server refreshes, webhooks and scripts'},
     {id: 'dailywire', label: 'DailyWire', description: 'Account and integration details'},
     {id: 'advanced', label: 'Advanced', description: 'Encryption files and configuration details'},
 ]
@@ -279,6 +281,7 @@ export default function SettingsPage() {
                     {activeTab === 'general' ? <GeneralSettingsTab {...tabProps} /> : null}
                     {activeTab === 'downloads' ? <DownloadsSettingsTab {...tabProps} /> : null}
                     {activeTab === 'automation' ? <AutomationSettingsTab {...tabProps} /> : null}
+                    {activeTab === 'notifications' ? <MessagesActionsSettingsTab /> : null}
                     {activeTab === 'dailywire' ? <DailyWireSettingsTab {...tabProps} /> : null}
                     {activeTab === 'advanced' ? <AdvancedSettingsTab {...tabProps} /> : null}
                 </div>

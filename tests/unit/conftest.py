@@ -69,3 +69,33 @@ def task_database(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     yield session_factory
     engine.dispose()
+
+def available_artifact(path: Path | None = None) -> dict[str, object]:
+    """Columns of a MediaDownload whose file is available.
+
+    The database requires an available artifact to carry its filesystem identity:
+    the identity of ``path``, or a placeholder for a test that never inspects the file.
+    """
+    if path is not None:
+        from dailywire_downloader.storage.identity import inspect_artifact
+
+        identity = inspect_artifact(path)
+        return {
+            "artifact_status": "available",
+            "artifact_stat_dev": identity.stat_dev,
+            "artifact_stat_ino": identity.stat_ino,
+            "artifact_size_bytes": identity.size_bytes,
+            "artifact_fingerprint": identity.fingerprint,
+        }
+    return {
+        "artifact_status": "available",
+        "artifact_stat_dev": "1",
+        "artifact_stat_ino": "1",
+        "artifact_size_bytes": 0,
+        "artifact_fingerprint": "0" * 64,
+    }
+
+
+def mark_artifact_available(download, path: Path | None = None) -> None:
+    for field, value in available_artifact(path).items():
+        setattr(download, field, value)

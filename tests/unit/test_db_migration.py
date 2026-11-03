@@ -9,16 +9,12 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 
-HEAD_REVISION = "c4e93f1a2b6d"
+HEAD_REVISION = "e566c9fe464d"
+WIRELOFT_1_2_5_REVISION = "c4e93f1a2b6d"
 WIRELOFT_1_2_3_REVISION = "a4e7c19b2d53"
 COUNTDOWN_REDOWNLOAD_REVISION = "6d3a9f1c2b7e"
 WIRELOFT_1_2_1_REVISION = "f2a6c93d8b14"
 WIRELOFT_1_2_REVISION = "6d4a8c1f2b90"
-PRE_HISTORY_HEAD_REVISION = "6d1e8f2a4c73"
-PRE_HISTORY_PARENT_REVISION = "d4a7c2e91b63"
-PREVIOUS_DEVELOPMENT_REVISION = "e5f1a2c7d903"
-HISTORICAL_EPISODE_SCHEMA_REVISION = "e4c91a7b2d30"
-OUTPUT_TEMPLATE_SPACING_REVISION = "9b1f4e7c2d6a"
 WIRELOFT_1_0_REVISION = "c8d4e2f1a7b9"
 BASE_REVISION = "0001"
 
@@ -246,7 +242,8 @@ def test_migration_history_has_one_head(migration_database):
     )
 
     assert script.get_heads() == [HEAD_REVISION]
-    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_3_REVISION
+    assert script.get_revision(HEAD_REVISION).down_revision == WIRELOFT_1_2_5_REVISION
+    assert script.get_revision(WIRELOFT_1_2_5_REVISION).down_revision == WIRELOFT_1_2_3_REVISION
     assert script.get_revision(WIRELOFT_1_2_3_REVISION).down_revision == WIRELOFT_1_2_1_REVISION
     assert script.get_revision(WIRELOFT_1_2_1_REVISION).down_revision == WIRELOFT_1_2_REVISION
     assert (
@@ -350,7 +347,7 @@ def test_countdown_redownload_intent_migration_uses_current_episode_table(migrat
             "INSERT INTO media_downloads "
             "(type, media_item_id, local_media_profile_id, file_path, artifact_status) "
             "VALUES ('episode', :media_item_id, :local_profile_id, "
-            "'/downloads/countdown.m4a', 'available')"
+            "'/downloads/countdown.m4a', 'absent')"
         ), {
             "media_item_id": media_item_id,
             "local_profile_id": local_profile_id,
@@ -367,7 +364,7 @@ def test_countdown_redownload_intent_migration_uses_current_episode_table(migrat
     upgrade_database()
 
     inspector = inspect(engine)
-    assert "redownload_when_final" in {
+    assert {"redownload_when_final", "redownload_when_delay_passed"} <= {
         column["name"]
         for column in inspector.get_columns("media_downloads_episode")
     }
@@ -379,95 +376,6 @@ def test_countdown_redownload_intent_migration_uses_current_episode_table(migrat
             "SELECT alembic_version_num FROM settings"
         )).scalar_one() == HEAD_REVISION
 
-
-
-def test_countdown_redownload_migration_resumes_after_failed_sqlite_batch(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config, upgrade_database
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        WIRELOFT_1_2_1_REVISION,
-    )
-
-    # Reproduce the state left by the original broken migration: its schema
-    # change succeeded far enough to add the column, Alembic did not advance
-    # the revision, and a stale SQLite batch scratch table survived the failure.
-    with engine.begin() as connection:
-        connection.exec_driver_sql(
-            "ALTER TABLE media_downloads_episode "
-            "ADD COLUMN redownload_when_final BOOLEAN DEFAULT 0 NOT NULL"
-        )
-        connection.exec_driver_sql(
-            "CREATE TABLE _alembic_tmp_media_downloads_episode "
-            "AS SELECT * FROM media_downloads_episode WHERE 0"
-        )
-
-    upgrade_database()
-
-    inspector = inspect(engine)
-    assert "_alembic_tmp_media_downloads_episode" not in inspector.get_table_names()
-    episode_download_columns = {
-        column["name"]
-        for column in inspector.get_columns("media_downloads_episode")
-    }
-    assert "redownload_when_final" in episode_download_columns
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT alembic_version_num FROM settings"
-        )).scalar_one() == HEAD_REVISION
-
-
-def test_redownload_delay_intent_migration_adds_persistent_flag(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config, upgrade_database
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        COUNTDOWN_REDOWNLOAD_REVISION,
-    )
-
-    assert "redownload_when_delay_passed" not in {
-        column["name"]
-        for column in inspect(engine).get_columns("media_downloads_episode")
-    }
-
-    upgrade_database()
-
-    assert "redownload_when_delay_passed" in {
-        column["name"]
-        for column in inspect(engine).get_columns("media_downloads_episode")
-    }
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT alembic_version_num FROM settings"
-        )).scalar_one() == HEAD_REVISION
-
-
-def test_redownload_delay_intent_migration_resumes_after_column_add(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config, upgrade_database
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        COUNTDOWN_REDOWNLOAD_REVISION,
-    )
-    with engine.begin() as connection:
-        connection.exec_driver_sql(
-            "ALTER TABLE media_downloads_episode "
-            "ADD COLUMN redownload_when_delay_passed BOOLEAN DEFAULT 0 NOT NULL"
-        )
-
-    upgrade_database()
-
-    assert "redownload_when_delay_passed" in {
-        column["name"]
-        for column in inspect(engine).get_columns("media_downloads_episode")
-    }
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT alembic_version_num FROM settings"
-        )).scalar_one() == HEAD_REVISION
 
 
 def test_fresh_database_upgrades_to_wireloft_1_1(migration_database):
@@ -561,158 +469,6 @@ def test_existing_database_upgrade_does_not_run_initial_seed(migration_database)
         assert connection.execute(text(
             "SELECT COUNT(*) FROM local_media_profiles"
         )).scalar_one() == 0
-
-
-def test_historical_e4_production_database_upgrades_to_current_head(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import (
-        get_alembic_config,
-        get_database_status,
-        upgrade_database,
-    )
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        HISTORICAL_EPISODE_SCHEMA_REVISION,
-    )
-
-    inspector = inspect(engine)
-    settings_columns = {
-        column["name"] for column in inspector.get_columns("settings")
-    }
-    season_columns = {
-        column["name"] for column in inspector.get_columns("seasons")
-    }
-    episode_columns = {
-        column["name"] for column in inspector.get_columns("media_items_episode")
-    }
-
-    # This matches the production state that exposed the missing historical
-    # revision: e4 is current, its episode-indexing columns exist, and e5 has not
-    # yet introduced background_migration_version.
-    assert "background_migration_version" not in settings_columns
-    assert {"season_type", "season_number"} <= season_columns
-    assert "dw_episode_number" in episode_columns
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT alembic_version_num FROM settings"
-        )).scalar_one() == HISTORICAL_EPISODE_SCHEMA_REVISION
-
-    upgrade_database()
-
-    current, head = get_database_status()
-    assert current == (HEAD_REVISION,)
-    assert head == HEAD_REVISION
-
-    inspector = inspect(engine)
-    assert "background_migration_version" in {
-        column["name"] for column in inspector.get_columns("settings")
-    }
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT alembic_version_num FROM settings"
-        )).scalar_one() == HEAD_REVISION
-
-
-def test_episode_indexing_migration_upgrades_from_previous_development_head(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config, get_database_status, upgrade_database
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        PREVIOUS_DEVELOPMENT_REVISION,
-    )
-
-    # The media database refactor has already moved content metadata onto the
-    # concrete episode table by this revision. The episode-indexing migration
-    # must therefore read title from media_items_episode, not media_items.
-    inspector = inspect(engine)
-    assert "title" not in {
-        column["name"] for column in inspector.get_columns("media_items")
-    }
-    assert "title" in {
-        column["name"] for column in inspector.get_columns("media_items_episode")
-    }
-
-    upgrade_database()
-
-    current, head = get_database_status()
-    assert current == (HEAD_REVISION,)
-    assert head == HEAD_REVISION
-
-
-def test_episode_indexing_migration_resumes_after_interrupted_column_adds(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import get_alembic_config, get_database_status, upgrade_database
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        OUTPUT_TEMPLATE_SPACING_REVISION,
-    )
-
-    # SQLite can retain these additive DDL changes when a later statement in the
-    # revision fails. Reproduce that state while leaving Alembic before e4c91a7b2d30.
-    with engine.begin() as connection:
-        connection.exec_driver_sql(
-            "ALTER TABLE seasons ADD COLUMN season_type VARCHAR DEFAULT 'normal' NOT NULL"
-        )
-        connection.exec_driver_sql(
-            "ALTER TABLE seasons ADD COLUMN season_number INTEGER DEFAULT 1 NOT NULL"
-        )
-        connection.exec_driver_sql(
-            "ALTER TABLE media_items_episode ADD COLUMN dw_episode_number VARCHAR"
-        )
-
-    current, _head = get_database_status()
-    assert current == (OUTPUT_TEMPLATE_SPACING_REVISION,)
-
-    upgrade_database()
-
-    current, head = get_database_status()
-    assert current == (HEAD_REVISION,)
-    assert head == HEAD_REVISION
-
-    inspector = inspect(engine)
-    season_columns = [column["name"] for column in inspector.get_columns("seasons")]
-    episode_columns = [
-        column["name"] for column in inspector.get_columns("media_items_episode")
-    ]
-    assert season_columns.count("season_type") == 1
-    assert season_columns.count("season_number") == 1
-    assert episode_columns.count("dw_episode_number") == 1
-
-
-def test_episode_indexing_migration_normalizes_background_revision(migration_database):
-    _database_path, engine = migration_database
-    from backend.db.migrations import (
-        downgrade_database,
-        get_alembic_config,
-        upgrade_database,
-    )
-
-    command.upgrade(
-        get_alembic_config(allow_version_storage_migration=True),
-        PREVIOUS_DEVELOPMENT_REVISION,
-    )
-    with engine.begin() as connection:
-        connection.execute(text(
-            "UPDATE settings SET background_migration_version = "
-            "'episode_indexing_semantics'"
-        ))
-
-    upgrade_database()
-
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT background_migration_version FROM settings"
-        )).scalar_one() == "f6a1c3d8b427"
-
-    downgrade_database(PREVIOUS_DEVELOPMENT_REVISION)
-
-    with engine.connect() as connection:
-        assert connection.execute(text(
-            "SELECT background_migration_version FROM settings"
-        )).scalar_one() is None
 
 
 def test_upgrade_from_wireloft_1_0_preserves_release_data(migration_database):

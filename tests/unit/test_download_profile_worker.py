@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from conftest import available_artifact
 import asyncio
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -138,6 +139,13 @@ def db_session(monkeypatch, tmp_path):
         "episode_download_delay_minutes",
         0,
     )
+    from task_manager.tasks.workers.download_profile_worker import service
+
+    async def no_custom_index_wait(*_args, **_kwargs):
+        # Custom Index readiness opens its own database session; these profiles use none.
+        return None
+
+    monkeypatch.setattr(service, "wait_for_custom_index_pair", no_custom_index_wait)
     yield session
     session.close()
     engine.dispose()
@@ -240,6 +248,8 @@ def test_episode_trigger_creates_visible_delayed_download_operation(db_session, 
     assert episode.safe_published_final is not None
 
     _make_podcast_profile(db_session, show, lmp)
+    # The worker ends its discovery transaction before locking each profile.
+    db_session.commit()
     dispatch = Mock(return_value=0)
     monkeypatch.setattr(service, "dispatch_queued_media_download_operations", dispatch)
 
@@ -924,6 +934,8 @@ def test_ensure_episode_download_rearms_unhealthy_artifact(db_session, artifact_
     existing = _completed_download(db_session, episode, lmp, profile)
     existing.artifact_status = artifact_status
     existing.artifact_error = "file watcher"
+    # A healthy file on disk would be recovered as available, so remove it.
+    Path(existing.file_path).unlink()
     db_session.commit()
 
     action = ensure_episode_download(db_session, profile, episode)
@@ -961,7 +973,7 @@ def test_cleanup_older_episodes_deletes_download_record_and_file(db_session, tmp
             media_item_id=episode.id,
             local_media_profile_id=lmp.id,
             download_profile_id=profile.id,
-            artifact_status=MediaDownloadArtifactStatus.AVAILABLE.value,
+            **available_artifact(),
             file_path=str(path),
         )
         for episode, path in [(old_episode, old_file), (recent_episode, recent_file)]

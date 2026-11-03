@@ -121,7 +121,7 @@ def test_quarantine_identifier_reservation_is_atomic_across_sessions(
                     duration=100.0,
                     publish_status=EpisodePublishStatus.PUBLISHED_FINAL.value,
                     sharing_url=f"https://example.test/concurrent-{index}",
-                    published_date=datetime(2026, 9, 7, 10, index, tzinfo=timezone.utc).replace(tzinfo=None),
+                    published_date=datetime(2026, 9, 7, 10, index, tzinfo=timezone.utc),
                 )
                 session.add(episode)
                 session.flush()

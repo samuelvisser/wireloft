@@ -76,7 +76,7 @@ def test_output_template_still_has_to_end_with_ext_on_save() -> None:
 
     output_template = (
         "/downloads/{{ show_title }}/{{ episode_title }}.ext"
-        "{% set suffix = year %}"
+        "{% if year %}-{{ year }}{% endif %}"
     )
 
     with pytest.raises(ValidationError, match="must end with '.ext'"):

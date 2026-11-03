@@ -25,7 +25,7 @@ def run_delete_show_downloads_worker(
         selected_media_download_ids: list[int] | None = None,
         progress=None,
 ) -> dict[str, Any]:
-    """Delete existing show artifacts after affected Download Profiles are disabled."""
+    """Delete existing show artifacts; a full delete first disables the affected profiles."""
     scope = EpisodeDownloadScope.resolve(
         s,
         show_id=show_id,
@@ -36,10 +36,14 @@ def run_delete_show_downloads_worker(
     base_result = scope.result_data()
     downloads = list(scope.downloads)
 
-    # The API disables profiles before this worker can be dispatched. Keep this
-    # idempotent guard for recovered/manual task execution and commit it before
-    # cancellation helpers deliberately roll back their read transaction.
-    disabled_during_worker = disable_download_profiles_for_episode_scope(s, scope)
+    # For a full delete the API disables profiles before this worker can be
+    # dispatched. Keep this idempotent guard for recovered/manual task execution
+    # and commit it before cancellation helpers roll back their read transaction.
+    # A partial delete (selected downloads) leaves the profiles on.
+    disabled_during_worker = (
+        disable_download_profiles_for_episode_scope(s, scope)
+        if selected_media_download_ids is None else 0
+    )
     s.commit()
     disabled_profile_count = max(download_profiles_disabled, disabled_during_worker)
 
@@ -67,9 +71,8 @@ def run_delete_show_downloads_worker(
         if progress is not None and callable(progress) and progress():
             raise DownloadCancelled("Show download deletion was canceled")
 
-        # Also protect against an explicit per-episode retry started by the user
-        # after the operation began. Automatic retries cannot appear here because
-        # the affected Download Profiles are durably disabled and serialized.
+        # Also protect against a retry started after the operation began, by the
+        # user or, for a partial delete, by a Download Profile that is still on.
         cancel_active_download_attempts(
             s,
             [download],

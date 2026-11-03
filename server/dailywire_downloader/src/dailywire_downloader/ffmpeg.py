@@ -220,6 +220,10 @@ def embed_media(
         for _language, path, _forced in subtitles:
             command += ["-i", path]
         command += ["-map", "0"]
+        if subtitles:
+            # Our tracks replace any the media already carries, so the language
+            # and forced flags below land on the tracks they describe.
+            command += ["-map", "-0:s?"]
         if thumbnail_path is not None:
             command += ["-map", "1:v:0"]
         for index in range(len(subtitles)):

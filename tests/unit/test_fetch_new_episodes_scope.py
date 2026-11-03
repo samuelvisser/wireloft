@@ -22,9 +22,9 @@ def shows():
     ]
 
 
-@pytest.mark.parametrize("show_id", [None, 0])
 @pytest.mark.parametrize("show_count", [0, 2])
-def test_global_scope_selects_all_shows(scope_helpers, shows, show_id, show_count):
+def test_global_scope_selects_all_shows(scope_helpers, shows, show_count):
+    show_id = None
     session = Mock(spec=Session)
     session.get.return_value = None
     expected = shows[:show_count]
@@ -38,7 +38,7 @@ def test_global_scope_selects_all_shows(scope_helpers, shows, show_id, show_coun
     session.get.assert_not_called()
 
 
-@pytest.mark.parametrize("show_id", [1, 17, 999, -1])
+@pytest.mark.parametrize("show_id", [0, 1, 17, 999, -1])
 def test_explicit_id_never_falls_back_to_all_shows(scope_helpers, shows, show_id):
     session = Mock(spec=Session)
     show = next((item for item in shows if item.id == show_id), None)
@@ -71,8 +71,8 @@ def test_slug_scope_takes_precedence_without_global_fallback(
     session.scalars.assert_not_called()
 
 
-@pytest.mark.parametrize("show_id", [0, None])
-def test_global_scan_processes_every_show(monkeypatch, shows, show_id):
+def test_global_scan_processes_every_show(monkeypatch, shows):
+    show_id = None
     service = import_module("task_manager.tasks.workers.fetch_new_episodes.service")
     session = Mock(spec=Session)
     session.scalars.return_value.all.return_value = shows
@@ -86,7 +86,7 @@ def test_global_scan_processes_every_show(monkeypatch, shows, show_id):
     fetch_show = AsyncMock(side_effect=[2, 1])
     monkeypatch.setattr(service, "_fetch_show", fetch_show)
 
-    # Exercise the real selector and service with both supported global scopes;
+    # Exercise the real selector and service with the global scope;
     # remote episode retrieval is intentionally isolated from this scope test.
     result = asyncio.run(service.run_fetch_new_episodes(session, show_id=show_id))
 

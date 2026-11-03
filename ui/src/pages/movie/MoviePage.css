@@ -55,12 +55,8 @@
 
 .movie-media-download-control.is-panel .progress-button-root,
 .movie-media-download-control.is-panel .movie-media-downloaded {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-width: 0;
-}
-
-.movie-media-download-control.is-panel .progress-button-root {
-    width: 100%;
 }
 
 .movie-media-downloaded {

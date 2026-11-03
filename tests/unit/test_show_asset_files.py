@@ -199,7 +199,9 @@ def test_forced_png_overrides_fallback_for_clearlogos(tmp_path, monkeypatch):
     assert result.output_format == "png"
     data = result.path.read_bytes()
     assert data.startswith(b"\x89PNG\r\n\x1a\n")
-    assert data[25] == 6
+    # This lossy WebP has no alpha channel; FFmpeg 6+ keeps it RGB (2), older
+    # builds decoded every WebP as RGBA (6). Either is a correct PNG.
+    assert data[25] in {2, 6}
 
 
 def test_cancellation_before_publication_leaves_no_target(tmp_path):
